@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block body_class %}admin-body{% endblock %}
+{% block footer %}{% endblock %}
+{% block content %}
+{% set ep = request.endpoint %}
+<div class="admin-shell">
+  <nav class="admin-side side-nav" aria-label="{{ _('admin_panel') }}" style="border-radius:0;border-top:0;border-bottom:0;border-left:0;box-shadow:none">
+    <a class="{{ 'on' if ep == 'admin.dashboard' }}" href="{{ url_for('admin.dashboard') }}">{{ icon('dashboard') }} {{ _('adm_dashboard') }}</a>
+    <div class="group">{{ _('adm_group_queues') }}</div>
+    <a class="{{ 'on' if ep == 'admin.org_review' or (ep == 'admin.entity_list' and entity == 'organizations' and request.args.get('status') == 'pending') }}" href="{{ url_for('admin.entity_list', entity='organizations', status='pending') }}">{{ icon('shield-check') }} {{ _('adm_org_verification') }}{% if queue_counts.organizations %}<span class="badge">{{ queue_counts.organizations }}</span>{% endif %}</a>
+    <a class="{{ 'on' if ep == 'admin.consents' }}" href="{{ url_for('admin.consents') }}">{{ icon('file-text') }} {{ _('adm_consents') }}{% if queue_counts.consents %}<span class="badge">{{ queue_counts.consents }}</span>{% endif %}</a>
+    <a class="{{ 'on' if ep == 'admin.messages' }}" href="{{ url_for('admin.messages') }}">{{ icon('inbox') }} {{ _('adm_messages') }}{% if queue_counts.messages %}<span class="badge">{{ queue_counts.messages }}</span>{% endif %}</a>
+    {% for group, items in NAV_GROUPS %}
+      <div class="group">{{ _(group) }}</div>
+      {% for key in items %}
+        <a class="{{ 'on' if entity == key and ep != 'admin.org_review' and not (key == 'organizations' and request.args.get('status') == 'pending') }}" href="{{ url_for('admin.entity_list', entity=key) }}">{{ icon(ENTITIES[key].icon) }} {{ _('adm_' ~ key) }}</a>
+      {% endfor %}
+    {% endfor %}
+    <div class="group">{{ _('adm_group_control') }}</div>
+    <a class="{{ 'on' if ep == 'admin.audit_log' }}" href="{{ url_for('admin.audit_log') }}">{{ icon('history') }} {{ _('adm_audit') }}</a>
+    <a href="{{ url_for('public.reports') }}">{{ icon('chart') }} {{ _('nav_reports') }}</a>
+  </nav>
+  <div class="admin-main">{% block admin %}{% endblock %}</div>
+</div>
+{% endblock %}

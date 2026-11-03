@@ -1,0 +1,50 @@
+{% extends "admin/_layout.html" %}
+{% from "partials/macros.html" import pagination %}
+{% block title %}{{ _('adm_' ~ entity) }}{% endblock %}
+{% block admin %}
+{% set status_cols = ('status', 'role') %}
+<div class="cab-head"><div><h1>{{ _('adm_' ~ entity) }}</h1><p>{{ _('adm_table') }}: <span class="mono">{{ cfg.table }}</span> · {{ _('found_n', n=page.total) }}</p></div>
+  <div class="row">
+    {% if cfg.create %}<a class="btn btn-primary btn-sm" href="{{ url_for('admin.entity_new', entity=entity) }}">{{ icon('plus', 16) }} {{ _('create') }}</a>{% endif %}
+    {% if entity == 'users' %}<a class="btn btn-primary btn-sm" href="{{ url_for('admin.new_admin') }}">{{ icon('user-plus', 16) }} {{ _('new_admin') }}</a>{% endif %}
+  </div></div>
+<form class="toolbar" method="get">
+  <label class="input-icon"><span class="sr-only">{{ _('search') }}</span>{{ icon('search', 16) }}<input class="input pill" name="q" value="{{ q }}" placeholder="{{ _('search') }}…"></label>
+  {% for col, choices in (cfg.filters or {}).items() %}
+    <select class="select pill" name="{{ col }}" onchange="this.form.submit()" aria-label="{{ col }}">
+      <option value="">{{ _('col_' ~ col) }}: {{ _('all') }}</option>
+      {% for c in choices %}<option value="{{ c }}" {{ 'selected' if active_filters.get(col) == c }}>{{ _('st_' ~ c) if col == 'status' else _('role_' ~ c) }}</option>{% endfor %}
+    </select>
+  {% endfor %}
+  <button class="btn btn-dark btn-sm">{{ _('find') }}</button>
+  {% if q or active_filters %}<a class="btn btn-ghost btn-sm" href="{{ url_for('admin.entity_list', entity=entity) }}">{{ _('reset') }}</a>{% endif %}
+</form>
+<div class="table-wrap"><table class="table">
+  <thead><tr>{% for c in cfg.columns %}<th>{{ _('col_' ~ c) }}</th>{% endfor %}<th></th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+    <tr>
+      {% for c in cfg.columns %}
+        {% set v = r[c] %}
+        <td class="{{ 'mono' if c in (cfg.pk, 'bin', 'code') }}">
+          {% if c in ('status',) %}<span class="status st-{{ v }}">{{ _('st_' ~ v) }}</span>
+          {% elif c == 'role' %}<span class="tag tone-{{ 'lilac' if v == 'admin' else 'sky' if v == 'coordinator' else 'mint' }}">{{ _('role_' ~ v) }}</span>
+          {% elif c.startswith('is_') %}{{ icon('check', 16) if v else '—' }}
+          {% elif c == 'rating' %}{{ '★' * v }}
+          {% elif c.endswith('_at') %}<span class="small nowrap">{{ fmt_dt(v) if v else '—' }}</span>
+          {% elif c == 'org_type' %}{{ _('orgtype_' ~ v) }}
+          {% else %}<span class="cell-clip" style="display:inline-block" title="{{ v if v is not none else '' }}">{{ v if v is not none else '—' }}</span>{% endif %}
+        </td>
+      {% endfor %}
+      <td class="nowrap">
+        {% if entity == 'organizations' %}<a class="btn btn-soft btn-xs" href="{{ url_for('admin.org_review', org_id=r.org_id) }}">{{ _('review') }}</a>{% endif %}
+        <a class="btn btn-ghost btn-xs" href="{{ url_for('admin.entity_edit', entity=entity, pk=r[cfg.pk]) }}">{{ icon('pencil', 14) }} {{ _('open') }}</a>
+      </td>
+    </tr>
+  {% else %}
+    <tr><td colspan="{{ cfg.columns|length + 1 }}" class="center muted" style="padding:32px">{{ _('nothing_here') }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+{{ pagination(page) }}
+{% endblock %}

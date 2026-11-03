@@ -1,0 +1,50 @@
+{% extends "admin/_layout.html" %}
+{% from "partials/macros.html" import status, dir_tag, org_logo %}
+{% block title %}{{ o.name }}{% endblock %}
+{% block admin %}
+<div class="crumbs"><a href="{{ url_for('admin.entity_list', entity='organizations') }}">{{ _('adm_organizations') }}</a>{{ icon('chevron-right', 14) }}<span>{{ o.name }}</span></div>
+<div class="cab-head"><div class="row">{{ org_logo(o, 'lg') }}<div><h1>{{ o.name }}</h1><div class="row tight mt-1">{{ status(o.status) }}<span class="small muted">{{ _('registered_on', d=fmt_dt(o.created_at)) }}</span></div></div></div>
+  <a class="btn btn-ghost btn-sm" href="{{ url_for('admin.entity_edit', entity='organizations', pk=o.org_id) }}">{{ icon('pencil', 16) }} {{ _('edit') }}</a></div>
+<div class="grid split">
+  <div class="card card-pad">
+    <h3>{{ _('check_list') }}</h3>
+    <div class="table-wrap"><table class="table">
+      <tr><td class="muted" style="width:200px">{{ _('bin') }}</td><td class="mono">{{ o.bin }}</td></tr>
+      <tr><td class="muted">{{ _('org_type') }}</td><td>{{ _('orgtype_' ~ o.org_type) }}</td></tr>
+      <tr><td class="muted">{{ _('city') }}</td><td>{{ loc(o, 'city_name') }}, {{ o.address }}</td></tr>
+      <tr><td class="muted">Email</td><td>{{ o.email }}</td></tr>
+      <tr><td class="muted">{{ _('phone') }}</td><td>{{ o.phone|phone }}</td></tr>
+      <tr><td class="muted">{{ _('website') }}</td><td>{{ o.website or '—' }}</td></tr>
+      <tr><td class="muted">{{ _('founded_year') }}</td><td>{{ o.founded_year or '—' }}</td></tr>
+      <tr><td class="muted">{{ _('directions') }}</td><td><div class="row tight">{% for d in dirs %}{{ dir_tag(d, '') }}{% endfor %}</div></td></tr>
+    </table></div>
+    <h4 class="mt-3">{{ _('org_description') }}</h4>
+    <p class="small">{{ o.description|nl2br }}</p>
+    <h4 class="mt-3">{{ _('team') }}</h4>
+    {% for s in staff %}<div class="small">{{ s.full_name }} · {{ s.email }} · {{ s.phone|phone }}{% if s.is_owner %} <span class="tag tone-mint">{{ _('owner') }}</span>{% endif %}</div>{% endfor %}
+    {% if o.status_comment %}<div class="alert alert-warn mt-3">{{ icon('info') }}<div class="small"><b>{{ _('last_comment') }}:</b> {{ o.status_comment }}</div></div>{% endif %}
+  </div>
+  <div>
+    <div class="card card-pad">
+      <h3>{{ _('decision') }}</h3>
+      <div class="alert alert-info mb-2">{{ icon('info') }}<div class="xs">{{ _('verification_guide') }}</div></div>
+      <form method="post">
+        {{ csrf_field() }}
+        <label for="comment">{{ _('comment_for_org') }}</label>
+        <textarea class="textarea" id="comment" name="comment" rows="3" style="min-height:90px" maxlength="500" placeholder="{{ _('comment_placeholder') }}"></textarea>
+        <div class="row mt-2">
+          {% if o.status in ('pending', 'rejected') %}<button class="btn btn-primary" name="action" value="verify">{{ icon('shield-check', 16) }} {{ _('verify') }}</button>{% endif %}
+          {% if o.status == 'pending' %}<button class="btn btn-danger" name="action" value="reject">{{ icon('x', 16) }} {{ _('reject') }}</button>{% endif %}
+          {% if o.status == 'verified' %}<button class="btn btn-danger" name="action" value="suspend">{{ icon('ban', 16) }} {{ _('suspend') }}</button>{% endif %}
+          {% if o.status == 'suspended' %}<button class="btn btn-primary" name="action" value="restore">{{ _('restore') }}</button>{% endif %}
+        </div>
+      </form>
+    </div>
+    <div class="card card-pad mt-3">
+      <h3>{{ _('adm_events') }}</h3>
+      {% for e in events %}<a class="queue-item" href="{{ url_for('admin.entity_edit', entity='events', pk=e.event_id) }}" style="color:inherit;text-decoration:none"><span class="grow small">{{ e.title }}</span><span class="xs muted">{{ fmt_date(e.starts_at) }}</span>{{ status(e.status) }}</a>
+      {% else %}<p class="small muted mb-0">{{ _('nothing_here') }}</p>{% endfor %}
+    </div>
+  </div>
+</div>
+{% endblock %}

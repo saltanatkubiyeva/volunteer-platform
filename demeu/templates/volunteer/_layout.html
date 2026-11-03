@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% from "partials/macros.html" import avatar %}
+{% block content %}
+{% set ep = request.endpoint %}
+<div class="wrap">
+  <div class="cabinet">
+    <nav class="card side-nav" aria-label="{{ _('my_cabinet') }}">
+      <div class="who">{{ avatar(g.volunteer.avatar_path, g.volunteer.full_name) }}<div><b>{{ g.volunteer.full_name }}</b><span class="xs muted">{{ _('role_volunteer') }}</span></div></div>
+      <a class="{{ 'on' if ep == 'volunteer.dashboard' }}" href="{{ url_for('volunteer.dashboard') }}">{{ icon('dashboard') }} {{ _('overview') }}</a>
+      <a class="{{ 'on' if ep == 'volunteer.applications' }}" href="{{ url_for('volunteer.applications') }}">{{ icon('clipboard-check') }} {{ _('my_applications') }}</a>
+      <a href="{{ url_for('public.events') }}">{{ icon('search') }} {{ _('find_event') }}</a>
+      <a class="{{ 'on' if ep == 'volunteer.profile_edit' }}" href="{{ url_for('volunteer.profile_edit') }}">{{ icon('user') }} {{ _('edit_profile') }}</a>
+      {% if age_on(g.volunteer.birth_date) < 18 %}
+      <a class="{{ 'on' if ep == 'volunteer.consent' }}" href="{{ url_for('volunteer.consent') }}">{{ icon('file-text') }} {{ _('parental_consent') }}</a>
+      {% endif %}
+      <a href="{{ url_for('auth.notifications') }}">{{ icon('bell') }} {{ _('notifications') }}{% if unread %}<span class="badge">{{ unread }}</span>{% endif %}</a>
+      <a href="{{ url_for('public.volunteer_profile', volunteer_id=g.volunteer.volunteer_id) }}">{{ icon('eye') }} {{ _('my_public_profile') }}</a>
+      <a href="{{ url_for('auth.settings') }}">{{ icon('sliders') }} {{ _('settings') }}</a>
+    </nav>
+    <div>{% block cab %}{% endblock %}</div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,30 @@
+{% extends "org/_layout.html" %}
+{% from "partials/macros.html" import field_error, avatar %}
+{% block title %}{{ _('team') }}{% endblock %}
+{% block cab %}
+<div class="cab-head"><div><h1>{{ _('team') }}</h1><p>{{ _('team_subtitle') }}</p></div></div>
+<div class="table-wrap mb-3"><table class="table">
+  <thead><tr><th>{{ _('coordinator') }}</th><th>Email</th><th>{{ _('position') }}</th><th class="num">{{ _('active_events') }}</th><th>{{ _('last_login') }}</th><th></th></tr></thead>
+  <tbody>{% for m in members %}
+  <tr><td><span class="person">{{ avatar(None, m.full_name, 'sm') }}<span>{{ m.full_name }}{% if m.is_owner %} <span class="tag tone-mint">{{ _('owner') }}</span>{% endif %}</span></span></td>
+    <td class="small">{{ m.email }}</td><td class="small">{{ m.position or '—' }}</td><td class="num">{{ m.active_events }}</td>
+    <td class="small">{{ fmt_dt(m.last_login_at) if m.last_login_at else '—' }}</td>
+    <td>{% if not m.is_owner %}<form method="post" action="{{ url_for('org.team_toggle', coordinator_id=m.coordinator_id) }}" data-confirm="{{ _('confirm_toggle_member') }}">{{ csrf_field() }}
+      <button class="btn {{ 'btn-danger' if m.is_active else 'btn-soft' }} btn-xs">{{ _('deactivate') if m.is_active else _('activate') }}</button></form>{% endif %}</td></tr>
+  {% endfor %}</tbody></table></div>
+
+<form class="card card-pad" method="post" novalidate>
+  {{ csrf_field() }}
+  <h3>{{ icon('user-plus') }} {{ _('add_coordinator') }}</h3>
+  <p class="small muted">{{ _('add_coordinator_hint') }}</p>
+  <div class="form-grid">
+    <div class="field {{ 'has-error' if errors.full_name }}"><label class="req" for="full_name">{{ _('full_name') }}</label><input class="input" id="full_name" name="full_name" value="{{ f.full_name or '' }}">{{ field_error(errors, 'full_name') }}</div>
+    <div class="field"><label for="position">{{ _('position') }}</label><input class="input" id="position" name="position" value="{{ f.position or '' }}"></div>
+    <div class="field {{ 'has-error' if errors.email }}"><label class="req" for="email">Email</label><input class="input" id="email" name="email" type="email" value="{{ f.email or '' }}">{{ field_error(errors, 'email') }}</div>
+    <div class="field {{ 'has-error' if errors.phone }}"><label class="req" for="phone">{{ _('phone') }}</label><input class="input" id="phone" name="phone" type="tel" value="{{ f.phone or '' }}">{{ field_error(errors, 'phone') }}</div>
+    <div class="field {{ 'has-error' if errors.password }}"><label class="req" for="password">{{ _('temp_password') }}</label><input class="input" id="password" name="password" type="text" autocomplete="off">
+      <span class="hint">{{ _('temp_password_hint') }}</span>{{ field_error(errors, 'password') }}</div>
+  </div>
+  <button class="btn btn-dark mt-3">{{ icon('user-plus', 16) }} {{ _('add') }}</button>
+</form>
+{% endblock %}

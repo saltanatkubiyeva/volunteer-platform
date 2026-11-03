@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% from "partials/macros.html" import avatar, dir_tag, pagination, empty %}
+{% block title %}{{ _('nav_volunteers') }}{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div class="wrap">
+    <div class="crumbs"><a href="{{ url_for('public.home') }}">{{ _('home') }}</a>{{ icon('chevron-right', 14) }}<span>{{ _('nav_volunteers') }}</span></div>
+    <h1>{{ _('volunteers_title') }}</h1>
+    <p>{{ _('volunteers_subtitle') }}</p>
+  </div>
+</section>
+<div class="wrap">
+  <div class="with-filters">
+    <form class="card filters" id="filters" method="get" data-autosubmit>
+      <h4>{{ _('search') }}</h4>
+      <label class="input-icon"><span class="sr-only">{{ _('search') }}</span>{{ icon('search', 17) }}
+        <input class="input pill" name="q" value="{{ q }}" placeholder="{{ _('search_volunteers_placeholder') }}"></label>
+      <h4>{{ _('city') }}</h4>
+      <select class="select" name="city" aria-label="{{ _('city') }}"><option value="">{{ _('all_cities') }}</option>
+        {% for c in cities %}<option value="{{ c.city_id }}" {{ 'selected' if city == c.city_id }}>{{ loc(c, 'name') }}</option>{% endfor %}</select>
+      <h4>{{ _('direction') }}</h4>
+      <div class="radio-list">
+        <label><input type="radio" name="direction" value="" {{ 'checked' if not direction }}> {{ _('all_directions') }}</label>
+        {% for d in directions %}
+        <label><input type="radio" name="direction" value="{{ d.direction_id }}" {{ 'checked' if direction == d.direction_id }}> {{ loc(d, 'name') }}</label>
+        {% endfor %}
+      </div>
+      <h4>{{ _('sort_by') }}</h4>
+      <select class="select" name="sort" aria-label="{{ _('sort_by') }}">
+        <option value="hours" {{ 'selected' if sort == 'hours' }}>{{ _('sort_hours') }}</option>
+        <option value="new" {{ 'selected' if sort == 'new' }}>{{ _('sort_newcomers') }}</option>
+        <option value="name" {{ 'selected' if sort == 'name' }}>{{ _('sort_name') }}</option>
+      </select>
+      <div class="row mt-3"><button class="btn btn-dark btn-sm grow">{{ _('apply_filters') }}</button>
+        <a class="btn btn-ghost btn-sm" href="{{ url_for('public.volunteers') }}">{{ _('reset') }}</a></div>
+      <p class="xs muted mt-2 mb-0">{{ icon('lock', 13) }} {{ _('volunteers_privacy_note') }}</p>
+    </form>
+    <div>
+      <div class="results-bar"><span class="count">{{ _('found_n', n=page.total) }}</span>
+        <button class="btn btn-ghost btn-sm filters-toggle" type="button" data-toggle="filters">{{ icon('filter', 16) }} {{ _('filters') }}</button></div>
+      {% if volunteers %}
+      <div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(260px,1fr))">
+        {% for v in volunteers %}
+        <a class="card card-hover person-card" href="{{ url_for('public.volunteer_profile', volunteer_id=v.volunteer_id) }}" style="color:inherit;text-decoration:none">
+          <div class="top">{{ avatar(v.avatar_path, v.full_name, 'lg' if False else '') }}
+            <div><h3>{{ v.full_name }}</h3><div class="xs muted">{{ icon('map-pin', 13) }} {{ loc(v, 'city_name') }}</div></div></div>
+          {% if v.about %}<p class="small muted mb-0" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">{{ v.about }}</p>{% endif %}
+          <div class="row tight">{% for d in dirs.get(v.volunteer_id, [])[:3] %}{{ dir_tag(d, '') }}{% endfor %}</div>
+          <div class="stats"><div><b>{{ fmt_hours(v.hours) }}</b>{{ _('hours_lower') }}</div><div><b>{{ v.n_events }}</b>{{ _('events_lower') }}</div></div>
+        </a>
+        {% endfor %}
+      </div>
+      {{ pagination(page) }}
+      {% else %}
+        {{ empty('users', _('no_volunteers_title'), _('no_results_text'), url_for('public.volunteers'), _('reset_filters')) }}
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

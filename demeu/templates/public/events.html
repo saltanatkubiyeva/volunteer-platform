@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% from "partials/macros.html" import event_card, pagination, empty %}
+{% block title %}{{ _('nav_events') }}{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div class="wrap">
+    <div class="crumbs"><a href="{{ url_for('public.home') }}">{{ _('home') }}</a>{{ icon('chevron-right', 14) }}<span>{{ _('nav_events') }}</span></div>
+    <h1>{{ _('events_title') }}</h1>
+    <p>{{ _('events_subtitle') }}</p>
+  </div>
+</section>
+<div class="wrap">
+  <div class="with-filters">
+    <form class="card filters" id="filters" method="get" data-autosubmit>
+      <h4>{{ _('search') }}</h4>
+      <label class="input-icon"><span class="sr-only">{{ _('search') }}</span>{{ icon('search', 17) }}
+        <input class="input pill" name="q" value="{{ q }}" placeholder="{{ _('search_short_placeholder') }}"></label>
+      <h4>{{ _('when') }}</h4>
+      <div class="radio-list">
+        {% for v, k in [('upcoming','when_any'),('weekend','when_weekend'),('week','when_week'),('month','when_month'),('past','when_past')] %}
+        <label><input type="radio" name="when" value="{{ v }}" {{ 'checked' if when == v }}> {{ _(k) }}</label>
+        {% endfor %}
+      </div>
+      <h4>{{ _('city') }}</h4>
+      <select class="select" name="city" aria-label="{{ _('city') }}">
+        <option value="">{{ _('all_cities') }}</option>
+        {% for c in cities %}<option value="{{ c.city_id }}" {{ 'selected' if city == c.city_id }}>{{ loc(c, 'name') }}</option>{% endfor %}
+      </select>
+      <h4>{{ _('direction') }}</h4>
+      <select class="select" name="direction" aria-label="{{ _('direction') }}">
+        <option value="">{{ _('all_directions') }}</option>
+        {% for d in directions %}<option value="{{ d.direction_id }}" {{ 'selected' if direction == d.direction_id }}>{{ loc(d, 'name') }}</option>{% endfor %}
+      </select>
+      {% if when != 'past' %}
+      <h4>{{ _('availability') }}</h4>
+      <label class="check"><input type="checkbox" name="free" value="1" {{ 'checked' if only_free }}> {{ _('only_with_places') }}</label>
+      {% endif %}
+      <input type="hidden" name="sort" value="{{ sort }}">
+      <div class="row mt-3">
+        <button class="btn btn-dark btn-sm grow" type="submit">{{ _('apply_filters') }}</button>
+        <a class="btn btn-ghost btn-sm" href="{{ url_for('public.events') }}">{{ _('reset') }}</a>
+      </div>
+    </form>
+
+    <div>
+      <div class="results-bar">
+        <span class="count">{{ _('found_n', n=page.total) }}</span>
+        <div class="row">
+          <button class="btn btn-ghost btn-sm filters-toggle" type="button" data-toggle="filters">{{ icon('filter', 16) }} {{ _('filters') }}</button>
+          {% if when != 'past' %}
+          <form method="get" data-autosubmit class="row tight">
+            {% for k, v in request.args.items() if k not in ('sort', 'page') %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}
+            <label class="small muted" for="sort">{{ _('sort_by') }}</label>
+            <select class="select pill" id="sort" name="sort" style="height:38px;width:auto">
+              <option value="soon" {{ 'selected' if sort == 'soon' }}>{{ _('sort_soon') }}</option>
+              <option value="new" {{ 'selected' if sort == 'new' }}>{{ _('sort_new') }}</option>
+              <option value="spots" {{ 'selected' if sort == 'spots' }}>{{ _('sort_spots') }}</option>
+            </select>
+            <noscript><button class="btn btn-ghost btn-sm">OK</button></noscript>
+          </form>
+          {% endif %}
+        </div>
+      </div>
+      {% if q or city or direction or only_free or when != 'upcoming' %}
+      <div class="active-filters">
+        {% set args = request.args.to_dict() %}
+        {% if q %}<a href="{{ url_for('public.events', **dict(args, q='', page=1)) }}">“{{ q }}” {{ icon('x', 13) }}</a>{% endif %}
+        {% if when != 'upcoming' %}<a href="{{ url_for('public.events', **dict(args, when='upcoming', page=1)) }}">{{ _('when_' ~ when) }} {{ icon('x', 13) }}</a>{% endif %}
+        {% if city %}{% for c in cities if c.city_id == city %}<a href="{{ url_for('public.events', **dict(args, city='', page=1)) }}">{{ loc(c, 'name') }} {{ icon('x', 13) }}</a>{% endfor %}{% endif %}
+        {% if direction %}{% for d in directions if d.direction_id == direction %}<a href="{{ url_for('public.events', **dict(args, direction='', page=1)) }}">{{ loc(d, 'name') }} {{ icon('x', 13) }}</a>{% endfor %}{% endif %}
+        {% if only_free %}<a href="{{ url_for('public.events', **dict(args, free='', page=1)) }}">{{ _('only_with_places') }} {{ icon('x', 13) }}</a>{% endif %}
+      </div>
+      {% endif %}
+      {% if events %}
+        <div class="grid grid-3" style="grid-template-columns:repeat(auto-fill,minmax(270px,1fr))">
+          {% for ev in events %}{{ event_card(ev) }}{% endfor %}
+        </div>
+        {{ pagination(page) }}
+      {% else %}
+        {{ empty('search', _('no_events_title'), _('no_events_text'), url_for('public.events'), _('reset_filters')) }}
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

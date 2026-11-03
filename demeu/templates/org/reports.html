@@ -1,0 +1,27 @@
+{% extends "org/_layout.html" %}
+{% from "partials/macros.html" import status, empty %}
+{% block title %}{{ _('nav_reports') }}{% endblock %}
+{% block cab %}
+<div class="cab-head"><div><h1>{{ _('org_reports_title') }}</h1><p>{{ _('org_reports_subtitle') }}</p></div>
+  <a class="btn btn-ghost" href="{{ url_for('org.reports', format='csv') }}">{{ icon('download', 16) }} {{ _('export_csv') }}</a></div>
+<div class="grid grid-4 mb-3">
+  <div class="stat dark"><div class="num">{{ fmt_hours(stats.hours) }}</div><div class="lbl">{{ _('stat_hours') }}</div></div>
+  <div class="stat"><div class="num">{{ stats.completed }}</div><div class="lbl">{{ _('stat_events_done') }}</div></div>
+  <div class="stat"><div class="num">{{ stats.volunteers }}</div><div class="lbl">{{ _('stat_people_helped') }}</div></div>
+  <div class="stat"><div class="num">{{ (stats.attendance ~ '%') if stats.attendance is not none else '—' }}</div><div class="lbl">{{ _('stat_attendance') }}</div></div>
+</div>
+{% if rows %}
+<div class="table-wrap"><table class="table">
+  <thead><tr><th>{{ _('event') }}</th><th>{{ _('date') }}</th><th class="num">{{ _('places') }}</th><th class="num">{{ _('applied_col') }}</th><th class="num">{{ _('accepted_col') }}</th>
+    <th class="num">{{ _('st_attended') }}</th><th class="num">{{ _('st_no_show') }}</th><th class="num">{{ _('no_show_rate') }}</th><th class="num">{{ _('hours_col') }}</th><th class="num">{{ _('rating') }}</th></tr></thead>
+  <tbody>{% for r in rows %}
+    {% set marked = (r.attended or 0) + (r.no_show or 0) %}
+    <tr><td><a href="{{ url_for('org.event_manage', event_id=r.event_id) }}">{{ r.title }}</a></td><td class="small nowrap">{{ fmt_date(r.starts_at) }}</td>
+      <td class="num">{{ r.max_volunteers }}</td><td class="num">{{ r.applied or 0 }}</td><td class="num">{{ r.accepted or 0 }}</td>
+      <td class="num">{{ r.attended or 0 }}</td><td class="num">{{ r.no_show or 0 }}</td>
+      <td class="num">{{ ((r.no_show or 0) * 100 // marked ~ '%') if marked else '—' }}</td>
+      <td class="num"><b>{{ fmt_hours(r.hours) }}</b></td><td class="num">{{ r.rating or '—' }}</td></tr>
+  {% endfor %}</tbody></table></div>
+<p class="xs muted mt-1">{{ _('no_show_rate_hint') }}</p>
+{% else %}{{ empty('chart', _('no_data')) }}{% endif %}
+{% endblock %}

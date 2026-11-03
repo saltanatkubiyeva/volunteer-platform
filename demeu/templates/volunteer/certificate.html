@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}{{ _('certificate') }} {{ cert.code }}{% endblock %}
+{% block body_class %}admin-body{% endblock %}
+{% block footer %}{% endblock %}
+{% block content %}
+<div class="wrap no-print row" style="padding-top:24px;justify-content:space-between">
+  <a class="btn btn-ghost btn-sm" href="{{ url_for('volunteer.applications', tab='history') }}">{{ icon('arrow-left', 16) }} {{ _('back') }}</a>
+  <button class="btn btn-dark btn-sm" onclick="window.print()">{{ icon('printer', 16) }} {{ _('print_or_pdf') }}</button>
+</div>
+<div class="certificate">
+  <div class="seal">DEMEU<br>{{ fmt_hours(cert.hours_confirmed) }} {{ _('h_short') }}<br>✓</div>
+  <a class="logo" href="#"><span class="logo-mark">{{ icon('heart', 19) }}</span>DEMEU</a>
+  <h1>{{ _('cert_title') }}</h1>
+  <p class="muted">{{ _('cert_subtitle') }}</p>
+  <div class="name">{{ cert.full_name }}</div>
+  <p style="font-size:18px">{{ _('cert_text', event=cert.title, org=cert.org_name, date=fmt_date(cert.starts_at), city=loc(cert, 'city_name')) }}</p>
+  <p style="font-size:22px"><b>{{ _('cert_hours', h=fmt_hours(cert.hours_confirmed)) }}</b></p>
+  <div class="sig">
+    <div>{{ cert.confirmed_name or '—' }}{% if cert.confirmed_position %}, {{ cert.confirmed_position }}{% endif %}<br>{{ cert.org_name }}</div>
+    <div>{{ _('cert_code') }}: <b class="mono" style="color:var(--ink)">{{ cert.code }}</b><br>{{ _('cert_verify_at') }} {{ request.host }}{{ url_for('public.verify') }}</div>
+  </div>
+  <p class="xs muted mt-3 mb-0">{{ _('issued_on', d=fmt_date(cert.issued_at)) }}</p>
+</div>
+{% endblock %}

@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}{{ _('register') }}{% endblock %}
+{% block footer %}{% endblock %}
+{% block content %}
+<div class="auth-wrap">
+  {% include "auth/_side.html" %}
+  <div class="auth-main">
+    <div class="auth-box" style="max-width:520px">
+      <h1 style="font-size:32px">{{ _('register_title') }}</h1>
+      <p class="muted">{{ _('register_choice_subtitle') }}</p>
+      <div class="grid mt-3" style="gap:16px">
+        <a class="card card-hover choice" href="{{ url_for('auth.register_volunteer') }}">
+          <span class="ic-wrap">{{ icon('heart', 24) }}</span>
+          <div><h3 class="mb-0">{{ _('i_am_volunteer') }}</h3><p class="small muted mb-0">{{ _('i_am_volunteer_text') }}</p>
+            <ul><li>{{ _('vol_benefit_1') }}</li><li>{{ _('vol_benefit_2') }}</li><li>{{ _('vol_benefit_3') }}</li></ul></div>
+        </a>
+        <a class="card card-hover choice" href="{{ url_for('auth.register_organization') }}">
+          <span class="ic-wrap" style="background:var(--forest);color:var(--lime)">{{ icon('building', 24) }}</span>
+          <div><h3 class="mb-0">{{ _('i_am_org') }}</h3><p class="small muted mb-0">{{ _('i_am_org_text') }}</p>
+            <ul><li>{{ _('org_benefit_1') }}</li><li>{{ _('org_benefit_2') }}</li><li>{{ _('org_benefit_3') }}</li></ul></div>
+        </a>
+      </div>
+      <p class="center mt-3 small">{{ _('have_account') }} <a href="{{ url_for('auth.login') }}"><b>{{ _('login') }}</b></a></p>
+    </div>
+  </div>
+</div>
+{% endblock %}

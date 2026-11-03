@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% from "partials/macros.html" import avatar, empty %}
+{% block title %}{{ _('nav_reports') }}{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div class="wrap">
+    <div class="crumbs"><a href="{{ url_for('public.home') }}">{{ _('home') }}</a>{{ icon('chevron-right', 14) }}<span>{{ _('nav_reports') }}</span></div>
+    <div class="row between">
+      <div><h1>{{ _('reports_title') }}</h1><p>{{ _('reports_subtitle') }}</p></div>
+      <form class="row" method="get" data-autosubmit>
+        <select class="select pill" name="year" aria-label="{{ _('year') }}" style="width:auto">
+          {% for y in years %}<option value="{{ y }}" {{ 'selected' if y == year }}>{{ y }}</option>{% endfor %}</select>
+        <select class="select pill" name="city" aria-label="{{ _('city') }}" style="width:auto"><option value="">{{ _('all_kazakhstan') }}</option>
+          {% for c in cities %}<option value="{{ c.city_id }}" {{ 'selected' if city == c.city_id }}>{{ loc(c, 'name') }}</option>{% endfor %}</select>
+        <noscript><button class="btn btn-dark btn-sm">OK</button></noscript>
+      </form>
+    </div>
+  </div>
+</section>
+<div class="wrap" style="padding:32px 24px 72px">
+  <div class="grid grid-4">
+    <div class="stat dark"><div class="ic-wrap">{{ icon('clock') }}</div><div class="num">{{ fmt_hours(totals.hours) }}</div><div class="lbl">{{ _('stat_hours') }}</div></div>
+    <div class="stat"><div class="ic-wrap">{{ icon('users') }}</div><div class="num">{{ totals.volunteers }}</div><div class="lbl">{{ _('stat_active_volunteers') }}</div></div>
+    <div class="stat"><div class="ic-wrap">{{ icon('check-circle') }}</div><div class="num">{{ totals.events }}</div><div class="lbl">{{ _('stat_events_done') }}</div></div>
+    <div class="stat"><div class="ic-wrap">{{ icon('target') }}</div><div class="num">{{ (totals.attendance ~ '%') if totals.attendance is not none else '—' }}</div><div class="lbl">{{ _('stat_attendance') }}</div></div>
+  </div>
+
+  <div class="card card-pad mt-3">
+    <div class="row between"><h3 class="mb-0">{{ _('hours_by_month', y=year) }}</h3><span class="small muted">{{ _('participations_n', n=totals.participations) }}</span></div>
+    {% set mx = (monthly.values()|max) or 1 %}
+    <div class="colchart" role="img" aria-label="{{ _('hours_by_month', y=year) }}">
+      {% for m, h in monthly.items() %}
+      <div class="col {{ 'zero' if not h }}" title="{{ fmt_hours(h) }} {{ _('h_short') }}">
+        <b>{{ fmt_hours(h) if h else '' }}</b><i style="height:{{ [3, (h * 100 / mx)|round|int]|max }}%"></i>
+        <small>{{ fmt_date('2000-%02d-01'|format(m), False, False).split(' ')[1] }}</small></div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="grid grid-2 mt-3">
+    <div class="card card-pad">
+      <h3>{{ _('hours_by_city') }}</h3>
+      {% if by_city %}
+      <div class="bars">{% set mx = by_city[0].hours or 1 %}
+        {% for c in by_city %}<div class="bar-row"><span>{{ loc(c, 'name') }}</span><span class="track"><i style="width:{{ (c.hours * 100 / mx)|round|int }}%"></i></span><span class="v">{{ fmt_hours(c.hours) }}</span></div>{% endfor %}
+      </div>{% else %}<p class="muted">{{ _('no_data') }}</p>{% endif %}
+    </div>
+    <div class="card card-pad">
+      <h3>{{ _('hours_by_direction') }}</h3>
+      {% if by_direction %}
+      <div class="bars">{% set mx = by_direction[0].hours or 1 %}
+        {% for d in by_direction %}<div class="bar-row"><span>{{ loc(d, 'name') }}</span><span class="track"><i style="width:{{ (d.hours * 100 / mx)|round|int }}%"></i></span><span class="v">{{ fmt_hours(d.hours) }}</span></div>{% endfor %}
+      </div>{% else %}<p class="muted">{{ _('no_data') }}</p>{% endif %}
+    </div>
+    <div class="card card-pad">
+      <h3>{{ _('top_orgs') }}</h3>
+      <div class="table-wrap"><table class="table"><thead><tr><th>{{ _('organization') }}</th><th class="num">{{ _('events_col') }}</th><th class="num">{{ _('people_col') }}</th><th class="num">{{ _('hours_col') }}</th></tr></thead>
+        <tbody>{% for o in top_orgs %}<tr><td><a href="{{ url_for('public.organization_profile', org_id=o.org_id) }}">{{ o.name }}</a></td><td class="num">{{ o.n }}</td><td class="num">{{ o.people }}</td><td class="num"><b>{{ fmt_hours(o.hours) }}</b></td></tr>
+        {% else %}<tr><td colspan="4" class="muted">{{ _('no_data') }}</td></tr>{% endfor %}</tbody></table></div>
+    </div>
+    <div class="card card-pad">
+      <h3>{{ _('top_volunteers') }}</h3>
+      <div class="table-wrap"><table class="table"><thead><tr><th>{{ _('volunteer') }}</th><th class="num">{{ _('events_col') }}</th><th class="num">{{ _('hours_col') }}</th></tr></thead>
+        <tbody>{% for v in top_vols %}<tr><td><a class="person" href="{{ url_for('public.volunteer_profile', volunteer_id=v.volunteer_id) }}">{{ avatar(v.avatar_path, v.full_name, 'sm') }}{{ v.full_name }}</a></td><td class="num">{{ v.n }}</td><td class="num"><b>{{ fmt_hours(v.hours) }}</b></td></tr>
+        {% else %}<tr><td colspan="3" class="muted">{{ _('no_data') }}</td></tr>{% endfor %}</tbody></table></div>
+      <p class="xs muted mt-1 mb-0">{{ _('top_volunteers_note') }}</p>
+    </div>
+  </div>
+  <p class="small muted mt-3">{{ icon('info', 14) }} {{ _('reports_method_note') }}</p>
+</div>
+{% endblock %}

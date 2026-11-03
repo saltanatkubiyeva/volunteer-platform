@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% from "partials/macros.html" import field_error %}
+{% block title %}{{ _('register_volunteer_title') }}{% endblock %}
+{% block content %}
+<div class="wrap" style="max-width:820px;padding:40px 24px 72px">
+  <div class="crumbs"><a href="{{ url_for('auth.register') }}">{{ _('register') }}</a>{{ icon('chevron-right', 14) }}<span>{{ _('i_am_volunteer') }}</span></div>
+  <h1>{{ _('register_volunteer_title') }}</h1>
+  <p class="muted">{{ _('register_volunteer_subtitle') }}</p>
+  <form class="card card-pad mt-3" method="post" novalidate>
+    {{ csrf_field() }}
+    <div class="form-section">
+      <h3><span class="num">1</span>{{ _('personal_data') }}</h3>
+      <div class="form-grid">
+        <div class="field span-2 {{ 'has-error' if errors.full_name }}"><label class="req" for="full_name">{{ _('full_name') }}</label>
+          <input class="input" id="full_name" name="full_name" value="{{ f.full_name or '' }}" maxlength="100" autocomplete="name" placeholder="{{ _('full_name_placeholder') }}" required>
+          {{ field_error(errors, 'full_name') }}</div>
+        <div class="field {{ 'has-error' if errors.birth_date }}"><label class="req" for="birth_date">{{ _('birth_date') }}</label>
+          <input class="input" type="date" id="birth_date" name="birth_date" value="{{ f.birth_date or '' }}" required>
+          <span class="hint">{{ _('birth_date_hint') }}</span>{{ field_error(errors, 'birth_date') }}</div>
+        <div class="field {{ 'has-error' if errors.city_id }}"><label class="req" for="city_id">{{ _('city') }}</label>
+          <select class="select" id="city_id" name="city_id" required><option value="">{{ _('choose') }}</option>
+            {% for c in cities %}<option value="{{ c.city_id }}" {{ 'selected' if f.city_id == c.city_id|string }}>{{ loc(c, 'name') }}</option>{% endfor %}</select>
+          {{ field_error(errors, 'city_id') }}</div>
+      </div>
+    </div>
+    <div class="form-section">
+      <h3><span class="num">2</span>{{ _('contacts_and_login') }}</h3>
+      <div class="form-grid">
+        <div class="field {{ 'has-error' if errors.email }}"><label class="req" for="email">Email</label>
+          <input class="input" type="email" id="email" name="email" value="{{ f.email or '' }}" maxlength="120" autocomplete="email" required>
+          {{ field_error(errors, 'email') }}</div>
+        <div class="field {{ 'has-error' if errors.phone }}"><label class="req" for="phone">{{ _('phone') }}</label>
+          <input class="input" type="tel" id="phone" name="phone" value="{{ f.phone or '' }}" placeholder="+7 701 123 45 67" autocomplete="tel" required>
+          {{ field_error(errors, 'phone') }}</div>
+        <div class="field {{ 'has-error' if errors.password }}"><label class="req" for="password">{{ _('password') }}</label>
+          <input class="input" type="password" id="password" name="password" autocomplete="new-password" required>
+          <span class="hint">{{ _('password_hint') }}</span>{{ field_error(errors, 'password') }}</div>
+        <div class="field {{ 'has-error' if errors.password2 }}"><label class="req" for="password2">{{ _('password_repeat') }}</label>
+          <input class="input" type="password" id="password2" name="password2" autocomplete="new-password" required>
+          {{ field_error(errors, 'password2') }}</div>
+      </div>
+    </div>
+    <div class="form-section {{ 'has-error' if errors.directions }}">
+      <h3><span class="num">3</span>{{ _('what_interests_you') }}</h3>
+      <p class="small muted">{{ _('directions_hint') }}</p>
+      <div class="check-grid">
+        {% set chosen = f.directions or [] %}
+        {% for d in directions %}
+        <label class="check-chip"><input type="checkbox" name="directions" value="{{ d.direction_id }}" {{ 'checked' if d.direction_id in chosen }}><span>{{ icon(d.icon, 15) }}{{ loc(d, 'name') }}</span></label>
+        {% endfor %}
+      </div>
+      {{ field_error(errors, 'directions') }}
+    </div>
+    <div class="alert alert-info">{{ icon('info') }}<div class="small">{{ _('minor_info') }}</div></div>
+    <div class="field mt-2 {{ 'has-error' if errors.agree }}">
+      <label class="check"><input type="checkbox" name="agree" value="1" {{ 'checked' if request.form.get('agree') }}> {{ _('agree_rules') }}</label>
+      {{ field_error(errors, 'agree') }}
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-primary btn-lg" type="submit">{{ _('create_account') }}</button>
+      <span class="small muted">{{ _('have_account') }} <a href="{{ url_for('auth.login') }}">{{ _('login') }}</a></span>
+    </div>
+  </form>
+</div>
+{% endblock %}

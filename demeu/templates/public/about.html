@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}{{ _('nav_about') }}{% endblock %}
+{% block content %}
+<section class="hero" style="padding-bottom:56px">
+  <div class="wrap">
+    <div class="crumbs"><a href="{{ url_for('public.home') }}">{{ _('home') }}</a>{{ icon('chevron-right', 14) }}<span>{{ _('nav_about') }}</span></div>
+    <div class="hero-grid">
+      <div>
+        <div class="eyebrow">{{ _('about_eyebrow') }}</div>
+        <h1>{{ _('about_title') }}</h1>
+        <p class="lead">{{ _('about_lead') }}</p>
+        <p class="small muted">{{ _('about_name_meaning') }}</p>
+      </div>
+      <div class="grid grid-2">
+        <div class="stat dark"><div class="num">{{ stats.volunteers }}</div><div class="lbl">{{ _('stat_volunteers') }}</div></div>
+        <div class="stat"><div class="num">{{ stats.orgs }}</div><div class="lbl">{{ _('stat_verified_orgs') }}</div></div>
+        <div class="stat" style="grid-column:span 2"><div class="num">{{ fmt_hours(stats.hours) }}</div><div class="lbl">{{ _('stat_hours') }}</div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="wrap">
+    <div class="grid grid-2">
+      <div class="card card-pad"><div class="eyebrow">{{ _('about_problem_eyebrow') }}</div><h3>{{ _('about_problem_title') }}</h3>
+        <ul class="muted" style="padding-left:18px;margin:0">
+          <li>{{ _('about_problem_1') }}</li><li>{{ _('about_problem_2') }}</li><li>{{ _('about_problem_3') }}</li><li>{{ _('about_problem_4') }}</li></ul></div>
+      <div class="card card-pad" style="background:var(--lime-soft)"><div class="eyebrow">{{ _('about_solution_eyebrow') }}</div><h3>{{ _('about_solution_title') }}</h3>
+        <ul style="padding-left:18px;margin:0">
+          <li>{{ _('about_solution_1') }}</li><li>{{ _('about_solution_2') }}</li><li>{{ _('about_solution_3') }}</li><li>{{ _('about_solution_4') }}</li></ul></div>
+    </div>
+  </div>
+</section>
+
+<section class="section tint">
+  <div class="wrap">
+    <div class="section-head"><div><div class="eyebrow">{{ _('about_principles_eyebrow') }}</div><h2>{{ _('about_principles_title') }}</h2></div></div>
+    <div class="grid grid-4">
+      {% for ic, k in [('shield-check','pr_verified'),('clock','pr_hours'),('lock','pr_privacy'),('users','pr_minors')] %}
+      <div class="card card-pad"><div class="stat" style="padding:0;border:0"><div class="ic-wrap">{{ icon(ic) }}</div></div>
+        <h4>{{ _(k ~ '_title') }}</h4><p class="small muted mb-0">{{ _(k ~ '_text') }}</p></div>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="wrap">
+    <div class="section-head"><div><div class="eyebrow">{{ _('team') }}</div><h2>{{ _('about_team_title') }}</h2><p>{{ _('about_team_text') }}</p></div></div>
+    <div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(200px,1fr))">
+      {% for name, role in [('Alan Aimurzayev','team_role_analysis'),('Ilyas Aitkhozha','team_role_data'),('Saltanat Kubiyeva','team_role_dev'),('Alua Kudaibergenova','team_role_arch'),('Emil Akshabayev','team_role_test')] %}
+      <div class="card team-card"><span class="avatar lg">{{ initials(name) }}</span><b>{{ name }}</b><div class="small muted">{{ _(role) }}</div></div>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+<section class="section tint" id="faq">
+  <div class="wrap" style="max-width:860px">
+    <div class="eyebrow">{{ _('faq') }}</div><h2>{{ _('faq_title') }}</h2>
+    <div class="faq mt-2">
+      {% for i in range(1, 9) %}
+      <details {{ 'open' if i == 1 }}><summary>{{ _('faq_q' ~ i) }} {{ icon('chevron-down') }}</summary><p>{{ _('faq_a' ~ i) }}</p></details>
+      {% endfor %}
+    </div>
+    <div class="row mt-3"><a class="btn btn-dark" href="{{ url_for('public.contacts') }}">{{ icon('message') }} {{ _('ask_question') }}</a></div>
+  </div>
+</section>
+{% endblock %}

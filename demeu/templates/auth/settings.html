@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% from "partials/macros.html" import field_error %}
+{% block title %}{{ _('settings') }}{% endblock %}
+{% block content %}
+<div class="wrap" style="max-width:760px;padding:40px 24px 72px">
+  <h1>{{ _('settings') }}</h1>
+  <p class="muted">{{ g.user.email }} · {{ _('role_' ~ g.user.role) }}</p>
+  <form class="card card-pad mt-3" method="post">
+    {{ csrf_field() }}<input type="hidden" name="action" value="language">
+    <h3>{{ icon('globe') }} {{ _('interface_language') }}</h3>
+    <p class="small muted">{{ _('interface_language_hint') }}</p>
+    <div class="row">
+      {% for code, label in [('en','English'),('ru','Русский'),('kk','Қазақша')] %}
+      <label class="check-chip"><input type="radio" name="preferred_lang" value="{{ code }}" {{ 'checked' if g.user.preferred_lang == code }}><span>{{ label }}</span></label>
+      {% endfor %}
+      <button class="btn btn-dark btn-sm" type="submit">{{ _('save') }}</button>
+    </div>
+  </form>
+  <form class="card card-pad mt-3" method="post" novalidate>
+    {{ csrf_field() }}<input type="hidden" name="action" value="password">
+    <h3>{{ icon('lock') }} {{ _('change_password') }}</h3>
+    <div class="field {{ 'has-error' if errors.current }}"><label for="current">{{ _('current_password') }}</label>
+      <input class="input" type="password" id="current" name="current" autocomplete="current-password">{{ field_error(errors, 'current') }}</div>
+    <div class="form-grid mt-2">
+      <div class="field {{ 'has-error' if errors.password }}"><label for="password">{{ _('new_password') }}</label>
+        <input class="input" type="password" id="password" name="password" autocomplete="new-password"><span class="hint">{{ _('password_hint') }}</span>{{ field_error(errors, 'password') }}</div>
+      <div class="field {{ 'has-error' if errors.password2 }}"><label for="password2">{{ _('password_repeat') }}</label>
+        <input class="input" type="password" id="password2" name="password2" autocomplete="new-password">{{ field_error(errors, 'password2') }}</div>
+    </div>
+    <button class="btn btn-dark mt-3" type="submit">{{ _('change_password') }}</button>
+  </form>
+</div>
+{% endblock %}

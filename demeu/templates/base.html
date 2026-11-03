@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="{{ 'kk' if lang == 'kk' else lang }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}{{ _('tagline') }}{% endblock %} · DEMEU</title>
+  <meta name="description" content="{{ _('meta_description') }}">
+  <link rel="icon" href="{{ url_for('static', filename='img/favicon.svg') }}" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+  {% block head %}{% endblock %}
+</head>
+<body class="{% block body_class %}{% endblock %}">
+<a class="skip" href="#main">{{ _('skip_to_content') }}</a>
+{% set ep = request.endpoint or '' %}
+<header class="site-header">
+  <div class="wrap header-inner">
+    <a class="logo" href="{{ url_for('public.home') }}" aria-label="DEMEU">
+      <span class="logo-mark">{{ icon('heart', 19) }}</span>DEMEU
+    </a>
+    <nav class="nav" aria-label="{{ _('main_menu') }}">
+      <a href="{{ url_for('public.events') }}" class="{{ 'active' if ep.startswith('public.event') }}">{{ _('nav_events') }}</a>
+      <a href="{{ url_for('public.volunteers') }}" class="{{ 'active' if ep.startswith('public.volunteer') }}">{{ _('nav_volunteers') }}</a>
+      <a href="{{ url_for('public.organizations') }}" class="{{ 'active' if ep.startswith('public.organization') }}">{{ _('nav_organizations') }}</a>
+      <a href="{{ url_for('public.reports') }}" class="{{ 'active' if ep == 'public.reports' }}">{{ _('nav_reports') }}</a>
+      <a href="{{ url_for('public.about') }}" class="{{ 'active' if ep == 'public.about' }}">{{ _('nav_about') }}</a>
+      <a href="{{ url_for('public.contacts') }}" class="{{ 'active' if ep == 'public.contacts' }}">{{ _('nav_contacts') }}</a>
+    </nav>
+    <div class="header-tools">
+      <a class="icon-btn hide-md" href="{{ url_for('public.search') }}" aria-label="{{ _('search') }}" title="{{ _('search') }}">{{ icon('search') }}</a>
+      <div class="lang-switch" role="group" aria-label="{{ _('language') }}">
+        {% for code in LANGS %}
+          <a href="{{ url_for('public.set_lang', code=code, next=request.full_path) }}" class="{{ 'on' if code == lang }}" lang="{{ code }}">{{ LANG_LABELS[code] }}</a>
+        {% endfor %}
+      </div>
+      {% if g.user %}
+        <a class="icon-btn" href="{{ url_for('auth.notifications') }}" aria-label="{{ _('notifications') }}" title="{{ _('notifications') }}">
+          {{ icon('bell') }}{% if unread %}<span class="count">{{ unread if unread < 100 else '99+' }}</span>{% endif %}
+        </a>
+        {% set person = g.volunteer or g.coordinator %}
+        <div class="user-menu">
+          <button class="user-btn" data-toggle="user-dd" aria-expanded="false" aria-haspopup="true">
+            {% if g.volunteer and g.volunteer.avatar_path %}
+              <span class="avatar sm"><img src="{{ url_for('media.public_file', folder=g.volunteer.avatar_path.split('/')[0], name=g.volunteer.avatar_path.split('/')[1]) }}" alt=""></span>
+            {% else %}
+              <span class="avatar sm">{{ initials(person.full_name if person else g.user.email) }}</span>
+            {% endif %}
+            <span class="hide-md">{{ (person.full_name.split()[0]) if person else _('role_admin') }}</span>{{ icon('chevron-down', 16) }}
+          </button>
+          <div class="dropdown" id="user-dd">
+            <div class="who"><b>{{ person.full_name if person else 'Admin' }}</b><div class="xs muted">{{ g.user.email }} · {{ _('role_' ~ g.user.role) }}</div></div>
+            {% if g.user.role == 'volunteer' %}
+              <a href="{{ url_for('volunteer.dashboard') }}">{{ icon('dashboard') }} {{ _('my_cabinet') }}</a>
+              <a href="{{ url_for('volunteer.applications') }}">{{ icon('clipboard-check') }} {{ _('my_applications') }}</a>
+              <a href="{{ url_for('public.volunteer_profile', volunteer_id=g.volunteer.volunteer_id) }}">{{ icon('user') }} {{ _('my_public_profile') }}</a>
+            {% elif g.user.role == 'coordinator' %}
+              <a href="{{ url_for('org.dashboard') }}">{{ icon('dashboard') }} {{ _('org_cabinet') }}</a>
+              <a href="{{ url_for('org.events') }}">{{ icon('calendar') }} {{ _('org_events') }}</a>
+              <a href="{{ url_for('public.organization_profile', org_id=g.org.org_id) }}">{{ icon('building') }} {{ _('org_public_page') }}</a>
+            {% else %}
+              <a href="{{ url_for('admin.dashboard') }}">{{ icon('shield-check') }} {{ _('admin_panel') }}</a>
+            {% endif %}
+            <a href="{{ url_for('auth.settings') }}">{{ icon('sliders') }} {{ _('settings') }}</a>
+            <hr>
+            <form method="post" action="{{ url_for('auth.logout') }}">{{ csrf_field() }}<button type="submit">{{ icon('log-out') }} {{ _('logout') }}</button></form>
+          </div>
+        </div>
+      {% else %}
+        <a class="btn btn-ghost btn-sm hide-md" href="{{ url_for('auth.login', next=request.full_path if ep not in ('auth.login','auth.register') else None) }}">{{ _('login') }}</a>
+        <a class="btn btn-primary btn-sm" href="{{ url_for('auth.register') }}">{{ _('join') }}</a>
+      {% endif %}
+      <button class="icon-btn burger" data-toggle="mobile-nav" aria-label="{{ _('main_menu') }}" aria-expanded="false">{{ icon('menu') }}</button>
+    </div>
+  </div>
+  <nav class="mobile-nav" id="mobile-nav" aria-label="{{ _('main_menu') }}">
+    <a href="{{ url_for('public.events') }}">{{ _('nav_events') }}</a>
+    <a href="{{ url_for('public.volunteers') }}">{{ _('nav_volunteers') }}</a>
+    <a href="{{ url_for('public.organizations') }}">{{ _('nav_organizations') }}</a>
+    <a href="{{ url_for('public.reports') }}">{{ _('nav_reports') }}</a>
+    <a href="{{ url_for('public.about') }}">{{ _('nav_about') }}</a>
+    <a href="{{ url_for('public.contacts') }}">{{ _('nav_contacts') }}</a>
+    <a href="{{ url_for('public.search') }}">{{ _('search') }}</a>
+    {% if not g.user %}<a href="{{ url_for('auth.login') }}">{{ _('login') }}</a>{% endif %}
+  </nav>
+</header>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+  <div class="flashes" role="status" aria-live="polite">
+    {% for cat, msg in messages %}
+      <div class="flash {{ cat }}">{{ icon('check-circle' if cat == 'success' else 'alert' if cat == 'error' else 'info') }}<span>{{ msg }}</span>
+        <button type="button" aria-label="{{ _('close') }}">{{ icon('x', 16) }}</button></div>
+    {% endfor %}
+  </div>
+  {% endif %}
+{% endwith %}
+
+<main id="main">{% block content %}{% endblock %}</main>
+
+{% block footer %}
+<footer class="site-footer">
+  <div class="wrap">
+    <div class="footer-grid">
+      <div>
+        <a class="logo" href="{{ url_for('public.home') }}"><span class="logo-mark">{{ icon('heart', 19) }}</span>DEMEU</a>
+        <p class="mt-2 small">{{ _('footer_about') }}</p>
+      </div>
+      <div>
+        <h4>{{ _('footer_platform') }}</h4>
+        <ul>
+          <li><a href="{{ url_for('public.events') }}">{{ _('nav_events') }}</a></li>
+          <li><a href="{{ url_for('public.volunteers') }}">{{ _('nav_volunteers') }}</a></li>
+          <li><a href="{{ url_for('public.organizations') }}">{{ _('nav_organizations') }}</a></li>
+          <li><a href="{{ url_for('public.reports') }}">{{ _('nav_reports') }}</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>{{ _('footer_info') }}</h4>
+        <ul>
+          <li><a href="{{ url_for('public.about') }}">{{ _('nav_about') }}</a></li>
+          <li><a href="{{ url_for('public.about') }}#faq">{{ _('faq') }}</a></li>
+          <li><a href="{{ url_for('public.contacts') }}">{{ _('nav_contacts') }}</a></li>
+          <li><a href="{{ url_for('public.verify') }}">{{ _('verify_certificate') }}</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>{{ _('footer_for_orgs') }}</h4>
+        <p class="small">{{ _('footer_for_orgs_text') }}</p>
+        <a class="btn btn-primary btn-sm" href="{{ url_for('auth.register_organization') }}">{{ _('register_org_cta') }}</a>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>© {{ 2026 }} DEMEU · {{ _('footer_rights') }}</span>
+      <span>support@demeu.kz · +7 7172 000 111</span>
+    </div>
+  </div>
+</footer>
+{% endblock %}
+
+<dialog id="confirm-dialog">
+  <div class="dlg">
+    <h3>{{ _('confirm_title') }}</h3>
+    <p id="confirm-text" class="muted"></p>
+    <div class="row mt-3">
+      <button class="btn btn-dark" id="confirm-yes" type="button">{{ _('confirm_yes') }}</button>
+      <button class="btn btn-ghost" id="confirm-no" type="button">{{ _('cancel') }}</button>
+    </div>
+  </div>
+</dialog>
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

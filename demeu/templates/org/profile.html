@@ -1,0 +1,44 @@
+{% extends "org/_layout.html" %}
+{% from "partials/macros.html" import field_error, org_logo %}
+{% block title %}{{ _('org_profile') }}{% endblock %}
+{% block cab %}
+<div class="cab-head"><div><h1>{{ _('org_profile') }}</h1><p>{{ _('org_profile_subtitle') }}</p></div>
+  <a class="btn btn-ghost" href="{{ url_for('public.organization_profile', org_id=g.org.org_id) }}">{{ icon('eye', 16) }} {{ _('preview') }}</a></div>
+<form class="card card-pad" method="post" enctype="multipart/form-data" novalidate>
+  {{ csrf_field() }}
+  <div class="form-section">
+    <h3>{{ _('logo') }}</h3>
+    <div class="row">{{ org_logo(g.org, 'lg') }}
+      <div class="field grow {{ 'has-error' if errors.logo }}"><input class="input" style="padding-top:10px" type="file" name="logo" accept=".jpg,.jpeg,.png,.webp">
+        <span class="hint">{{ _('image_hint') }}</span>{{ field_error(errors, 'logo') }}</div></div>
+  </div>
+  <div class="form-section">
+    <h3>{{ _('organization') }}</h3>
+    <div class="form-grid">
+      <div class="field {{ 'has-error' if errors.name }}"><label class="req" for="name">{{ _('org_name') }}</label>
+        <input class="input" id="name" name="name" value="{{ f.name }}" {{ 'disabled' if g.org.status == 'verified' }} maxlength="150">
+        {% if g.org.status == 'verified' %}<span class="hint">{{ _('name_locked_hint') }}</span>{% endif %}{{ field_error(errors, 'name') }}</div>
+      <div class="field"><span class="label">{{ _('bin') }}</span><input class="input mono" value="{{ f.bin }}" disabled><span class="hint">{{ _('bin_locked_hint') }}</span></div>
+      <div class="field {{ 'has-error' if errors.city_id }}"><label class="req" for="city_id">{{ _('city') }}</label>
+        <select class="select" id="city_id" name="city_id">{% for c in cities %}<option value="{{ c.city_id }}" {{ 'selected' if f.city_id|string == c.city_id|string }}>{{ loc(c, 'name') }}</option>{% endfor %}</select></div>
+      <div class="field {{ 'has-error' if errors.address }}"><label class="req" for="address">{{ _('address') }}</label>
+        <input class="input" id="address" name="address" value="{{ f.address }}" maxlength="200">{{ field_error(errors, 'address') }}</div>
+      <div class="field {{ 'has-error' if errors.email }}"><label class="req" for="email">{{ _('org_email') }}</label>
+        <input class="input" id="email" name="email" type="email" value="{{ f.email }}">{{ field_error(errors, 'email') }}</div>
+      <div class="field {{ 'has-error' if errors.phone }}"><label class="req" for="phone">{{ _('org_phone') }}</label>
+        <input class="input" id="phone" name="phone" type="tel" value="{{ f.phone }}">{{ field_error(errors, 'phone') }}</div>
+      <div class="field"><label for="website">{{ _('website') }}</label><input class="input" id="website" name="website" value="{{ f.website or '' }}" maxlength="150"></div>
+      <div class="field {{ 'has-error' if errors.founded_year }}"><label for="founded_year">{{ _('founded_year') }}</label>
+        <input class="input" id="founded_year" name="founded_year" type="number" min="1950" max="2100" value="{{ f.founded_year or '' }}">{{ field_error(errors, 'founded_year') }}</div>
+      <div class="field span-2 {{ 'has-error' if errors.description }}"><label class="req" for="description">{{ _('org_description') }}</label>
+        <textarea class="textarea" id="description" name="description" maxlength="3000">{{ f.description }}</textarea>{{ field_error(errors, 'description') }}</div>
+    </div>
+  </div>
+  <div class="form-section {{ 'has-error' if errors.directions }}">
+    <h3>{{ _('directions') }}</h3>
+    <div class="check-grid">{% for d in directions %}<label class="check-chip"><input type="checkbox" name="directions" value="{{ d.direction_id }}" {{ 'checked' if d.direction_id in selected }}><span>{{ icon(d.icon, 15) }}{{ loc(d, 'name') }}</span></label>{% endfor %}</div>
+    {{ field_error(errors, 'directions') }}
+  </div>
+  <div class="form-actions"><button class="btn btn-primary btn-lg">{{ _('resubmit') if g.org.status == 'rejected' else _('save') }}</button></div>
+</form>
+{% endblock %}

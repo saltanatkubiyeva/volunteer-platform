@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% from "partials/macros.html" import cover_url, dir_tag, org_logo, avatar, rating, status, event_card %}
+{% block title %}{{ ev.title }}{% endblock %}
+{% block content %}
+{% set phase = event_phase(ev) %}
+{% set left = ev.max_volunteers - ev.taken %}
+<div class="wrap" style="padding-top:24px">
+  <div class="crumbs"><a href="{{ url_for('public.home') }}">{{ _('home') }}</a>{{ icon('chevron-right', 14) }}
+    <a href="{{ url_for('public.events') }}">{{ _('nav_events') }}</a>{{ icon('chevron-right', 14) }}<span>{{ ev.title }}</span></div>
+  <div class="detail-hero"><img src="{{ cover_url(ev) }}" alt=""></div>
+
+  <div class="detail-grid">
+    <div>
+      <div class="row mb-2">{{ dir_tag(ev) }} {{ status(phase) }}
+        {% if not ev.requires_approval %}<span class="tag tone-mint">{{ icon('check', 12) }}{{ _('instant_join') }}</span>{% endif %}</div>
+      <h1>{{ ev.title }}</h1>
+      <p class="muted" style="font-size:18px">{{ ev.summary }}</p>
+
+      {% if ev.status == 'cancelled' %}
+        <div class="alert alert-danger mt-2">{{ icon('x-circle') }}<div><b>{{ _('event_cancelled_banner') }}</b><p>{{ ev.cancel_reason }}</p></div></div>
+      {% elif ev.status == 'draft' %}
+        <div class="alert alert-warn mt-2">{{ icon('pencil') }}<div>{{ _('draft_banner') }}</div></div>
+      {% elif ev.org_status != 'verified' %}
+        <div class="alert alert-warn mt-2">{{ icon('hourglass') }}<div>{{ _('org_not_verified_banner') }}</div></div>
+      {% endif %}
+
+      <div class="prose mt-3">
+        <h3>{{ _('about_event') }}</h3>
+        <p>{{ ev.description|nl2br }}</p>
+      </div>
+      <div class="info-boxes">
+        {% if ev.requirements %}<div class="info-box"><h4>{{ icon('clipboard-check', 18) }} {{ _('requirements') }}</h4><p class="small mb-0">{{ ev.requirements }}</p></div>{% endif %}
+        {% if ev.provided %}<div class="info-box"><h4>{{ icon('package', 18) }} {{ _('provided') }}</h4><p class="small mb-0">{{ ev.provided }}</p></div>{% endif %}
+      </div>
+
+      <h3 class="mt-4">{{ _('organizer') }}</h3>
+      <a class="card card-hover card-pad row" href="{{ url_for('public.organization_profile', org_id=ev.org_id) }}" style="color:inherit;text-decoration:none;flex-wrap:nowrap">
+        {{ org_logo(ev, 'lg') }}
+        <div class="grow"><b style="font-size:18px">{{ ev.org_name }}</b>
+          {% if ev.org_status == 'verified' %}<span class="verified">{{ icon('shield-check', 16) }}</span>{% endif %}
+          <div class="small muted">{{ _('event_coordinator') }}: {{ coordinator.full_name }}{% if coordinator.position %} · {{ coordinator.position }}{% endif %}</div></div>
+        {{ icon('chevron-right') }}
+      </a>
+
+      {% if participants %}
+      <h3 class="mt-4">{{ _('who_took_part') if phase == 'finished' else _('who_is_going') }} <span class="muted small">({{ ev.taken }})</span></h3>
+      <div class="row">
+        <div class="avatar-stack">
+          {% for p in participants[:10] %}
+            {% if p.is_public %}<a href="{{ url_for('public.volunteer_profile', volunteer_id=p.volunteer_id) }}" title="{{ p.full_name }}">{{ avatar(p.avatar_path, p.full_name) }}</a>
+            {% else %}{{ avatar(None, '?') }}{% endif %}
+          {% endfor %}
+          {% if ev.taken > 10 %}<span class="avatar more">+{{ ev.taken - 10 }}</span>{% endif %}
+        </div>
+      </div>
+      {% endif %}
+
+      {% if reviews %}
+      <h3 class="mt-4">{{ _('reviews') }} <span class="muted small">({{ reviews|length }})</span></h3>
+      <div class="card card-pad">
+        {% for r in reviews %}
+        <div class="review"><div class="head">{{ avatar(r.avatar_path, r.full_name, 'sm') }}<b class="small">{{ r.full_name }}</b>{{ rating(r.rating) }}
+          <span class="xs muted">{{ fmt_date(r.created_at) }}</span></div>
+          {% if r.comment %}<p class="small mb-0">{{ r.comment }}</p>{% endif %}</div>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+
+    <aside class="detail-aside">
+      <div class="card card-pad">
+        <div class="kv">
+          <div><span class="ic-wrap">{{ icon('calendar') }}</span><div><b>{{ fmt_date(ev.starts_at, True) }}</b><span>{{ fmt_time(ev.starts_at) }}–{{ fmt_time(ev.ends_at) }} · {{ _('n_hours', n=fmt_hours(hours)) }}</span></div></div>
+          <div><span class="ic-wrap">{{ icon('map-pin') }}</span><div><b>{{ loc(ev, 'city_name') }}</b><span>{{ ev.address }}</span></div></div>
+          <div><span class="ic-wrap">{{ icon('users') }}</span><div><b>{{ _('joined_of', a=ev.taken, b=ev.max_volunteers) }}</b>
+            <span>{% if phase != 'upcoming' %}{{ _('registration_closed') }}{% elif left > 0 %}{{ _('spots_left', n=left) }}{% else %}{{ _('no_spots') }}{% endif %}{% if phase == 'upcoming' and ev.pending and ev.requires_approval %} · {{ _('n_pending_apps', n=ev.pending) }}{% endif %}</span></div></div>
+          <div><span class="ic-wrap">{{ icon('user') }}</span><div><b>{{ _('age_from', n=ev.min_age) }}</b><span>{{ _('minors_need_consent') if ev.min_age < 18 else _('adults_only') }}</span></div></div>
+          <div><span class="ic-wrap">{{ icon('hourglass') }}</span><div><b>{{ _('apply_until') }}</b><span>{{ fmt_dt(ev.registration_deadline) }}</span></div></div>
+        </div>
+        <div class="progress mt-3 {{ 'full' if left <= 0 }}"><i style="width: {{ [100, (ev.taken * 100 // ev.max_volunteers)]|min }}%"></i></div>
+
+        <div class="mt-3">
+        {% if own_org %}
+          <a class="btn btn-dark btn-block" href="{{ url_for('org.event_manage', event_id=ev.event_id) }}">{{ icon('sliders') }} {{ _('manage_event') }}</a>
+        {% elif g.user and g.user.role == 'admin' %}
+          <a class="btn btn-dark btn-block" href="{{ url_for('admin.entity_edit', entity='events', pk=ev.event_id) }}">{{ icon('shield-check') }} {{ _('open_in_admin') }}</a>
+        {% elif g.user and g.user.role == 'coordinator' %}
+          <p class="small muted mb-0">{{ _('coordinators_cannot_apply') }}</p>
+        {% elif not g.user %}
+          {% if phase == 'upcoming' and ev.status == 'published' %}
+            <a class="btn btn-primary btn-block btn-lg" href="{{ url_for('auth.login', next=request.path) }}">{{ _('login_to_apply') }}</a>
+            <p class="small muted center mt-1 mb-0">{{ _('no_account') }} <a href="{{ url_for('auth.register_volunteer') }}">{{ _('register') }}</a></p>
+          {% endif %}
+        {% elif g.volunteer %}
+          {% if my_reg and my_reg.status in ('pending', 'approved', 'attended', 'no_show', 'rejected') %}
+            <div class="alert {{ 'alert-ok' if my_reg.status in ('approved','attended') else 'alert-warn' if my_reg.status == 'pending' else 'alert-danger' }}">
+              {{ icon('info') }}<div><b>{{ _('your_status') }}: {{ _('st_' ~ my_reg.status) }}</b>
+              <p class="small">{{ _('status_hint_' ~ my_reg.status) }}</p>
+              {% if my_reg.decision_note and my_reg.status == 'rejected' %}<p class="small"><i>{{ my_reg.decision_note }}</i></p>{% endif %}</div></div>
+            {% if my_reg.status in ('pending', 'approved') and phase == 'upcoming' %}
+              <form method="post" action="{{ url_for('volunteer.cancel', registration_id=my_reg.registration_id) }}" class="mt-2" data-confirm="{{ _('confirm_cancel_application') }}">
+                {{ csrf_field() }}<button class="btn btn-ghost btn-block" type="submit">{{ _('cancel_application') }}</button></form>
+            {% elif my_reg.status == 'attended' %}
+              <form method="post" action="{{ url_for('volunteer.certificate_issue', registration_id=my_reg.registration_id) }}" class="mt-2">
+                {{ csrf_field() }}<button class="btn btn-dark btn-block" type="submit">{{ icon('award') }} {{ _('get_certificate') }}</button></form>
+            {% endif %}
+          {% elif not reason %}
+            <form method="post" action="{{ url_for('volunteer.apply', event_id=ev.event_id) }}">
+              {{ csrf_field() }}
+              {% if ev.requires_approval %}
+              <div class="field"><label for="motivation">{{ _('motivation_label') }} <span class="label-note">({{ _('optional') }})</span></label>
+                <textarea class="textarea" id="motivation" name="motivation" maxlength="500" rows="3" style="min-height:90px" placeholder="{{ _('motivation_placeholder') }}"></textarea></div>
+              {% endif %}
+              <button class="btn btn-primary btn-block btn-lg mt-2" type="submit">{{ icon('check') }} {{ _('apply_btn') if ev.requires_approval else _('join_btn') }}</button>
+              <p class="xs muted center mt-1 mb-0">{{ _('apply_hint_approval') if ev.requires_approval else _('apply_hint_instant') }}</p>
+            </form>
+          {% else %}
+            <div class="alert alert-warn">{{ icon('alert') }}<div><b>{{ _('cannot_apply') }}</b><p class="small">{{ _(reason) }}</p>
+              {% if reason == 'rule_consent' %}<a class="btn btn-dark btn-sm" href="{{ url_for('volunteer.consent') }}">{{ _('upload_consent') }}</a>{% endif %}</div></div>
+          {% endif %}
+        {% endif %}
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  {% if similar %}
+  <section style="padding-bottom:72px">
+    <h2>{{ _('similar_events') }}</h2>
+    <div class="grid grid-3">{% for s in similar %}{{ event_card(s) }}{% endfor %}</div>
+  </section>
+  {% endif %}
+</div>
+{% endblock %}

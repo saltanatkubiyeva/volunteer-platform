@@ -1,0 +1,19 @@
+{% extends "admin/_layout.html" %}
+{% from "partials/macros.html" import status, empty %}
+{% block title %}{{ _('adm_messages') }}{% endblock %}
+{% block admin %}
+<div class="cab-head"><div><h1>{{ _('adm_messages') }}</h1><p>{{ _('adm_messages_subtitle') }}</p></div></div>
+{% for m in rows %}
+<div class="card card-pad mb-2">
+  <div class="row between">
+    <div><b>{{ m.name }}</b> <a class="small" href="mailto:{{ m.email }}">{{ m.email }}</a> <span class="tag tone-sky">{{ _('topic_' ~ m.topic) }}</span>
+      <div class="xs muted">{{ fmt_dt(m.created_at) }}</div></div>
+    <form method="post" action="{{ url_for('admin.message_status', message_id=m.message_id) }}" class="row tight">{{ csrf_field() }}
+      <select class="select pill" name="status" onchange="this.form.submit()" style="height:36px;width:auto" aria-label="{{ _('status') }}">
+        {% for s in ['new','in_progress','closed'] %}<option value="{{ s }}" {{ 'selected' if m.status == s }}>{{ _('st_' ~ s) }}</option>{% endfor %}</select>
+      <noscript><button class="btn btn-ghost btn-xs">OK</button></noscript></form>
+  </div>
+  <p class="small mt-1 mb-0">{{ m.message|nl2br }}</p>
+</div>
+{% else %}{{ empty('inbox', _('queue_empty')) }}{% endfor %}
+{% endblock %}

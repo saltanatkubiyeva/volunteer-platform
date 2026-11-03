@@ -1,0 +1,106 @@
+{% extends "org/_layout.html" %}
+{% from "partials/macros.html" import avatar, status, empty, dir_tag %}
+{% block title %}{{ ev.title }}{% endblock %}
+{% block cab %}
+{% set phase = event_phase(ev) %}
+<div class="crumbs"><a href="{{ url_for('org.events') }}">{{ _('org_events') }}</a>{{ icon('chevron-right', 14) }}<span>{{ ev.title }}</span></div>
+<div class="cab-head">
+  <div><div class="row mb-1">{{ dir_tag(ev) }}{{ status(phase) }}</div><h1>{{ ev.title }}</h1>
+    <p>{{ fmt_date(ev.starts_at, True) }}, {{ fmt_time(ev.starts_at) }}–{{ fmt_time(ev.ends_at) }} · {{ ev.address }}</p></div>
+  <div class="row">
+    <a class="btn btn-ghost btn-sm" href="{{ url_for('public.event_detail', event_id=ev.event_id) }}">{{ icon('eye', 16) }} {{ _('public_page') }}</a>
+    {% if ev.status in ('draft','published') and not started %}<a class="btn btn-ghost btn-sm" href="{{ url_for('org.event_edit', event_id=ev.event_id) }}">{{ icon('pencil', 16) }} {{ _('edit') }}</a>{% endif %}
+    <a class="btn btn-ghost btn-sm" href="{{ url_for('org.export', event_id=ev.event_id) }}">{{ icon('download', 16) }} CSV</a>
+    {% if ev.status in ('draft','published') and not started %}<button class="btn btn-danger btn-sm" data-dialog="cancel-dlg">{{ icon('x', 16) }} {{ _('cancel_event') }}</button>{% endif %}
+  </div>
+</div>
+{% if ev.status == 'cancelled' %}<div class="alert alert-danger mb-3">{{ icon('x-circle') }}<div><b>{{ _('event_cancelled_banner') }}</b><p class="small mb-0">{{ ev.cancel_reason }}</p></div></div>{% endif %}
+{% if ev.status == 'draft' %}<div class="alert alert-warn mb-3">{{ icon('pencil') }}<div class="small">{{ _('draft_banner') }}</div></div>{% endif %}
+
+<div class="grid grid-4 mb-3">
+  <div class="stat"><div class="num">{{ ev.taken }}/{{ ev.max_volunteers }}</div><div class="lbl">{{ _('approved_places') }}</div></div>
+  <div class="stat"><div class="num">{{ groups.pending|length }}</div><div class="lbl">{{ _('st_pending') }}</div></div>
+  <div class="stat"><div class="num">{{ groups.participants|selectattr('status','equalto','attended')|list|length }}</div><div class="lbl">{{ _('st_attended') }}</div></div>
+  <div class="stat"><div class="num">{{ fmt_hours(groups.participants|selectattr('status','equalto','attended')|sum(attribute='hours_confirmed')) }}</div><div class="lbl">{{ _('hours_col') }}</div></div>
+</div>
+
+<nav class="tabs">
+  <a class="{{ 'on' if tab == 'pending' }}" href="?tab=pending">{{ _('tab_applications') }} <span class="n">{{ groups.pending|length }}</span></a>
+  <a class="{{ 'on' if tab == 'participants' }}" href="?tab=participants">{{ _('tab_participants') }} <span class="n">{{ groups.participants|length }}</span></a>
+  {% if started and ev.status in ('published', 'completed') %}<a class="{{ 'on' if tab == 'attendance' }}" href="?tab=attendance">{{ _('tab_attendance') }}{% if unmarked %} <span class="n">{{ unmarked }}</span>{% endif %}</a>{% endif %}
+  <a class="{{ 'on' if tab == 'closed' }}" href="?tab=closed">{{ _('tab_closed') }} <span class="n">{{ groups.closed|length }}</span></a>
+</nav>
+
+{% if tab == 'pending' %}
+  {% if groups.pending %}
+  <div class="table-wrap"><table class="table">
+    <thead><tr><th>{{ _('volunteer') }}</th><th>{{ _('age') }}</th><th>{{ _('experience') }}</th><th>{{ _('motivation') }}</th><th>{{ _('applied') }}</th><th></th></tr></thead>
+    <tbody>
+    {% for r in groups.pending %}
+      <tr><td><a class="person" href="{{ url_for('public.volunteer_profile', volunteer_id=r.volunteer_id) }}">{{ avatar(r.avatar_path, r.full_name, 'sm') }}{{ r.full_name }}</a></td>
+        <td>{{ age_on(r.birth_date) }}</td>
+        <td class="small">{{ _('n_attended', n=r.done) }}{% if r.missed %} · <span style="color:var(--danger)">{{ _('n_missed', n=r.missed) }}</span>{% endif %}</td>
+        <td class="small cell-clip" title="{{ r.motivation or '' }}">{{ r.motivation or '—' }}</td>
+        <td class="small nowrap">{{ fmt_dt(r.applied_at) }}</td>
+        <td class="nowrap">
+          {% if ev.status == 'published' and not started %}
+          <form method="post" action="{{ url_for('org.decide', registration_id=r.registration_id) }}" class="inline-form">{{ csrf_field() }}
+            <button class="btn btn-primary btn-xs" name="decision" value="approve" {{ 'disabled' if ev.taken >= ev.max_volunteers }}>{{ icon('check', 14) }} {{ _('approve') }}</button>
+            <button class="btn btn-danger btn-xs" name="decision" value="reject">{{ icon('x', 14) }}</button></form>
+          {% endif %}</td></tr>
+    {% endfor %}
+    </tbody></table></div>
+  {% if ev.taken >= ev.max_volunteers %}<p class="small muted mt-1">{{ _('full_cannot_approve') }}</p>{% endif %}
+  {% else %}{{ empty('inbox', _('no_pending_apps')) }}{% endif %}
+
+{% elif tab == 'participants' %}
+  {% if groups.participants %}
+  <div class="table-wrap"><table class="table">
+    <thead><tr><th>{{ _('volunteer') }}</th><th>{{ _('phone') }}</th><th>Email</th><th>{{ _('status') }}</th><th class="num">{{ _('hours_col') }}</th></tr></thead>
+    <tbody>{% for r in groups.participants %}
+      <tr><td><a class="person" href="{{ url_for('public.volunteer_profile', volunteer_id=r.volunteer_id) }}">{{ avatar(r.avatar_path, r.full_name, 'sm') }}{{ r.full_name }}</a></td>
+        <td class="nowrap"><a href="tel:{{ r.phone }}">{{ r.phone|phone }}</a></td><td><a href="mailto:{{ r.email }}">{{ r.email }}</a></td>
+        <td>{{ status(r.status) }}</td><td class="num">{{ fmt_hours(r.hours_confirmed) if r.hours_confirmed else '—' }}</td></tr>
+    {% endfor %}</tbody></table></div>
+  <p class="xs muted mt-1">{{ icon('lock', 12) }} {{ _('contacts_privacy_coord') }}</p>
+  {% else %}{{ empty('users', _('no_participants')) }}{% endif %}
+
+{% elif tab == 'attendance' %}
+  <div class="alert alert-info mb-2">{{ icon('info') }}<div class="small">{{ _('attendance_hint', h=fmt_hours(hours)) }} {{ _('attendance_default_hint') }}</div></div>
+  {% if groups.participants %}
+  <form method="post" action="{{ url_for('org.attendance', event_id=ev.event_id) }}">
+    {{ csrf_field() }}
+    <div class="table-wrap"><table class="table">
+      <thead><tr><th>{{ _('volunteer') }}</th><th>{{ _('mark') }}</th><th>{{ _('hours_col') }}</th><th>{{ _('status') }}</th></tr></thead>
+      <tbody>{% for r in groups.participants %}
+        <tr data-attendance-row><td><span class="person">{{ avatar(r.avatar_path, r.full_name, 'sm') }}{{ r.full_name }}</span><input type="hidden" name="registration_id" value="{{ r.registration_id }}"></td>
+          <td><div class="seg">
+            <input type="radio" id="a{{ r.registration_id }}" name="mark_{{ r.registration_id }}" value="attended" {{ 'checked' if r.status in ('attended', 'approved') }}><label class="yes" for="a{{ r.registration_id }}">{{ _('came') }}</label>
+            <input type="radio" id="n{{ r.registration_id }}" name="mark_{{ r.registration_id }}" value="no_show" {{ 'checked' if r.status == 'no_show' }}><label class="no" for="n{{ r.registration_id }}">{{ _('no_show') }}</label></div></td>
+          <td><input class="input hours-input" type="number" step="0.5" min="0.5" max="{{ hours }}" name="hours_{{ r.registration_id }}" value="{{ fmt_hours(r.hours_confirmed) if r.hours_confirmed else fmt_hours(hours) }}" aria-label="{{ _('hours_col') }}"></td>
+          <td>{{ status(r.status) }}</td></tr>
+      {% endfor %}</tbody></table></div>
+    <div class="row mt-2"><button class="btn btn-dark">{{ icon('check', 16) }} {{ _('save_attendance') }}</button>
+      <span class="xs muted">{{ _('audit_note') }}</span></div>
+  </form>
+  {% if ev.status == 'published' and finished %}
+  <form method="post" action="{{ url_for('org.complete', event_id=ev.event_id) }}" class="card card-pad mt-3 row between" data-confirm="{{ _('confirm_complete') }}">
+    {{ csrf_field() }}<div><b>{{ _('complete_event') }}</b><div class="small muted">{{ _('complete_event_hint') }}</div></div>
+    <button class="btn btn-primary" {{ 'disabled' if unmarked }}>{{ icon('check-circle', 16) }} {{ _('complete_event') }}</button></form>
+  {% endif %}
+  {% else %}{{ empty('users', _('no_participants')) }}{% endif %}
+
+{% else %}
+  {% if groups.closed %}
+  <div class="table-wrap"><table class="table">
+    <thead><tr><th>{{ _('volunteer') }}</th><th>{{ _('status') }}</th><th>{{ _('note') }}</th><th>{{ _('date') }}</th></tr></thead>
+    <tbody>{% for r in groups.closed %}<tr><td>{{ r.full_name }}</td><td>{{ status(r.status) }}</td><td class="small">{{ r.decision_note or '—' }}</td><td class="small">{{ fmt_dt(r.decided_at) }}</td></tr>{% endfor %}</tbody></table></div>
+  {% else %}{{ empty('inbox', _('nothing_here')) }}{% endif %}
+{% endif %}
+
+<dialog id="cancel-dlg"><form class="dlg" method="post" action="{{ url_for('org.cancel', event_id=ev.event_id) }}">
+  {{ csrf_field() }}<h3>{{ _('cancel_event') }}</h3><p class="small muted">{{ _('cancel_event_hint') }}</p>
+  <label for="reason">{{ _('cancel_reason') }}</label><textarea class="textarea" id="reason" name="reason" required minlength="5" maxlength="300" rows="3" style="min-height:90px"></textarea>
+  <div class="row mt-2"><button class="btn btn-danger">{{ _('cancel_event') }}</button><button class="btn btn-ghost" type="button" data-close>{{ _('close') }}</button></div>
+</form></dialog>
+{% endblock %}

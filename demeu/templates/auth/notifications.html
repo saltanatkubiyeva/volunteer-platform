@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% from "partials/macros.html" import empty %}
+{% block title %}{{ _('notifications') }}{% endblock %}
+{% block content %}
+<div class="wrap" style="max-width:820px;padding:40px 24px 72px">
+  <div class="row between mb-2">
+    <h1 class="mb-0">{{ _('notifications') }}</h1>
+    {% if unread %}<form method="post" action="{{ url_for('auth.notifications_read') }}">{{ csrf_field() }}<button class="btn btn-ghost btn-sm">{{ icon('check', 16) }} {{ _('mark_all_read') }}</button></form>{% endif %}
+  </div>
+  {% if rows %}
+  <div class="card" style="padding:8px">
+    {% for n in rows %}
+    <form method="post" action="{{ url_for('auth.notifications_read') }}" class="notif {{ 'unread' if not n.is_read }}">
+      {{ csrf_field() }}<input type="hidden" name="id" value="{{ n.notification_id }}">
+      <span class="dot"></span>
+      <button type="submit"><div>{{ notification_text(n) }}</div><div class="time">{{ fmt_dt(n.created_at) }}</div></button>
+      {% if n.link %}{{ icon('chevron-right', 16) }}{% endif %}
+    </form>
+    {% endfor %}
+  </div>
+  {% else %}
+    {{ empty('bell', _('no_notifications'), _('no_notifications_text')) }}
+  {% endif %}
+</div>
+{% endblock %}

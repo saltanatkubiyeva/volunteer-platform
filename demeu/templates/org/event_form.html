@@ -1,0 +1,80 @@
+{% extends "org/_layout.html" %}
+{% from "partials/macros.html" import field_error, cover_url %}
+{% block title %}{{ _('edit_event') if ev else _('new_event') }}{% endblock %}
+{% block cab %}
+<div class="cab-head"><div><h1>{{ _('edit_event') if ev else _('new_event') }}</h1><p>{{ _('event_form_subtitle') }}</p></div>
+  {% if ev %}<a class="btn btn-ghost" href="{{ url_for('org.event_manage', event_id=ev.event_id) }}">{{ icon('arrow-left', 16) }} {{ _('back') }}</a>{% endif %}</div>
+{% if errors.form %}<div class="alert alert-danger mb-2">{{ icon('alert') }}<div>{{ _(errors.form) }}</div></div>{% endif %}
+{% if ev and ev.status == 'published' and ev.taken %}<div class="alert alert-info mb-2">{{ icon('info') }}<div class="small">{{ _('edit_notifies_participants') }}</div></div>{% endif %}
+<form class="card card-pad" method="post" enctype="multipart/form-data" novalidate>
+  {{ csrf_field() }}
+  <div class="form-section">
+    <h3><span class="num">1</span>{{ _('event_main_info') }}</h3>
+    <div class="form-grid">
+      <div class="field span-2 {{ 'has-error' if errors.title }}"><label class="req" for="title">{{ _('event_title') }}</label>
+        <input class="input" id="title" name="title" value="{{ f.title or '' }}" maxlength="120" placeholder="{{ _('event_title_placeholder') }}">{{ field_error(errors, 'title') }}</div>
+      <div class="field span-2 {{ 'has-error' if errors.summary }}"><label class="req" for="summary">{{ _('event_summary') }}</label>
+        <input class="input" id="summary" name="summary" value="{{ f.summary or '' }}" maxlength="160" placeholder="{{ _('event_summary_placeholder') }}">{{ field_error(errors, 'summary') }}</div>
+      <div class="field {{ 'has-error' if errors.direction_id }}"><label class="req" for="direction_id">{{ _('direction') }}</label>
+        <select class="select" id="direction_id" name="direction_id"><option value="">{{ _('choose') }}</option>
+          {% for d in directions %}<option value="{{ d.direction_id }}" {{ 'selected' if f.direction_id|string == d.direction_id|string }}>{{ loc(d, 'name') }}</option>{% endfor %}</select>{{ field_error(errors, 'direction_id') }}</div>
+      <div class="field {{ 'has-error' if errors.coordinator_id }}"><label class="req" for="coordinator_id">{{ _('responsible_coordinator') }}</label>
+        <select class="select" id="coordinator_id" name="coordinator_id">
+          {% for t in team %}<option value="{{ t.coordinator_id }}" {{ 'selected' if f.coordinator_id|string == t.coordinator_id|string }}>{{ t.full_name }}</option>{% endfor %}</select>{{ field_error(errors, 'coordinator_id') }}</div>
+      <div class="field span-2 {{ 'has-error' if errors.description }}"><label class="req" for="description">{{ _('event_description') }}</label>
+        <textarea class="textarea" id="description" name="description" maxlength="4000" rows="6" placeholder="{{ _('event_description_placeholder') }}">{{ f.description or '' }}</textarea>{{ field_error(errors, 'description') }}</div>
+    </div>
+  </div>
+  <div class="form-section">
+    <h3><span class="num">2</span>{{ _('when_and_where') }}</h3>
+    <div class="form-grid">
+      <div class="field {{ 'has-error' if errors.starts_at }}"><label class="req" for="starts_at">{{ _('starts_at') }}</label>
+        <input class="input" type="datetime-local" id="starts_at" name="starts_at" value="{{ f.starts_at or '' }}">{{ field_error(errors, 'starts_at') }}</div>
+      <div class="field {{ 'has-error' if errors.ends_at }}"><label class="req" for="ends_at">{{ _('ends_at') }}</label>
+        <input class="input" type="datetime-local" id="ends_at" name="ends_at" value="{{ f.ends_at or '' }}">{{ field_error(errors, 'ends_at') }}</div>
+      <div class="field {{ 'has-error' if errors.registration_deadline }}"><label class="req" for="registration_deadline">{{ _('registration_deadline') }}</label>
+        <input class="input" type="datetime-local" id="registration_deadline" name="registration_deadline" value="{{ f.registration_deadline or '' }}">
+        <span class="hint">{{ _('deadline_hint') }}</span>{{ field_error(errors, 'registration_deadline') }}</div>
+      <div class="field {{ 'has-error' if errors.city_id }}"><label class="req" for="city_id">{{ _('city') }}</label>
+        <select class="select" id="city_id" name="city_id">{% for c in cities %}<option value="{{ c.city_id }}" {{ 'selected' if f.city_id|string == c.city_id|string }}>{{ loc(c, 'name') }}</option>{% endfor %}</select>{{ field_error(errors, 'city_id') }}</div>
+      <div class="field span-2 {{ 'has-error' if errors.address }}"><label class="req" for="address">{{ _('meeting_point') }}</label>
+        <input class="input" id="address" name="address" value="{{ f.address or '' }}" maxlength="200" placeholder="{{ _('meeting_point_placeholder') }}">{{ field_error(errors, 'address') }}</div>
+    </div>
+  </div>
+  <div class="form-section">
+    <h3><span class="num">3</span>{{ _('participants') }}</h3>
+    <div class="form-grid">
+      <div class="field {{ 'has-error' if errors.max_volunteers }}"><label class="req" for="max_volunteers">{{ _('max_volunteers') }}</label>
+        <input class="input" type="number" min="1" max="1000" id="max_volunteers" name="max_volunteers" value="{{ f.max_volunteers or '' }}">
+        {% if ev and ev.taken %}<span class="hint">{{ _('already_approved_n', n=ev.taken) }}</span>{% endif %}{{ field_error(errors, 'max_volunteers') }}</div>
+      <div class="field {{ 'has-error' if errors.min_age }}"><label class="req" for="min_age">{{ _('min_age') }}</label>
+        <input class="input" type="number" min="14" max="99" id="min_age" name="min_age" value="{{ f.min_age or 14 }}">
+        <span class="hint">{{ _('min_age_hint') }}</span>{{ field_error(errors, 'min_age') }}</div>
+      <div class="field span-2"><label class="check"><input type="checkbox" name="requires_approval" value="1" {{ 'checked' if f.requires_approval }}>
+        <span><b>{{ _('requires_approval') }}</b><br><span class="small muted">{{ _('requires_approval_hint') }}</span></span></label></div>
+      <div class="field"><label for="requirements">{{ _('requirements') }}</label>
+        <textarea class="textarea" id="requirements" name="requirements" maxlength="600" rows="3" style="min-height:90px" placeholder="{{ _('requirements_placeholder') }}">{{ f.requirements or '' }}</textarea></div>
+      <div class="field"><label for="provided">{{ _('provided') }}</label>
+        <textarea class="textarea" id="provided" name="provided" maxlength="600" rows="3" style="min-height:90px" placeholder="{{ _('provided_placeholder') }}">{{ f.provided or '' }}</textarea></div>
+    </div>
+  </div>
+  <div class="form-section">
+    <h3><span class="num">4</span>{{ _('cover_image') }}</h3>
+    <div class="row">
+      {% if ev %}<img src="{{ cover_url(ev) }}" alt="" style="width:160px;height:90px;object-fit:cover;border-radius:14px">{% endif %}
+      <div class="field grow {{ 'has-error' if errors.cover }}"><input class="input" style="padding-top:10px" type="file" name="cover" accept=".jpg,.jpeg,.png,.webp">
+        <span class="hint">{{ _('cover_hint') }}</span>{{ field_error(errors, 'cover') }}
+        {% if ev and ev.cover_path %}<label class="check small"><input type="checkbox" name="remove_cover" value="1"> {{ _('remove_cover') }}</label>{% endif %}</div>
+    </div>
+  </div>
+  <div class="form-actions">
+    {% if not ev or ev.status == 'draft' %}
+      <button class="btn btn-primary btn-lg" name="action" value="publish" {{ 'disabled' if g.org.status != 'verified' }}>{{ icon('send', 16) }} {{ _('publish') }}</button>
+      <button class="btn btn-ghost btn-lg" name="action" value="draft">{{ _('save_draft') }}</button>
+      {% if g.org.status != 'verified' %}<span class="small muted">{{ _('publish_after_verification') }}</span>{% endif %}
+    {% else %}
+      <button class="btn btn-primary btn-lg" name="action" value="save">{{ _('save_changes') }}</button>
+    {% endif %}
+  </div>
+</form>
+{% endblock %}

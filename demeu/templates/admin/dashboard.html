@@ -1,0 +1,46 @@
+{% extends "admin/_layout.html" %}
+{% from "partials/macros.html" import status %}
+{% block title %}{{ _('admin_panel') }}{% endblock %}
+{% block admin %}
+<div class="cab-head"><div><h1>{{ _('admin_panel') }}</h1><p>{{ _('admin_subtitle') }}</p></div>
+  <a class="btn btn-ghost btn-sm" href="{{ url_for('admin.new_admin') }}">{{ icon('user-plus', 16) }} {{ _('new_admin') }}</a></div>
+<div class="kpis">
+  <div class="stat dark"><div class="num">{{ k.users }}</div><div class="lbl">{{ _('adm_users') }} · +{{ k.new_users_30 }} {{ _('in_30_days') }}</div></div>
+  <div class="stat"><div class="num">{{ k.orgs }}</div><div class="lbl">{{ _('stat_verified_orgs') }}</div></div>
+  <div class="stat"><div class="num">{{ k.events_open }}</div><div class="lbl">{{ _('stat_open_events') }}</div></div>
+  <div class="stat"><div class="num">{{ fmt_hours(k.hours) }}</div><div class="lbl">{{ _('stat_hours') }}</div></div>
+</div>
+<div class="grid grid-2">
+  <div class="card card-pad">
+    <div class="row between"><h3 class="mb-0">{{ _('adm_org_verification') }}</h3><span class="tag tone-butter">{{ pending_orgs|length }}</span></div>
+    {% for o in pending_orgs %}
+      <div class="queue-item"><div class="grow"><b class="small">{{ o.name }}</b><div class="xs muted">{{ o.city }} · {{ _('bin') }} <span class="mono">{{ o.bin }}</span> · {{ fmt_dt(o.created_at) }}</div></div>
+        <a class="btn btn-dark btn-xs" href="{{ url_for('admin.org_review', org_id=o.org_id) }}">{{ _('review') }}</a></div>
+    {% else %}<p class="small muted mt-2 mb-0">{{ _('queue_empty') }}</p>{% endfor %}
+  </div>
+  <div class="card card-pad">
+    <div class="row between"><h3 class="mb-0">{{ _('adm_consents') }}</h3><span class="tag tone-butter">{{ pending_consents|length }}</span></div>
+    {% for c in pending_consents %}
+      <div class="queue-item"><div class="grow"><b class="small">{{ c.full_name }}</b><div class="xs muted">{{ _('age_n', n=age_on(c.birth_date)) }} · {{ c.parent_name }} · {{ fmt_dt(c.uploaded_at) }}</div></div>
+        <a class="btn btn-dark btn-xs" href="{{ url_for('admin.consents') }}">{{ _('review') }}</a></div>
+    {% else %}<p class="small muted mt-2 mb-0">{{ _('queue_empty') }}</p>{% endfor %}
+  </div>
+  <div class="card card-pad">
+    <div class="row between"><h3 class="mb-0">{{ _('applications_14_days') }}</h3><span class="small muted">{{ k.apps_30 }} {{ _('in_30_days') }}</span></div>
+    {% set mx = (daily|map(attribute='n')|max) if daily else 1 %}
+    <div class="minichart mt-2">{% for d in daily %}<i title="{{ d.d }}: {{ d.n }}" style="height:{{ [4, (d.n * 100 / mx)|round|int]|max }}%"></i>{% else %}<span class="small muted">{{ _('no_data') }}</span>{% endfor %}</div>
+  </div>
+  <div class="card card-pad">
+    <div class="row between"><h3 class="mb-0">{{ _('adm_messages') }}</h3><a class="small" href="{{ url_for('admin.messages') }}">{{ _('all') }}</a></div>
+    {% for m in new_messages %}
+      <div class="queue-item"><div class="grow"><b class="small">{{ m.name }}</b> <span class="xs muted">· {{ _('topic_' ~ m.topic) }}</span><div class="xs muted cell-clip">{{ m.message }}</div></div></div>
+    {% else %}<p class="small muted mt-2 mb-0">{{ _('queue_empty') }}</p>{% endfor %}
+  </div>
+</div>
+<div class="card card-pad mt-3">
+  <div class="row between"><h3 class="mb-0">{{ _('recent_actions') }}</h3><a class="small" href="{{ url_for('admin.audit_log') }}">{{ _('adm_audit') }}</a></div>
+  <div class="table-wrap mt-2"><table class="table"><thead><tr><th>{{ _('date') }}</th><th>{{ _('user') }}</th><th>{{ _('action') }}</th><th>{{ _('object') }}</th><th>{{ _('old_value') }}</th><th>{{ _('new_value') }}</th></tr></thead>
+    <tbody>{% for a in recent_audit %}<tr><td class="small nowrap">{{ fmt_dt(a.created_at) }}</td><td class="small">{{ a.email or '—' }}</td><td class="mono">{{ a.action }}</td>
+      <td class="small">{{ a.entity }} #{{ a.entity_id }}</td><td class="small">{{ a.old_value or '—' }}</td><td class="small">{{ a.new_value or '—' }}</td></tr>{% endfor %}</tbody></table></div>
+</div>
+{% endblock %}

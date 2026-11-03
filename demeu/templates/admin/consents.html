@@ -1,0 +1,21 @@
+{% extends "admin/_layout.html" %}
+{% from "partials/macros.html" import status, empty %}
+{% block title %}{{ _('adm_consents') }}{% endblock %}
+{% block admin %}
+<div class="cab-head"><div><h1>{{ _('adm_consents') }}</h1><p>{{ _('adm_consents_subtitle') }}</p></div></div>
+{% for c in rows %}
+<div class="card card-pad mb-2">
+  <div class="row between">
+    <div><b>{{ c.full_name }}</b> <span class="small muted">· {{ _('age_n', n=age_on(c.birth_date)) }} · {{ _('birth_date') }} {{ fmt_date(c.birth_date) }}</span>
+      <div class="small muted">{{ _('parent_name') }}: {{ c.parent_name }} · {{ c.parent_phone|phone }} · {{ _('uploaded_on', d=fmt_dt(c.uploaded_at)) }}</div></div>
+    <div class="row">{{ status(c.status) }}<a class="btn btn-ghost btn-sm" target="_blank" href="{{ url_for('media.consent_file', consent_id=c.consent_id) }}">{{ icon('file-text', 16) }} {{ _('open_document') }}</a></div>
+  </div>
+  {% if c.status == 'pending' %}
+  <form class="row mt-2" method="post">{{ csrf_field() }}<input type="hidden" name="consent_id" value="{{ c.consent_id }}">
+    <input class="input grow" name="comment" maxlength="300" placeholder="{{ _('reject_reason_placeholder') }}" style="height:40px">
+    <button class="btn btn-primary btn-sm" name="action" value="approve">{{ icon('check', 16) }} {{ _('approve') }}</button>
+    <button class="btn btn-danger btn-sm" name="action" value="reject">{{ icon('x', 16) }} {{ _('reject') }}</button></form>
+  {% elif c.review_comment %}<p class="small muted mt-1 mb-0">{{ c.review_comment }}</p>{% endif %}
+</div>
+{% else %}{{ empty('file-text', _('queue_empty')) }}{% endfor %}
+{% endblock %}

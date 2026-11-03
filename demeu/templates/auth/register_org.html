@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% from "partials/macros.html" import field_error %}
+{% block title %}{{ _('register_org_title') }}{% endblock %}
+{% block content %}
+<div class="wrap" style="max-width:880px;padding:40px 24px 72px">
+  <div class="crumbs"><a href="{{ url_for('auth.register') }}">{{ _('register') }}</a>{{ icon('chevron-right', 14) }}<span>{{ _('i_am_org') }}</span></div>
+  <h1>{{ _('register_org_title') }}</h1>
+  <p class="muted">{{ _('register_org_subtitle') }}</p>
+  <div class="alert alert-lime mt-2">{{ icon('shield-check') }}<div class="small">{{ _('org_verification_info') }}</div></div>
+  <form class="card card-pad mt-3" method="post" novalidate>
+    {{ csrf_field() }}
+    <div class="form-section">
+      <h3><span class="num">1</span>{{ _('organization') }}</h3>
+      <div class="form-grid">
+        <div class="field span-2 {{ 'has-error' if errors.name }}"><label class="req" for="name">{{ _('org_name') }}</label>
+          <input class="input" id="name" name="name" value="{{ f.name or '' }}" maxlength="150" required>{{ field_error(errors, 'name') }}</div>
+        <div class="field {{ 'has-error' if errors.bin }}"><label class="req" for="bin">{{ _('bin') }}</label>
+          <input class="input mono" id="bin" name="bin" value="{{ f.bin or '' }}" inputmode="numeric" maxlength="12" placeholder="123456789012" required>
+          <span class="hint">{{ _('bin_hint') }}</span>{{ field_error(errors, 'bin') }}</div>
+        <div class="field {{ 'has-error' if errors.org_type }}"><label class="req" for="org_type">{{ _('org_type') }}</label>
+          <select class="select" id="org_type" name="org_type"><option value="">{{ _('choose') }}</option>
+            {% for t in org_types %}<option value="{{ t }}" {{ 'selected' if f.org_type == t }}>{{ _('orgtype_' ~ t) }}</option>{% endfor %}</select>
+          {{ field_error(errors, 'org_type') }}</div>
+        <div class="field {{ 'has-error' if errors.city_id }}"><label class="req" for="city_id">{{ _('city') }}</label>
+          <select class="select" id="city_id" name="city_id"><option value="">{{ _('choose') }}</option>
+            {% for c in cities %}<option value="{{ c.city_id }}" {{ 'selected' if f.city_id == c.city_id|string }}>{{ loc(c, 'name') }}</option>{% endfor %}</select>
+          {{ field_error(errors, 'city_id') }}</div>
+        <div class="field {{ 'has-error' if errors.address }}"><label class="req" for="address">{{ _('address') }}</label>
+          <input class="input" id="address" name="address" value="{{ f.address or '' }}" maxlength="200" required>{{ field_error(errors, 'address') }}</div>
+        <div class="field {{ 'has-error' if errors.org_email }}"><label class="req" for="org_email">{{ _('org_email') }}</label>
+          <input class="input" type="email" id="org_email" name="org_email" value="{{ f.org_email or '' }}" maxlength="120" required>{{ field_error(errors, 'org_email') }}</div>
+        <div class="field {{ 'has-error' if errors.org_phone }}"><label class="req" for="org_phone">{{ _('org_phone') }}</label>
+          <input class="input" type="tel" id="org_phone" name="org_phone" value="{{ f.org_phone or '' }}" placeholder="+7 7172 55 66 77" required>{{ field_error(errors, 'org_phone') }}</div>
+        <div class="field span-2"><label for="website">{{ _('website') }} <span class="label-note">({{ _('optional') }})</span></label>
+          <input class="input" id="website" name="website" value="{{ f.website or '' }}" maxlength="150" placeholder="https://"></div>
+        <div class="field span-2 {{ 'has-error' if errors.description }}"><label class="req" for="description">{{ _('org_description') }}</label>
+          <textarea class="textarea" id="description" name="description" maxlength="2000" placeholder="{{ _('org_description_placeholder') }}">{{ f.description or '' }}</textarea>
+          {{ field_error(errors, 'description') }}</div>
+      </div>
+      <div class="field mt-2 {{ 'has-error' if errors.directions }}"><span class="label req">{{ _('directions') }}</span>
+        <div class="check-grid">
+          {% set chosen = f.directions or [] %}
+          {% for d in directions %}<label class="check-chip"><input type="checkbox" name="directions" value="{{ d.direction_id }}" {{ 'checked' if d.direction_id in chosen }}><span>{{ icon(d.icon, 15) }}{{ loc(d, 'name') }}</span></label>{% endfor %}
+        </div>{{ field_error(errors, 'directions') }}</div>
+    </div>
+    <div class="form-section">
+      <h3><span class="num">2</span>{{ _('contact_person') }}</h3>
+      <p class="small muted">{{ _('contact_person_hint') }}</p>
+      <div class="form-grid">
+        <div class="field {{ 'has-error' if errors.full_name }}"><label class="req" for="full_name">{{ _('full_name') }}</label>
+          <input class="input" id="full_name" name="full_name" value="{{ f.full_name or '' }}" maxlength="100" required>{{ field_error(errors, 'full_name') }}</div>
+        <div class="field"><label for="position">{{ _('position') }} <span class="label-note">({{ _('optional') }})</span></label>
+          <input class="input" id="position" name="position" value="{{ f.position or '' }}" maxlength="80"></div>
+        <div class="field {{ 'has-error' if errors.email }}"><label class="req" for="email">{{ _('login_email') }}</label>
+          <input class="input" type="email" id="email" name="email" value="{{ f.email or '' }}" maxlength="120" autocomplete="email" required>{{ field_error(errors, 'email') }}</div>
+        <div class="field {{ 'has-error' if errors.phone }}"><label class="req" for="phone">{{ _('phone') }}</label>
+          <input class="input" type="tel" id="phone" name="phone" value="{{ f.phone or '' }}" placeholder="+7 701 123 45 67" required>{{ field_error(errors, 'phone') }}</div>
+        <div class="field {{ 'has-error' if errors.password }}"><label class="req" for="password">{{ _('password') }}</label>
+          <input class="input" type="password" id="password" name="password" autocomplete="new-password" required>
+          <span class="hint">{{ _('password_hint') }}</span>{{ field_error(errors, 'password') }}</div>
+        <div class="field {{ 'has-error' if errors.password2 }}"><label class="req" for="password2">{{ _('password_repeat') }}</label>
+          <input class="input" type="password" id="password2" name="password2" autocomplete="new-password" required>{{ field_error(errors, 'password2') }}</div>
+      </div>
+    </div>
+    <div class="field {{ 'has-error' if errors.agree }}">
+      <label class="check"><input type="checkbox" name="agree" value="1" {{ 'checked' if request.form.get('agree') }}> {{ _('agree_rules_org') }}</label>
+      {{ field_error(errors, 'agree') }}</div>
+    <div class="form-actions">
+      <button class="btn btn-primary btn-lg" type="submit">{{ _('submit_for_review') }}</button>
+      <span class="small muted">{{ _('have_account') }} <a href="{{ url_for('auth.login') }}">{{ _('login') }}</a></span>
+    </div>
+  </form>
+</div>
+{% endblock %}

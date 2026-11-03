@@ -1,0 +1,89 @@
+{% extends "volunteer/_layout.html" %}
+{% from "partials/macros.html" import event_card, status, cover_url, dir_tag, empty %}
+{% block title %}{{ _('my_cabinet') }}{% endblock %}
+{% block cab %}
+<div class="cab-head">
+  <div><h1>{{ _('hello_name', name=g.volunteer.full_name.split()[0]) }}</h1><p>{{ _('volunteer_dash_subtitle') }}</p></div>
+  <a class="btn btn-primary" href="{{ url_for('public.events') }}">{{ icon('search') }} {{ _('find_event') }}</a>
+</div>
+
+{% if age < 18 and consent != 'approved' %}
+<div class="alert {{ 'alert-warn' if consent == 'pending' else 'alert-danger' }} mb-3">{{ icon('file-text') }}
+  <div><b>{{ _('consent_needed_title') }}</b><p class="small">{{ _('consent_status_' ~ (consent or 'none')) }}</p>
+  {% if consent != 'pending' %}<a class="btn btn-dark btn-sm" href="{{ url_for('volunteer.consent') }}">{{ _('upload_consent') }}</a>{% endif %}</div></div>
+{% endif %}
+{% if profile_missing %}
+<div class="alert alert-lime mb-3">{{ icon('sparkles') }}<div><b>{{ _('complete_profile_title') }}</b>
+  <p class="small">{{ _('complete_profile_text') }}</p><a class="btn btn-dark btn-sm" href="{{ url_for('volunteer.profile_edit') }}">{{ _('edit_profile') }}</a></div></div>
+{% endif %}
+
+<div class="grid grid-3">
+  <div class="stat dark"><div class="ic-wrap">{{ icon('clock') }}</div><div class="num">{{ fmt_hours(stats.hours) }}</div><div class="lbl">{{ _('stat_hours_personal') }}</div></div>
+  <div class="stat"><div class="ic-wrap">{{ icon('check-circle') }}</div><div class="num">{{ stats.attended }}</div><div class="lbl">{{ _('stat_events_attended') }}</div></div>
+  <div class="stat"><div class="ic-wrap">{{ icon('hourglass') }}</div><div class="num">{{ stats.active }}</div><div class="lbl">{{ _('stat_active_apps') }}</div></div>
+</div>
+
+<div class="card card-pad mt-3">
+  <div class="row between"><h3 class="mb-0">{{ icon('award') }} {{ _('progress_title') }}</h3>
+    <span class="small muted">{% if stats.next_milestone %}{{ _('to_next_milestone', n=fmt_hours(stats.next_milestone - stats.hours), m=stats.next_milestone) }}{% else %}{{ _('all_milestones') }}{% endif %}</span></div>
+  <div class="progress mt-2" style="height:12px"><i style="width:{{ stats.progress }}%"></i></div>
+  <div class="milestone mt-2">{% for m in [10, 20, 50, 100, 200] %}<span class="{{ 'got' if m in stats.badges }}">{{ icon('award', 13) }}{{ m }} {{ _('h_short') }}</span>{% endfor %}</div>
+</div>
+
+<div class="grid split mt-3">
+  <div>
+    <div class="row between mb-2"><h3 class="mb-0">{{ _('my_upcoming') }}</h3><a class="link-arrow small" href="{{ url_for('volunteer.applications') }}">{{ _('all_applications') }} {{ icon('arrow-right', 14) }}</a></div>
+    {% for r in upcoming %}
+    <div class="card list-card">
+      <a class="thumb" href="{{ url_for('public.event_detail', event_id=r.event_id) }}"><img src="{{ cover_url(r) }}" alt=""></a>
+      <div><h4><a href="{{ url_for('public.event_detail', event_id=r.event_id) }}">{{ r.title }}</a></h4>
+        <div class="meta"><span>{{ icon('calendar', 14) }}{{ fmt_date(r.starts_at, True) }}, {{ fmt_time(r.starts_at) }}</span><span>{{ icon('map-pin', 14) }}{{ loc(r, 'city_name') }}</span></div></div>
+      <div class="actions">{{ status(r.status) }}</div>
+    </div>
+    {% else %}
+      {{ empty('calendar', _('no_upcoming_title'), _('no_upcoming_text'), url_for('public.events'), _('find_event')) }}
+    {% endfor %}
+
+    {% if to_review %}
+    <h3 class="mt-4">{{ _('leave_feedback') }}</h3>
+    {% for r in to_review %}
+    <form class="card card-pad mb-2" method="post" action="{{ url_for('volunteer.feedback', registration_id=r.registration_id) }}">
+      {{ csrf_field() }}
+      <div class="row between"><b>{{ r.title }}</b><span class="xs muted">{{ fmt_date(r.starts_at) }} · {{ r.org_name }}</span></div>
+      <div class="stars mt-1" role="radiogroup" aria-label="{{ _('rating') }}">
+        {% for s in range(5, 0, -1) %}<input type="radio" id="st{{ r.registration_id }}-{{ s }}" name="rating" value="{{ s }}" required><label for="st{{ r.registration_id }}-{{ s }}" title="{{ s }}">{{ icon('star') }}</label>{% endfor %}
+      </div>
+      <textarea class="textarea mt-1" name="comment" maxlength="600" rows="2" style="min-height:70px" placeholder="{{ _('feedback_placeholder') }}"></textarea>
+      <button class="btn btn-dark btn-sm mt-1">{{ _('send_feedback') }}</button>
+    </form>
+    {% endfor %}
+    {% endif %}
+  </div>
+  <div>
+    <div class="card card-pad">
+      <div class="row between mb-1"><h3 class="mb-0">{{ _('notifications') }}</h3><a class="small" href="{{ url_for('auth.notifications') }}">{{ _('all') }}</a></div>
+      {% for n in notifications %}
+        <div class="notif {{ 'unread' if not n.is_read }}" style="padding:10px 8px"><span class="dot"></span><div><div class="small">{{ notification_text(n) }}</div><div class="time">{{ fmt_dt(n.created_at) }}</div></div></div>
+      {% else %}<p class="small muted mb-0">{{ _('no_notifications') }}</p>{% endfor %}
+    </div>
+    {% if recent %}
+    <div class="card card-pad mt-3">
+      <h3>{{ _('recent_hours') }}</h3>
+      {% for r in recent %}
+      <div class="queue-item"><div class="grow"><b class="small">{{ r.title }}</b><div class="xs muted">{{ fmt_date(r.starts_at) }}</div></div>
+        <span class="tag tone-mint">{{ fmt_hours(r.hours_confirmed) }} {{ _('h_short') }}</span>
+        {% if r.cert_code %}<a class="icon-btn" style="width:34px;height:34px" href="{{ url_for('volunteer.certificate', code=r.cert_code) }}" title="{{ _('certificate') }}">{{ icon('award', 16) }}</a>
+        {% else %}<form method="post" action="{{ url_for('volunteer.certificate_issue', registration_id=r.registration_id) }}">{{ csrf_field() }}<button class="icon-btn" style="width:34px;height:34px" title="{{ _('get_certificate') }}">{{ icon('award', 16) }}</button></form>{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+{% if recommended %}
+<h3 class="mt-4">{{ _('recommended_for_you') }}</h3>
+<p class="small muted">{{ _('recommended_hint') }}</p>
+<div class="grid grid-3">{% for ev in recommended %}{{ event_card(ev) }}{% endfor %}</div>
+{% endif %}
+{% endblock %}

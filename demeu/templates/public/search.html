@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% from "partials/macros.html" import event_card, avatar, org_logo, dir_tag, empty %}
+{% block title %}{{ _('search') }}{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div class="wrap">
+    <h1>{{ _('search_title') }}</h1>
+    <form method="get" class="row mt-2" role="search">
+      <label class="input-icon grow" style="max-width:640px"><span class="sr-only">{{ _('search') }}</span>{{ icon('search') }}
+        <input class="input pill" name="q" value="{{ q }}" placeholder="{{ _('search_everything_placeholder') }}" autofocus minlength="2"></label>
+      <input type="hidden" name="tab" value="{{ tab }}">
+      <button class="btn btn-dark">{{ _('find') }}</button>
+    </form>
+  </div>
+</section>
+<div class="wrap" style="padding:28px 24px 72px">
+  {% if q|length < 2 %}
+    {{ empty('search', _('search_hint_title'), _('search_hint_text')) }}
+  {% else %}
+    {% set total = res.events|length + res.orgs|length + res.volunteers|length %}
+    <nav class="tabs" aria-label="{{ _('search') }}">
+      {% for key, label in [('all','tab_all'),('events','nav_events'),('orgs','nav_organizations'),('volunteers','nav_volunteers')] %}
+        {% set n = total if key == 'all' else res[key]|length %}
+        <a class="{{ 'on' if tab == key }}" href="{{ url_for('public.search', q=q, tab=key) }}">{{ _(label) }} <span class="n">{{ n }}</span></a>
+      {% endfor %}
+    </nav>
+    {% if total == 0 %}
+      {{ empty('search', _('nothing_found', q=q), _('nothing_found_text')) }}
+    {% endif %}
+    {% if tab in ('all', 'events') and res.events %}
+      <h3>{{ _('nav_events') }}</h3>
+      <div class="grid grid-3 mb-3">{% for ev in (res.events if tab == 'events' else res.events[:3]) %}{{ event_card(ev) }}{% endfor %}</div>
+      {% if tab == 'all' and res.events|length > 3 %}<a class="link-arrow mb-3" href="{{ url_for('public.search', q=q, tab='events') }}">{{ _('show_all_n', n=res.events|length) }} {{ icon('arrow-right', 16) }}</a>{% endif %}
+    {% endif %}
+    {% if tab in ('all', 'orgs') and res.orgs %}
+      <h3 class="mt-3">{{ _('nav_organizations') }}</h3>
+      <div class="grid grid-3 mb-3">
+        {% for o in (res.orgs if tab == 'orgs' else res.orgs[:3]) %}
+        <a class="card card-hover person-card" href="{{ url_for('public.organization_profile', org_id=o.org_id) }}" style="color:inherit;text-decoration:none">
+          <div class="top">{{ org_logo(o) }}<div><h3>{{ o.name }}</h3><div class="xs muted">{{ loc(o, 'city_name') }} · {{ _('orgtype_' ~ o.org_type) }}</div></div></div>
+          <div class="row tight">{% for d in odirs.get(o.org_id, [])[:3] %}{{ dir_tag(d, '') }}{% endfor %}</div>
+          <div class="stats"><div><b>{{ o.n_open }}</b>{{ _('open_events_lower') }}</div><div><b>{{ fmt_hours(o.hours) }}</b>{{ _('hours_lower') }}</div></div>
+        </a>
+        {% endfor %}
+      </div>
+      {% if tab == 'all' and res.orgs|length > 3 %}<a class="link-arrow mb-3" href="{{ url_for('public.search', q=q, tab='orgs') }}">{{ _('show_all_n', n=res.orgs|length) }} {{ icon('arrow-right', 16) }}</a>{% endif %}
+    {% endif %}
+    {% if tab in ('all', 'volunteers') and res.volunteers %}
+      <h3 class="mt-3">{{ _('nav_volunteers') }}</h3>
+      <div class="grid grid-3">
+        {% for v in (res.volunteers if tab == 'volunteers' else res.volunteers[:3]) %}
+        <a class="card card-hover person-card" href="{{ url_for('public.volunteer_profile', volunteer_id=v.volunteer_id) }}" style="color:inherit;text-decoration:none">
+          <div class="top">{{ avatar(v.avatar_path, v.full_name) }}<div><h3>{{ v.full_name }}</h3><div class="xs muted">{{ loc(v, 'city_name') }}</div></div></div>
+          <div class="row tight">{% for d in dirs.get(v.volunteer_id, [])[:3] %}{{ dir_tag(d, '') }}{% endfor %}</div>
+          <div class="stats"><div><b>{{ fmt_hours(v.hours) }}</b>{{ _('hours_lower') }}</div><div><b>{{ v.n_events }}</b>{{ _('events_lower') }}</div></div>
+        </a>
+        {% endfor %}
+      </div>
+      {% if tab == 'all' and res.volunteers|length > 3 %}<a class="link-arrow mt-2" href="{{ url_for('public.search', q=q, tab='volunteers') }}">{{ _('show_all_n', n=res.volunteers|length) }} {{ icon('arrow-right', 16) }}</a>{% endif %}
+    {% endif %}
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% from "partials/macros.html" import field_error %}
+{% block title %}{{ _('nav_contacts') }}{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div class="wrap">
+    <div class="crumbs"><a href="{{ url_for('public.home') }}">{{ _('home') }}</a>{{ icon('chevron-right', 14) }}<span>{{ _('nav_contacts') }}</span></div>
+    <h1>{{ _('contacts_title') }}</h1><p>{{ _('contacts_subtitle') }}</p>
+  </div>
+</section>
+<div class="wrap" style="padding:32px 24px 72px">
+  <div class="grid grid-4">
+    {% for o in offices %}
+    <div class="card office {{ 'head' if o.is_head }}">
+      <div class="row between mb-1"><b>{{ loc(o, 'city_name') }}</b>{% if o.is_head %}<span class="tag tone-mint">{{ _('head_office') }}</span>{% else %}<span class="tag tone-sage">{{ _('regional_office') }}</span>{% endif %}</div>
+      <div class="kv small">
+        <div>{{ icon('map-pin', 16) }}<span>{{ o.address }}</span></div>
+        <div>{{ icon('phone', 16) }}<a href="tel:{{ o.phone }}">{{ o.phone|phone }}</a></div>
+        <div>{{ icon('mail', 16) }}<a href="mailto:{{ o.email }}">{{ o.email }}</a></div>
+        <div>{{ icon('clock', 16) }}<span>{{ o.hours }}</span></div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="grid contact-grid mt-3">
+    <div class="map" id="map">
+      <div class="map-fallback">{{ icon('map-pin', 28) }}<p class="mt-1">{{ _('map_offline') }}</p></div>
+    </div>
+    <div class="card card-pad">
+      <h3>{{ _('write_to_us') }}</h3>
+      <p class="small muted">{{ _('write_to_us_text') }}</p>
+      <form method="post" novalidate>
+        {{ csrf_field() }}
+        <div class="sr-only"><label>Website <input name="website" tabindex="-1" autocomplete="off"></label></div>
+        <div class="form-grid">
+          <div class="field {{ 'has-error' if errors.name }}"><label class="req" for="c-name">{{ _('your_name') }}</label>
+            <input class="input" id="c-name" name="name" value="{{ f.name or '' }}" maxlength="120" required>{{ field_error(errors, 'name') }}</div>
+          <div class="field {{ 'has-error' if errors.email }}"><label class="req" for="c-email">Email</label>
+            <input class="input" id="c-email" type="email" name="email" value="{{ f.email or '' }}" maxlength="120" required>{{ field_error(errors, 'email') }}</div>
+          <div class="field span-2 {{ 'has-error' if errors.topic }}"><label class="req" for="c-topic">{{ _('topic') }}</label>
+            <select class="select" id="c-topic" name="topic">
+              {% for t in ['general','volunteer','organization','technical','partnership'] %}<option value="{{ t }}" {{ 'selected' if f.topic == t }}>{{ _('topic_' ~ t) }}</option>{% endfor %}
+            </select></div>
+          <div class="field span-2 {{ 'has-error' if errors.message }}"><label class="req" for="c-msg">{{ _('message') }}</label>
+            <textarea class="textarea" id="c-msg" name="message" maxlength="3000" required>{{ f.message or '' }}</textarea>{{ field_error(errors, 'message') }}</div>
+        </div>
+        <button class="btn btn-primary mt-2" type="submit">{{ icon('send', 16) }} {{ _('send') }}</button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<script>
+(function () {
+  if (!window.L) return; // offline: keep the text fallback
+  var offices = [{% for o in offices %}{lat: {{ o.lat }}, lng: {{ o.lng }}, title: {{ loc(o, 'city_name')|tojson }}, addr: {{ o.address|tojson }}, head: {{ 'true' if o.is_head else 'false' }}}{{ ',' if not loop.last }}{% endfor %}];
+  var el = document.getElementById('map');
+  el.innerHTML = '';
+  var map = L.map(el, {scrollWheelZoom: false}).setView([48.0, 68.0], 5);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom: 18, attribution: '&copy; OpenStreetMap'}).addTo(map);
+  var bounds = [];
+  offices.forEach(function (o) {
+    var m = L.circleMarker([o.lat, o.lng], {radius: o.head ? 11 : 8, color: '#0f3823', weight: 3, fillColor: '#9be809', fillOpacity: 1}).addTo(map);
+    var div = document.createElement('div');
+    var b = document.createElement('b'); b.textContent = o.title; div.appendChild(b);
+    div.appendChild(document.createElement('br')); div.appendChild(document.createTextNode(o.addr));
+    m.bindPopup(div);
+    bounds.push([o.lat, o.lng]);
+  });
+  if (bounds.length) map.fitBounds(bounds, {padding: [40, 40]});
+})();
+</script>
+{% endblock %}

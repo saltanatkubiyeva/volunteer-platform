@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}{{ _('verify_certificate') }}{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div class="wrap" style="max-width:760px">
+    <div class="crumbs"><a href="{{ url_for('public.home') }}">{{ _('home') }}</a>{{ icon('chevron-right', 14) }}<span>{{ _('verify_certificate') }}</span></div>
+    <h1>{{ _('verify_title') }}</h1><p>{{ _('verify_subtitle') }}</p>
+    <form class="row mt-2" method="get">
+      <label class="input-icon grow"><span class="sr-only">{{ _('certificate_code') }}</span>{{ icon('award') }}
+        <input class="input pill mono" name="code" value="{{ code }}" placeholder="DMU7K2Q9XA" maxlength="10" style="text-transform:uppercase"></label>
+      <button class="btn btn-dark">{{ _('check') }}</button>
+    </form>
+  </div>
+</section>
+<div class="wrap" style="max-width:760px;padding:28px 24px 72px">
+  {% if code and cert %}
+    <div class="alert alert-ok">{{ icon('check-circle', 22) }}<div><b>{{ _('certificate_valid') }}</b>
+      <p class="mb-0">{{ _('certificate_valid_text', name=cert.full_name, hours=fmt_hours(cert.hours_confirmed), event=cert.title, org=cert.org_name, date=fmt_date(cert.starts_at)) }}</p>
+      <p class="xs mt-1 mb-0">{{ _('issued_on', d=fmt_date(cert.issued_at)) }} · <span class="mono">{{ cert.code }}</span></p></div></div>
+  {% elif code %}
+    <div class="alert alert-danger">{{ icon('x-circle', 22) }}<div><b>{{ _('certificate_invalid') }}</b><p class="mb-0">{{ _('certificate_invalid_text') }}</p></div></div>
+  {% endif %}
+</div>
+{% endblock %}

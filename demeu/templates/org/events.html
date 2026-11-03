@@ -1,0 +1,25 @@
+{% extends "org/_layout.html" %}
+{% from "partials/macros.html" import status, cover_url, empty %}
+{% block title %}{{ _('org_events') }}{% endblock %}
+{% block cab %}
+<div class="cab-head"><div><h1>{{ _('org_events') }}</h1></div>
+  <a class="btn btn-primary" href="{{ url_for('org.event_new') }}">{{ icon('plus') }} {{ _('new_event') }}</a></div>
+<nav class="tabs">
+  {% for key in ['upcoming', 'drafts', 'past', 'cancelled'] %}
+  <a class="{{ 'on' if tab == key }}" href="{{ url_for('org.events', tab=key) }}">{{ _('org_tab_' ~ key) }} <span class="n">{{ counts[key] }}</span></a>
+  {% endfor %}
+</nav>
+{% for ev in rows %}
+<div class="card list-card">
+  <a class="thumb" href="{{ url_for('org.event_manage', event_id=ev.event_id) }}"><img src="{{ cover_url(ev) }}" alt=""></a>
+  <div><h4><a href="{{ url_for('org.event_manage', event_id=ev.event_id) }}">{{ ev.title }}</a></h4>
+    <div class="meta"><span>{{ icon('calendar', 14) }}{{ fmt_date(ev.starts_at, True) }}, {{ fmt_time(ev.starts_at) }}</span><span>{{ icon('map-pin', 14) }}{{ loc(ev, 'city_name') }}</span>
+      <span>{{ icon('users', 14) }}{{ ev.taken }}/{{ ev.max_volunteers }}</span>
+      {% if ev.pending %}<span class="tag tone-butter">{{ _('n_pending_apps', n=ev.pending) }}</span>{% endif %}</div></div>
+  <div class="actions">{{ status(event_phase(ev)) }}
+    <a class="btn btn-ghost btn-xs" href="{{ url_for('org.event_manage', event_id=ev.event_id) }}">{{ _('manage') }}</a></div>
+</div>
+{% else %}
+  {{ empty('calendar', _('no_events_in_tab'), '', url_for('org.event_new'), _('new_event')) }}
+{% endfor %}
+{% endblock %}

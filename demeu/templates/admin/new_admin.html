@@ -1,0 +1,13 @@
+{% extends "admin/_layout.html" %}
+{% from "partials/macros.html" import field_error %}
+{% block title %}{{ _('new_admin') }}{% endblock %}
+{% block admin %}
+<div class="cab-head"><div><h1>{{ _('new_admin') }}</h1><p>{{ _('new_admin_subtitle') }}</p></div></div>
+<form class="card card-pad" method="post" style="max-width:560px" novalidate>
+  {{ csrf_field() }}
+  <div class="field {{ 'has-error' if errors.email }}"><label class="req" for="email">Email</label><input class="input" id="email" name="email" type="email" value="{{ f.email or '' }}">{{ field_error(errors, 'email') }}</div>
+  <div class="field {{ 'has-error' if errors.password }}"><label class="req" for="password">{{ _('temp_password') }}</label><input class="input" id="password" name="password" type="text" autocomplete="off">
+    <span class="hint">{{ _('password_hint') }}</span>{{ field_error(errors, 'password') }}</div>
+  <button class="btn btn-primary mt-3">{{ _('create') }}</button>
+</form>
+{% endblock %}

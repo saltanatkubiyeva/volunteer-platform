@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% from "partials/macros.html" import org_logo, dir_tag, event_card, avatar, rating, status, empty %}
+{% block title %}{{ o.name }}{% endblock %}
+{% block content %}
+<div class="profile-cover"></div>
+<div class="wrap">
+  <div class="profile-head">
+    <div class="profile-bar">
+      <span style="background:#fff;border-radius:28px;padding:6px;box-shadow:var(--sh-1)">{{ org_logo(o, 'lg') }}</span>
+      <div class="info">
+        <h1>{{ o.name }} {% if o.status == 'verified' %}<span class="verified" title="{{ _('st_verified') }}">{{ icon('shield-check', 24) }}</span>{% endif %}</h1>
+        <div class="meta"><span>{{ icon('briefcase', 15) }}{{ _('orgtype_' ~ o.org_type) }}</span><span>{{ icon('map-pin', 15) }}{{ loc(o, 'city_name') }}</span>
+          {% if o.founded_year %}<span>{{ icon('calendar', 15) }}{{ _('founded_in', y=o.founded_year) }}</span>{% endif %}
+          {% if o.status != 'verified' %}{{ status(o.status) }}{% endif %}</div>
+      </div>
+      {% if own and g.coordinator.is_owner %}<a class="btn btn-ghost" href="{{ url_for('org.profile') }}">{{ icon('pencil', 16) }} {{ _('edit_profile') }}</a>{% endif %}
+    </div>
+  </div>
+  <div class="detail-grid" style="padding-top:0">
+    <div>
+      <div class="grid grid-4">
+        <div class="stat dark"><div class="num">{{ fmt_hours(stats.hours) }}</div><div class="lbl">{{ _('stat_hours') }}</div></div>
+        <div class="stat"><div class="num">{{ stats.completed }}</div><div class="lbl">{{ _('stat_events_done') }}</div></div>
+        <div class="stat"><div class="num">{{ stats.volunteers }}</div><div class="lbl">{{ _('stat_people_helped') }}</div></div>
+        <div class="stat"><div class="num">{{ stats.rating or '—' }}</div><div class="lbl">{{ _('stat_rating', n=stats.reviews) }}</div></div>
+      </div>
+      <h3 class="mt-4">{{ _('about_org') }}</h3>
+      <p class="prose">{{ o.description|nl2br }}</p>
+      <div class="row tight">{% for d in dirs %}{{ dir_tag(d, '') }}{% endfor %}</div>
+
+      <h3 class="mt-4">{{ _('upcoming_events') }} <span class="muted small">({{ upcoming|length }})</span></h3>
+      {% if upcoming %}
+        <div class="grid grid-2">{% for ev in upcoming %}{{ event_card(ev) }}{% endfor %}</div>
+      {% else %}{{ empty('calendar', _('no_upcoming_title'), _('no_upcoming_org_text')) }}{% endif %}
+
+      {% if past %}
+      <h3 class="mt-4">{{ _('past_events') }}</h3>
+      <div class="card card-pad timeline">
+        {% for ev in past %}
+        <div class="item"><span class="date">{{ fmt_date(ev.starts_at) }}</span>
+          <a href="{{ url_for('public.event_detail', event_id=ev.event_id) }}"><b>{{ ev.title }}</b></a>
+          <span class="small muted">{{ _('joined_of', a=ev.taken, b=ev.max_volunteers) }}</span></div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      <h3 class="mt-4">{{ _('reviews') }} <span class="muted small">({{ stats.reviews }})</span></h3>
+      {% if reviews %}
+      <div class="card card-pad">
+        {% for r in reviews %}
+        <div class="review"><div class="head">{{ avatar(r.avatar_path, r.full_name, 'sm') }}<b class="small">{{ r.full_name }}</b>{{ rating(r.rating) }}</div>
+          {% if r.comment %}<p class="small mb-1">{{ r.comment }}</p>{% endif %}
+          <a class="xs muted" href="{{ url_for('public.event_detail', event_id=r.event_id) }}">{{ r.title }} · {{ fmt_date(r.created_at) }}</a></div>
+        {% endfor %}
+      </div>
+      {% else %}<p class="muted">{{ _('no_reviews') }}</p>{% endif %}
+    </div>
+    <aside class="detail-aside">
+      <div class="card card-pad">
+        <h4>{{ _('contacts') }}</h4>
+        <div class="kv">
+          <div><span class="ic-wrap">{{ icon('map-pin') }}</span><div><b>{{ loc(o, 'city_name') }}</b><span>{{ o.address }}</span></div></div>
+          <div><span class="ic-wrap">{{ icon('phone') }}</span><div><b><a href="tel:{{ o.phone }}">{{ o.phone|phone }}</a></b></div></div>
+          <div><span class="ic-wrap">{{ icon('mail') }}</span><div><b><a href="mailto:{{ o.email }}">{{ o.email }}</a></b></div></div>
+          {% if o.website %}<div><span class="ic-wrap">{{ icon('globe') }}</span><div><b><a href="{{ o.website }}" rel="noopener nofollow" target="_blank">{{ o.website.replace('https://','').replace('http://','') }}</a></b></div></div>{% endif %}
+        </div>
+      </div>
+      <div class="card card-pad">
+        <h4>{{ _('team') }}</h4>
+        {% for t in team %}<div class="row mb-1">{{ avatar(None, t.full_name, 'sm') }}<div><b class="small">{{ t.full_name }}</b><div class="xs muted">{{ t.position or '' }}</div></div></div>{% endfor %}
+      </div>
+      <div class="card card-pad">
+        <h4>{{ _('legal_info') }}</h4>
+        <p class="small mb-0"><span class="muted">{{ _('bin') }}:</span> <span class="mono">{{ o.bin }}</span></p>
+        {% if o.status == 'verified' %}<p class="small mb-0 mt-1"><span class="verified">{{ icon('shield-check', 14) }}</span> {{ _('verified_by_demeu', d=fmt_date(o.verified_at)) }}</p>{% endif %}
+      </div>
+    </aside>
+  </div>
+</div>
+{% endblock %}

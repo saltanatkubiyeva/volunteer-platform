@@ -1,0 +1,49 @@
+{% extends "org/_layout.html" %}
+{% from "partials/macros.html" import avatar, status, empty %}
+{% block title %}{{ _('org_cabinet') }}{% endblock %}
+{% block cab %}
+<div class="cab-head">
+  <div><h1>{{ _('hello_name', name=g.coordinator.full_name.split()[0]) }}</h1><p>{{ _('org_dash_subtitle') }}</p></div>
+  <a class="btn btn-primary" href="{{ url_for('org.event_new') }}">{{ icon('plus') }} {{ _('new_event') }}</a>
+</div>
+<div class="grid grid-4">
+  <div class="stat dark"><div class="ic-wrap">{{ icon('inbox') }}</div><div class="num">{{ n_pending }}</div><div class="lbl">{{ _('stat_pending_apps') }}</div></div>
+  <div class="stat"><div class="ic-wrap">{{ icon('clock') }}</div><div class="num">{{ fmt_hours(stats.hours) }}</div><div class="lbl">{{ _('stat_hours') }}</div></div>
+  <div class="stat"><div class="ic-wrap">{{ icon('target') }}</div><div class="num">{{ (stats.attendance ~ '%') if stats.attendance is not none else '—' }}</div><div class="lbl">{{ _('stat_attendance') }}</div></div>
+  <div class="stat"><div class="ic-wrap">{{ icon('star') }}</div><div class="num">{{ stats.rating or '—' }}</div><div class="lbl">{{ _('stat_rating', n=stats.reviews) }}</div></div>
+</div>
+
+{% if to_mark %}
+<div class="alert alert-lime mt-3">{{ icon('clipboard-check') }}<div><b>{{ _('to_mark_title') }}</b><p class="small">{{ _('to_mark_text') }}</p>
+  <div class="row tight">{% for ev in to_mark %}<a class="btn btn-dark btn-xs" href="{{ url_for('org.event_manage', event_id=ev.event_id, tab='attendance') }}">{{ ev.title }} · {{ fmt_date(ev.starts_at, False, False) }}</a>{% endfor %}</div></div></div>
+{% endif %}
+
+<div class="grid split mt-3">
+  <div class="card card-pad">
+    <div class="row between mb-1"><h3 class="mb-0">{{ _('new_applications') }}</h3></div>
+    {% for r in pending %}
+    <div class="queue-item">
+      <a href="{{ url_for('public.volunteer_profile', volunteer_id=r.volunteer_id) }}">{{ avatar(r.avatar_path, r.full_name) }}</a>
+      <div class="grow"><b class="small">{{ r.full_name }}</b> <span class="xs muted">· {{ _('age_n', n=age_on(r.birth_date)) }}</span>
+        <div class="xs muted"><a class="muted" href="{{ url_for('org.event_manage', event_id=r.event_id) }}">{{ r.title }}</a> · {{ fmt_date(r.starts_at, False, False) }}</div>
+        {% if r.motivation %}<div class="xs mt-1">“{{ r.motivation }}”</div>{% endif %}</div>
+      <form method="post" action="{{ url_for('org.decide', registration_id=r.registration_id) }}" class="row tight">{{ csrf_field() }}
+        <button class="btn btn-primary btn-xs" name="decision" value="approve" title="{{ _('approve') }}">{{ icon('check', 14) }}</button>
+        <button class="btn btn-danger btn-xs" name="decision" value="reject" title="{{ _('reject') }}">{{ icon('x', 14) }}</button></form>
+    </div>
+    {% else %}<p class="small muted mb-0">{{ _('no_pending_apps') }}</p>{% endfor %}
+  </div>
+  <div class="card card-pad">
+    <div class="row between mb-1"><h3 class="mb-0">{{ _('upcoming_events') }}</h3><a class="small" href="{{ url_for('org.events') }}">{{ _('all') }}</a></div>
+    {% for ev in upcoming %}
+    <a class="queue-item" href="{{ url_for('org.event_manage', event_id=ev.event_id) }}" style="color:inherit;text-decoration:none">
+      <div class="grow"><b class="small">{{ ev.title }}</b><div class="xs muted">{{ fmt_date(ev.starts_at, True) }}, {{ fmt_time(ev.starts_at) }}</div>
+        <div class="progress mt-1"><i style="width:{{ [100, ev.taken * 100 // ev.max_volunteers]|min }}%"></i></div></div>
+      <span class="small nowrap"><b>{{ ev.taken }}</b>/{{ ev.max_volunteers }}{% if ev.pending %} <span class="tag tone-butter">+{{ ev.pending }}</span>{% endif %}</span>
+    </a>
+    {% else %}
+      {{ empty('calendar', _('no_upcoming_title'), '', url_for('org.event_new'), _('new_event')) }}
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,53 @@
+{% extends "volunteer/_layout.html" %}
+{% from "partials/macros.html" import status, cover_url, rating, empty %}
+{% block title %}{{ _('my_applications') }}{% endblock %}
+{% block cab %}
+<div class="cab-head"><div><h1>{{ _('my_applications') }}</h1><p>{{ _('applications_subtitle') }}</p></div></div>
+<nav class="tabs">
+  {% for key in ['active', 'history', 'closed'] %}
+  <a class="{{ 'on' if tab == key }}" href="{{ url_for('volunteer.applications', tab=key) }}">{{ _('apps_tab_' ~ key) }} <span class="n">{{ counts[key] }}</span></a>
+  {% endfor %}
+</nav>
+{% for r in rows %}
+<div class="card list-card">
+  <a class="thumb" href="{{ url_for('public.event_detail', event_id=r.event_id) }}"><img src="{{ cover_url(r) }}" alt=""></a>
+  <div>
+    <h4><a href="{{ url_for('public.event_detail', event_id=r.event_id) }}">{{ r.title }}</a></h4>
+    <div class="meta"><span>{{ icon('calendar', 14) }}{{ fmt_date(r.starts_at, True) }}, {{ fmt_time(r.starts_at) }}–{{ fmt_time(r.ends_at) }}</span>
+      <span>{{ icon('map-pin', 14) }}{{ loc(r, 'city_name') }}</span><span>{{ icon('building', 14) }}{{ r.org_name }}</span></div>
+    {% if r.ev_status == 'cancelled' %}<p class="small mt-1 mb-0" style="color:var(--danger)">{{ icon('x-circle', 14) }} {{ _('event_cancelled_banner') }}: {{ r.cancel_reason }}</p>
+    {% elif r.status == 'rejected' and r.decision_note %}<p class="small muted mt-1 mb-0">{{ r.decision_note }}</p>
+    {% elif r.status == 'pending' %}<p class="xs muted mt-1 mb-0">{{ _('applied_on', d=fmt_dt(r.applied_at)) }} · {{ _('status_hint_pending') }}</p>
+    {% elif r.status == 'approved' and tab == 'history' %}<p class="xs muted mt-1 mb-0">{{ _('hours_waiting') }}</p>{% endif %}
+  </div>
+  <div class="actions">
+    {% if r.ev_status == 'cancelled' %}{{ status('cancelled') }}{% else %}{{ status(r.status) }}{% endif %}
+    {% if r.status == 'attended' %}
+      <span class="tag tone-mint">{{ icon('clock', 12) }}{{ fmt_hours(r.hours_confirmed) }} {{ _('h_short') }}</span>
+      {% if r.cert_code %}
+        <a class="btn btn-ghost btn-xs" href="{{ url_for('volunteer.certificate', code=r.cert_code) }}">{{ icon('award', 14) }} {{ _('certificate') }}</a>
+      {% else %}
+        <form method="post" action="{{ url_for('volunteer.certificate_issue', registration_id=r.registration_id) }}">{{ csrf_field() }}
+          <button class="btn btn-ghost btn-xs">{{ icon('award', 14) }} {{ _('get_certificate') }}</button></form>
+      {% endif %}
+      {% if r.my_rating %}{{ rating(r.my_rating) }}{% endif %}
+    {% elif r.status in ('pending', 'approved') and tab == 'active' %}
+      <form method="post" action="{{ url_for('volunteer.cancel', registration_id=r.registration_id) }}" data-confirm="{{ _('confirm_cancel_application') }}">
+        {{ csrf_field() }}<button class="btn btn-danger btn-xs">{{ icon('x', 14) }} {{ _('cancel_application') }}</button></form>
+    {% endif %}
+  </div>
+</div>
+{% if r.status == 'attended' and not r.my_rating and tab == 'history' %}
+<form class="card card-pad" method="post" action="{{ url_for('volunteer.feedback', registration_id=r.registration_id) }}" style="margin:-4px 0 12px;border-top-left-radius:0;border-top-right-radius:0;background:var(--mint)">
+  {{ csrf_field() }}
+  <div class="row"><span class="small"><b>{{ _('rate_event') }}</b></span>
+    <div class="stars" role="radiogroup" aria-label="{{ _('rating') }}">
+      {% for s in range(5, 0, -1) %}<input type="radio" id="s{{ r.registration_id }}-{{ s }}" name="rating" value="{{ s }}" required><label for="s{{ r.registration_id }}-{{ s }}">{{ icon('star') }}</label>{% endfor %}</div>
+    <input class="input grow" name="comment" maxlength="600" placeholder="{{ _('feedback_placeholder') }}" style="height:38px;min-width:200px">
+    <button class="btn btn-dark btn-sm">{{ _('send_feedback') }}</button></div>
+</form>
+{% endif %}
+{% else %}
+  {{ empty('clipboard-check', _('no_apps_' ~ tab), _('no_apps_text'), url_for('public.events'), _('find_event')) }}
+{% endfor %}
+{% endblock %}

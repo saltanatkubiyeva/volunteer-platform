@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% from "partials/macros.html" import org_logo, status %}
+{% block content %}
+{% set ep = request.endpoint %}
+<div class="wrap">
+  <div class="cabinet">
+    <nav class="card side-nav" aria-label="{{ _('org_cabinet') }}">
+      <div class="who">{{ org_logo(g.org) }}<div><b>{{ g.org.name }}</b><span class="xs muted">{{ g.coordinator.full_name }}</span></div></div>
+      <a class="{{ 'on' if ep == 'org.dashboard' }}" href="{{ url_for('org.dashboard') }}">{{ icon('dashboard') }} {{ _('overview') }}</a>
+      <a class="{{ 'on' if ep in ('org.events', 'org.event_manage', 'org.event_edit') }}" href="{{ url_for('org.events') }}">{{ icon('calendar') }} {{ _('org_events') }}</a>
+      <a class="{{ 'on' if ep == 'org.event_new' }}" href="{{ url_for('org.event_new') }}">{{ icon('plus') }} {{ _('new_event') }}</a>
+      <a class="{{ 'on' if ep == 'org.reports' }}" href="{{ url_for('org.reports') }}">{{ icon('chart') }} {{ _('nav_reports') }}</a>
+      {% if g.coordinator.is_owner %}
+      <a class="{{ 'on' if ep == 'org.profile' }}" href="{{ url_for('org.profile') }}">{{ icon('building') }} {{ _('org_profile') }}</a>
+      <a class="{{ 'on' if ep == 'org.team' }}" href="{{ url_for('org.team') }}">{{ icon('users') }} {{ _('team') }}</a>
+      {% endif %}
+      <a href="{{ url_for('auth.notifications') }}">{{ icon('bell') }} {{ _('notifications') }}{% if unread %}<span class="badge">{{ unread }}</span>{% endif %}</a>
+      <a href="{{ url_for('public.organization_profile', org_id=g.org.org_id) }}">{{ icon('eye') }} {{ _('org_public_page') }}</a>
+      <a href="{{ url_for('auth.settings') }}">{{ icon('sliders') }} {{ _('settings') }}</a>
+    </nav>
+    <div>
+      {% if g.org.status == 'pending' %}
+        <div class="alert alert-warn mb-3">{{ icon('hourglass') }}<div><b>{{ _('org_pending_title') }}</b><p class="small">{{ _('org_pending_text') }}</p></div></div>
+      {% elif g.org.status == 'rejected' %}
+        <div class="alert alert-danger mb-3">{{ icon('x-circle') }}<div><b>{{ _('org_rejected_title') }}</b><p class="small">{{ g.org.status_comment }}</p>
+          <p class="small">{{ _('org_rejected_text') }}</p>{% if g.coordinator.is_owner %}<a class="btn btn-dark btn-sm" href="{{ url_for('org.profile') }}">{{ _('fix_and_resubmit') }}</a>{% endif %}</div></div>
+      {% elif g.org.status == 'suspended' %}
+        <div class="alert alert-danger mb-3">{{ icon('ban') }}<div><b>{{ _('org_suspended_title') }}</b><p class="small">{{ g.org.status_comment }}</p></div></div>
+      {% endif %}
+      {% block cab %}{% endblock %}
+    </div>
+  </div>
+</div>
+{% endblock %}

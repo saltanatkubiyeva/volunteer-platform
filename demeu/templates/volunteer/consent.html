@@ -1,0 +1,42 @@
+{% extends "volunteer/_layout.html" %}
+{% from "partials/macros.html" import field_error, status %}
+{% block title %}{{ _('parental_consent') }}{% endblock %}
+{% block cab %}
+<div class="cab-head"><div><h1>{{ _('parental_consent') }}</h1><p>{{ _('consent_subtitle') }}</p></div></div>
+{% if age >= 18 %}
+  <div class="alert alert-ok">{{ icon('check-circle') }}<div>{{ _('consent_not_needed') }}</div></div>
+{% else %}
+  {% if current %}
+  <div class="card card-pad mb-3">
+    <div class="row between"><h3 class="mb-0">{{ _('current_document') }}</h3>{{ status(current.status) }}</div>
+    <p class="small muted mt-1">{{ _('uploaded_on', d=fmt_dt(current.uploaded_at)) }} · {{ current.parent_name }} · {{ current.parent_phone|phone }}</p>
+    {% if current.status == 'pending' %}<div class="alert alert-warn">{{ icon('hourglass') }}<div class="small">{{ _('consent_status_pending') }}</div></div>
+    {% elif current.status == 'approved' %}<div class="alert alert-ok">{{ icon('check-circle') }}<div class="small">{{ _('consent_status_approved') }}</div></div>
+    {% else %}<div class="alert alert-danger">{{ icon('x-circle') }}<div class="small"><b>{{ _('consent_status_rejected') }}</b>{% if current.review_comment %}<br>{{ current.review_comment }}{% endif %}</div></div>{% endif %}
+    <a class="btn btn-ghost btn-sm mt-2" href="{{ url_for('media.consent_file', consent_id=current.consent_id) }}" target="_blank">{{ icon('file-text', 16) }} {{ _('open_document') }}</a>
+  </div>
+  {% endif %}
+
+  {% if not current or current.status == 'rejected' %}
+  <div class="card card-pad">
+    <h3>{{ _('upload_consent') }}</h3>
+    <ol class="small" style="padding-left:18px">
+      <li>{{ _('consent_step_1') }} <a href="{{ url_for('static', filename='consent_template.pdf') }}" download>{{ icon('download', 14) }} {{ _('download_template') }}</a></li>
+      <li>{{ _('consent_step_2') }}</li><li>{{ _('consent_step_3') }}</li></ol>
+    <form method="post" enctype="multipart/form-data" novalidate>
+      {{ csrf_field() }}
+      <div class="form-grid">
+        <div class="field {{ 'has-error' if errors.parent_name }}"><label class="req" for="parent_name">{{ _('parent_name') }}</label>
+          <input class="input" id="parent_name" name="parent_name" value="{{ f.parent_name or '' }}" maxlength="100">{{ field_error(errors, 'parent_name') }}</div>
+        <div class="field {{ 'has-error' if errors.parent_phone }}"><label class="req" for="parent_phone">{{ _('parent_phone') }}</label>
+          <input class="input" id="parent_phone" name="parent_phone" type="tel" value="{{ f.parent_phone or '' }}" placeholder="+7 701 123 45 67">{{ field_error(errors, 'parent_phone') }}</div>
+        <div class="field span-2 {{ 'has-error' if errors.document }}"><label class="req" for="document">{{ _('signed_document') }}</label>
+          <div class="file-drop">{{ icon('upload', 22) }}<input type="file" id="document" name="document" accept=".pdf,.jpg,.jpeg,.png"></div>
+          <span class="hint">{{ _('document_hint') }}</span>{{ field_error(errors, 'document') }}</div>
+      </div>
+      <button class="btn btn-primary mt-3">{{ icon('upload', 16) }} {{ _('send_for_review') }}</button>
+    </form>
+  </div>
+  {% endif %}
+{% endif %}
+{% endblock %}

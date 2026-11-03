@@ -1,0 +1,47 @@
+{% extends "volunteer/_layout.html" %}
+{% from "partials/macros.html" import field_error, avatar %}
+{% block title %}{{ _('edit_profile') }}{% endblock %}
+{% block cab %}
+<div class="cab-head"><div><h1>{{ _('edit_profile') }}</h1><p>{{ _('edit_profile_subtitle') }}</p></div>
+  <a class="btn btn-ghost" href="{{ url_for('public.volunteer_profile', volunteer_id=g.volunteer.volunteer_id) }}">{{ icon('eye', 16) }} {{ _('preview') }}</a></div>
+<form class="card card-pad" method="post" enctype="multipart/form-data" novalidate>
+  {{ csrf_field() }}
+  <div class="form-section">
+    <h3>{{ _('photo') }}</h3>
+    <div class="row">{{ avatar(f.avatar_path, f.full_name, 'lg') }}
+      <div class="field grow {{ 'has-error' if errors.avatar }}"><input type="file" name="avatar" accept=".jpg,.jpeg,.png,.webp" class="input" style="padding-top:10px">
+        <span class="hint">{{ _('image_hint') }}</span>{{ field_error(errors, 'avatar') }}
+        {% if f.avatar_path %}<label class="check small"><input type="checkbox" name="remove_avatar" value="1"> {{ _('remove_photo') }}</label>{% endif %}</div></div>
+  </div>
+  <div class="form-section">
+    <h3>{{ _('personal_data') }}</h3>
+    <div class="form-grid">
+      <div class="field {{ 'has-error' if errors.full_name }}"><label class="req" for="full_name">{{ _('full_name') }}</label>
+        <input class="input" id="full_name" name="full_name" value="{{ f.full_name }}" maxlength="100">{{ field_error(errors, 'full_name') }}</div>
+      <div class="field {{ 'has-error' if errors.phone }}"><label class="req" for="phone">{{ _('phone') }}</label>
+        <input class="input" id="phone" name="phone" type="tel" value="{{ f.phone }}">{{ field_error(errors, 'phone') }}</div>
+      <div class="field {{ 'has-error' if errors.city_id }}"><label class="req" for="city_id">{{ _('city') }}</label>
+        <select class="select" id="city_id" name="city_id">{% for c in cities %}<option value="{{ c.city_id }}" {{ 'selected' if f.city_id|string == c.city_id|string }}>{{ loc(c, 'name') }}</option>{% endfor %}</select></div>
+      <div class="field"><span class="label">{{ _('birth_date') }}</span><input class="input" value="{{ fmt_date(g.volunteer.birth_date) }}" disabled>
+        <span class="hint">{{ _('birth_date_locked') }}</span></div>
+      <div class="field span-2"><label for="about">{{ _('about_me') }}</label>
+        <textarea class="textarea" id="about" name="about" maxlength="1500" placeholder="{{ _('about_placeholder') }}">{{ f.about or '' }}</textarea></div>
+      <div class="field span-2"><label for="skills">{{ _('skills') }}</label>
+        <input class="input" id="skills" name="skills" value="{{ f.skills or '' }}" maxlength="300" placeholder="{{ _('skills_placeholder') }}">
+        <span class="hint">{{ _('skills_hint') }}</span></div>
+    </div>
+  </div>
+  <div class="form-section {{ 'has-error' if errors.directions }}">
+    <h3>{{ _('directions') }}</h3>
+    <div class="check-grid">{% for d in directions %}<label class="check-chip"><input type="checkbox" name="directions" value="{{ d.direction_id }}" {{ 'checked' if d.direction_id in selected }}><span>{{ icon(d.icon, 15) }}{{ loc(d, 'name') }}</span></label>{% endfor %}</div>
+    {{ field_error(errors, 'directions') }}
+  </div>
+  <div class="form-section">
+    <h3>{{ icon('lock') }} {{ _('privacy') }}</h3>
+    <label class="check"><input type="checkbox" name="is_public" value="1" {{ 'checked' if f.is_public }}><span><b>{{ _('privacy_public') }}</b><br><span class="small muted">{{ _('privacy_public_hint') }}</span></span></label>
+    <label class="check mt-2"><input type="checkbox" name="show_contacts" value="1" {{ 'checked' if f.show_contacts }}><span><b>{{ _('privacy_contacts') }}</b><br><span class="small muted">{{ _('privacy_contacts_hint') }}</span></span></label>
+  </div>
+  <div class="form-actions"><button class="btn btn-primary btn-lg">{{ _('save') }}</button>
+    <a class="btn btn-ghost" href="{{ url_for('volunteer.dashboard') }}">{{ _('cancel') }}</a></div>
+</form>
+{% endblock %}

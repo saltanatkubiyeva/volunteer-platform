@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}{{ code }}{% endblock %}
+{% block content %}
+<div class="wrap center" style="padding:96px 24px">
+  <div class="big-num" style="font-size:96px;color:var(--lime-2)">{{ code }}</div>
+  <h1 class="mt-2">{{ _('error_' ~ code ~ '_title') }}</h1>
+  <p class="muted" style="max-width:520px;margin:0 auto 24px">{{ _('error_' ~ code ~ '_text') }}</p>
+  <div class="row" style="justify-content:center">
+    <a class="btn btn-dark" href="{{ url_for('public.home') }}">{{ icon('home', 16) }} {{ _('to_home') }}</a>
+    <a class="btn btn-ghost" href="{{ url_for('public.events') }}">{{ _('nav_events') }}</a>
+  </div>
+</div>
+{% endblock %}

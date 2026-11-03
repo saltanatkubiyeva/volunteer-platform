@@ -1,0 +1,86 @@
+{% macro media_url(path) -%}
+{%- if path -%}{{ url_for('media.public_file', folder=path.split('/')[0], name=path.split('/')[1]) }}{%- endif -%}
+{%- endmacro %}
+
+{% macro cover_url(ev) -%}
+{%- if ev.cover_path -%}{{ media_url(ev.cover_path) }}{%- else -%}{{ url_for('static', filename='img/covers/' ~ (ev.dir_slug or 'ecology') ~ '.svg') }}{%- endif -%}
+{%- endmacro %}
+
+{% macro avatar(path, name, cls='') -%}
+<span class="avatar {{ cls }}">{% if path %}<img src="{{ media_url(path) }}" alt="">{% else %}{{ initials(name) }}{% endif %}</span>
+{%- endmacro %}
+
+{% macro org_logo(o, cls='') -%}
+<span class="avatar org {{ cls }}">{% if o.logo_path or o.org_logo %}<img src="{{ media_url(o.logo_path or o.org_logo) }}" alt="">{% else %}{{ initials(o.name or o.org_name) }}{% endif %}</span>
+{%- endmacro %}
+
+{% macro dir_tag(row, prefix='dir_') -%}
+<span class="tag tone-{{ row[prefix ~ 'tone'] if prefix else row.tone }}">{{ icon(row[prefix ~ 'icon'] if prefix else row.icon, 13) }}{{ loc(row, prefix ~ 'name' if prefix else 'name') }}</span>
+{%- endmacro %}
+
+{% macro status(value, label_prefix='st_') -%}
+<span class="status st-{{ value }}">{{ _(label_prefix ~ value) }}</span>
+{%- endmacro %}
+
+{% macro rating(n) -%}
+<span class="rating" aria-label="{{ n }}/5">{% for i in range(5) %}<span class="{{ '' if i < n else 'off' }}">{{ icon('star', 14) }}</span>{% endfor %}</span>
+{%- endmacro %}
+
+{% macro event_card(ev) -%}
+{% set phase = event_phase(ev) %}
+{% set left = ev.max_volunteers - ev.taken %}
+<article class="card card-hover event-card">
+  <a class="event-cover" href="{{ url_for('public.event_detail', event_id=ev.event_id) }}" tabindex="-1" aria-hidden="true">
+    <img src="{{ cover_url(ev) }}" alt="" loading="lazy">
+    <div class="tags">
+      {{ dir_tag(ev) }}
+      {% if phase == 'upcoming' and left <= 0 %}<span class="tag tone-rose">{{ _('full') }}</span>
+      {% elif phase == 'upcoming' and left <= 5 %}<span class="tag tone-butter">{{ _('spots_left', n=left) }}</span>{% endif %}
+      {% if phase == 'finished' %}<span class="tag tag-white">{{ _('st_finished') }}</span>{% endif %}
+      {% if not ev.requires_approval and phase == 'upcoming' %}<span class="tag tag-white">{{ icon('check', 12) }}{{ _('instant_join') }}</span>{% endif %}
+    </div>
+    <span class="when">{{ icon('calendar', 14) }}{{ fmt_date(ev.starts_at, True, False) }} · {{ fmt_time(ev.starts_at) }}</span>
+  </a>
+  <div class="event-body">
+    <div class="meta"><span>{{ icon('map-pin', 15) }}{{ loc(ev, 'city_name') }}</span><span>{{ icon('building', 15) }}{{ ev.org_name }}</span></div>
+    <h3><a href="{{ url_for('public.event_detail', event_id=ev.event_id) }}">{{ ev.title }}</a></h3>
+    <p class="summary">{{ ev.summary }}</p>
+    <div class="event-foot">
+      <div>
+        <div class="progress-label"><span>{{ _('joined_of', a=ev.taken, b=ev.max_volunteers) }}</span><span>{{ (ev.taken * 100 // ev.max_volunteers) if ev.max_volunteers else 0 }}%</span></div>
+        <div class="progress {{ 'full' if left <= 0 }}"><i style="width: {{ [100, (ev.taken * 100 // ev.max_volunteers)]|min }}%"></i></div>
+      </div>
+      <a class="btn {{ 'btn-primary' if phase == 'upcoming' and left > 0 else 'btn-ghost' }} btn-sm btn-block" href="{{ url_for('public.event_detail', event_id=ev.event_id) }}">
+        {{ _('view_and_join') if phase == 'upcoming' and left > 0 else _('details') }}</a>
+    </div>
+  </div>
+</article>
+{%- endmacro %}
+
+{% macro field_error(errors, name) -%}
+{% if errors and errors.get(name) %}<div class="error-text">{{ icon('alert', 14) }}{{ _(errors.get(name)) }}</div>{% endif %}
+{%- endmacro %}
+
+{% macro pagination(page) -%}
+{% if page.pages > 1 %}
+<nav class="pagination" aria-label="{{ _('pages') }}">
+  {% if page.page > 1 %}<a href="{{ page.url(page.page - 1) }}" aria-label="{{ _('prev') }}">{{ icon('chevron-left', 16) }}</a>{% endif %}
+  {% for p in range(1, page.pages + 1) %}
+    {% if p == page.page %}<span class="on">{{ p }}</span>
+    {% elif p <= 2 or p > page.pages - 2 or (p - page.page)|abs <= 1 %}<a href="{{ page.url(p) }}">{{ p }}</a>
+    {% elif (p - page.page)|abs == 2 %}<span>…</span>{% endif %}
+  {% endfor %}
+  {% if page.page < page.pages %}<a href="{{ page.url(page.page + 1) }}" aria-label="{{ _('next') }}">{{ icon('chevron-right', 16) }}</a>{% endif %}
+</nav>
+{% endif %}
+{%- endmacro %}
+
+{% macro empty(ic, title, text='', action_url=None, action_label=None) -%}
+<div class="empty">{{ icon(ic, 32) }}<h3>{{ title }}</h3>{% if text %}<p>{{ text }}</p>{% endif %}
+{% if action_url %}<a class="btn btn-dark btn-sm" href="{{ action_url }}">{{ action_label }}</a>{% endif %}</div>
+{%- endmacro %}
+
+{% macro select_options(rows, value_key, label_field, selected, placeholder=None) -%}
+{% if placeholder %}<option value="">{{ placeholder }}</option>{% endif %}
+{% for r in rows %}<option value="{{ r[value_key] }}" {{ 'selected' if selected|string == r[value_key]|string }}>{{ loc(r, label_field) }}</option>{% endfor %}
+{%- endmacro %}

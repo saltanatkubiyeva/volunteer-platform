@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+{% from "partials/macros.html" import event_card, cover_url, dir_tag, org_logo, avatar, rating %}
+{% block title %}{{ _('tagline') }}{% endblock %}
+{% block content %}
+<section class="hero">
+  <div class="wrap">
+    <div class="hero-grid">
+      <div>
+        <a class="pill-note" href="{{ url_for('public.events') }}"><b>{{ stats.open }}</b> {{ _('home_open_events_note') }} {{ icon('arrow-right', 14) }}</a>
+        <h1>{{ _('home_title_1') }} <em>{{ _('home_title_2') }}</em> {{ _('home_title_3') }}</h1>
+        <p class="lead">{{ _('home_lead') }}</p>
+        <div class="row mt-3">
+          <a class="btn btn-primary btn-lg" href="{{ url_for('public.events') }}">{{ icon('search') }} {{ _('find_event') }}</a>
+          <a class="btn btn-ghost btn-lg" href="{{ url_for('auth.register_organization') }}">{{ icon('building') }} {{ _('for_organizations') }}</a>
+        </div>
+        <div class="row mt-3 small">
+          <div class="avatar-stack">
+            {% for f in faces %}{{ avatar(f.avatar_path, f.full_name, 'sm') }}{% endfor %}
+            <span class="avatar sm more">+</span>
+          </div>
+          <span><b>{{ stats.volunteers }}</b> {{ _('home_volunteers_note') }} · <b>{{ fmt_hours(stats.hours) }}</b> {{ _('hours_confirmed_lower') }}</span>
+        </div>
+      </div>
+      <div class="hero-visual">
+        {% set top = featured[0] if featured else None %}
+        <div class="hero-card">
+          <img src="{{ cover_url(top) if top else url_for('static', filename='img/covers/ecology.svg') }}" alt="">
+          {% if top %}
+          <a class="cap" href="{{ url_for('public.event_detail', event_id=top.event_id) }}" style="color:inherit;text-decoration:none">
+            <div class="xs muted" style="font-weight:800;letter-spacing:.06em;text-transform:uppercase">{{ _('next_event') }}</div>
+            <b>{{ top.title }}</b>
+            <div class="meta mt-1"><span>{{ icon('calendar', 14) }}{{ fmt_date(top.starts_at, True) }}</span><span>{{ icon('map-pin', 14) }}{{ loc(top, 'city_name') }}</span></div>
+          </a>
+          {% endif %}
+        </div>
+        <div class="float-badge" style="top:-14px; right:24px"><span class="ic-wrap">{{ icon('shield-check', 18) }}</span>{{ _('badge_verified_orgs', n=stats.orgs) }}</div>
+        <div class="float-badge" style="top:42%; left:-34px"><span class="ic-wrap">{{ icon('clock', 18) }}</span>{{ _('badge_hours_confirmed') }}</div>
+      </div>
+    </div>
+
+    <form class="search-panel" action="{{ url_for('public.events') }}" method="get" role="search">
+      <div class="search-row">
+        <label class="input-icon"><span class="sr-only">{{ _('search') }}</span>{{ icon('search') }}
+          <input class="input pill" name="q" placeholder="{{ _('search_events_placeholder') }}"></label>
+        <label><span class="sr-only">{{ _('city') }}</span>
+          <select class="select pill" name="city"><option value="">{{ _('all_cities') }}</option>
+            {% for c in cities %}<option value="{{ c.city_id }}">{{ loc(c, 'name') }}</option>{% endfor %}</select></label>
+        <label><span class="sr-only">{{ _('when') }}</span>
+          <select class="select pill" name="when">
+            <option value="upcoming">{{ _('when_any') }}</option><option value="weekend">{{ _('when_weekend') }}</option>
+            <option value="week">{{ _('when_week') }}</option><option value="month">{{ _('when_month') }}</option></select></label>
+        <button class="btn btn-dark" type="submit">{{ _('find') }}</button>
+      </div>
+      <div class="chips">
+        <span class="xs muted" style="font-weight:800;letter-spacing:.06em;text-transform:uppercase">{{ _('directions') }}:</span>
+        {% for d in dir_counts if d.n %}
+          <a class="chip" href="{{ url_for('public.events', direction=d.direction_id) }}">{{ icon(d.icon, 14) }}{{ loc(d, 'name') }} <span class="n">{{ d.n }}</span></a>
+        {% endfor %}
+      </div>
+    </form>
+  </div>
+</section>
+
+<section class="section">
+  <div class="wrap">
+    <div class="section-head">
+      <div><div class="eyebrow">{{ _('home_featured_eyebrow') }}</div><h2>{{ _('home_featured_title') }}</h2>
+        <p>{{ _('home_featured_text') }}</p></div>
+      <a class="link-arrow" href="{{ url_for('public.events') }}">{{ _('all_events') }} {{ icon('arrow-right', 16) }}</a>
+    </div>
+    <div class="grid grid-3">
+      {% for ev in featured %}{{ event_card(ev) }}{% endfor %}
+    </div>
+  </div>
+</section>
+
+<section class="section tint">
+  <div class="wrap">
+    <div class="section-head">
+      <div><div class="eyebrow">{{ _('directions') }}</div><h2>{{ _('home_directions_title') }}</h2></div>
+    </div>
+    <div class="grid grid-4">
+      {% for d in dir_counts %}
+      <a class="card card-hover dir-tile" href="{{ url_for('public.events', direction=d.direction_id) }}">
+        <span class="ic-wrap tone-{{ d.tone }}">{{ icon(d.icon, 22) }}</span>
+        <span><b>{{ loc(d, 'name') }}</b><span>{{ _('n_open_events', n=d.n) }}</span></span>
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="wrap">
+    <div class="section-head">
+      <div><div class="eyebrow">{{ _('home_impact_eyebrow') }}</div><h2>{{ _('home_impact_title') }}</h2>
+        <p>{{ _('home_impact_text') }}</p></div>
+      <a class="link-arrow" href="{{ url_for('public.reports') }}">{{ _('open_reports') }} {{ icon('arrow-right', 16) }}</a>
+    </div>
+    <div class="grid grid-4">
+      <div class="stat dark"><div class="ic-wrap">{{ icon('clock') }}</div><div class="num">{{ fmt_hours(stats.hours) }}</div><div class="lbl">{{ _('stat_hours') }}</div></div>
+      <div class="stat"><div class="ic-wrap">{{ icon('users') }}</div><div class="num">{{ stats.volunteers }}</div><div class="lbl">{{ _('stat_volunteers') }}</div></div>
+      <div class="stat"><div class="ic-wrap">{{ icon('check-circle') }}</div><div class="num">{{ stats.events }}</div><div class="lbl">{{ _('stat_events_done') }}</div></div>
+      <div class="stat"><div class="ic-wrap">{{ icon('map-pin') }}</div><div class="num">{{ stats.cities }}</div><div class="lbl">{{ _('stat_cities') }}</div></div>
+    </div>
+  </div>
+</section>
+
+<section class="section tint">
+  <div class="wrap">
+    <div class="section-head"><div><div class="eyebrow">{{ _('how_it_works') }}</div><h2>{{ _('home_steps_title') }}</h2></div></div>
+    <div class="steps">
+      <div class="card step"><div class="n">01</div><h3>{{ _('step1_title') }}</h3><p class="muted">{{ _('step1_text') }}</p></div>
+      <div class="card step"><div class="n">02</div><h3>{{ _('step2_title') }}</h3><p class="muted">{{ _('step2_text') }}</p></div>
+      <div class="card step"><div class="n">03</div><h3>{{ _('step3_title') }}</h3><p class="muted">{{ _('step3_text') }}</p></div>
+    </div>
+  </div>
+</section>
+
+{% if reviews %}
+<section class="section">
+  <div class="wrap">
+    <div class="section-head"><div><div class="eyebrow">{{ _('reviews') }}</div><h2>{{ _('home_reviews_title') }}</h2></div></div>
+    <div class="grid grid-3">
+      {% for r in reviews %}
+      <figure class="card quote" style="margin:0">
+        {{ rating(r.rating) }}
+        <p>“{{ r.comment }}”</p>
+        <figcaption class="row" style="margin-top:auto">{{ avatar(r.avatar_path, r.full_name, 'sm') }}
+          <span class="small"><b>{{ r.full_name.split()[0] }}</b> · <a href="{{ url_for('public.event_detail', event_id=r.event_id) }}">{{ r.title }}</a></span></figcaption>
+      </figure>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+{% endif %}
+
+<section class="section {{ 'tint' if reviews else '' }}">
+  <div class="wrap">
+    <div class="section-head">
+      <div><div class="eyebrow">{{ _('nav_organizations') }}</div><h2>{{ _('home_orgs_title') }}</h2></div>
+      <a class="link-arrow" href="{{ url_for('public.organizations') }}">{{ _('all_organizations') }} {{ icon('arrow-right', 16) }}</a>
+    </div>
+    <div class="grid grid-4">
+      {% for o in top_orgs %}
+      <a class="card card-hover person-card" href="{{ url_for('public.organization_profile', org_id=o.org_id) }}" style="color:inherit;text-decoration:none">
+        <div class="top">{{ org_logo(o) }}<div><h3>{{ o.name }} <span class="verified" title="{{ _('st_verified') }}">{{ icon('shield-check', 15) }}</span></h3>
+          <div class="xs muted">{{ loc(o, 'city_name') }} · {{ _('orgtype_' ~ o.org_type) }}</div></div></div>
+        <p class="small muted mb-0" style="display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden">{{ o.description }}</p>
+        <div class="stats"><div><b>{{ o.n_events }}</b>{{ _('events_lower') }}</div></div>
+      </a>
+      {% endfor %}
+    </div>
+    <div class="cta mt-4">
+      <div><div class="eyebrow" style="color:var(--lime)">{{ _('for_organizations') }}</div>
+        <h2>{{ _('home_cta_title') }}</h2><p class="mb-0">{{ _('home_cta_text') }}</p></div>
+      <div class="row" style="justify-content:flex-end">
+        <a class="btn btn-primary btn-lg" href="{{ url_for('auth.register_organization') }}">{{ icon('plus') }} {{ _('register_org_cta') }}</a>
+        <a class="btn btn-ghost btn-lg" href="{{ url_for('auth.register_volunteer') }}">{{ _('become_volunteer') }}</a>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}
