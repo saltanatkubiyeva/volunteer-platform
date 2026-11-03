@@ -7,7 +7,7 @@ from flask import Flask, g, render_template, request, session
 
 from . import core
 from .db import close_db
-from .icons import icon
+from .icons import icon, logo_mark
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
@@ -58,7 +58,7 @@ def create_app(test_config=None):
     app.jinja_env.globals.update(
         _=core._, loc=core.loc, fmt_date=core.fmt_date, fmt_time=core.fmt_time,
         fmt_dt=core.fmt_dt, fmt_hours=core.fmt_hours, initials=core.initials,
-        csrf_field=core.csrf_field, csrf_token=core.csrf_token, icon=icon,
+        csrf_field=core.csrf_field, csrf_token=core.csrf_token, icon=icon, logo_mark=logo_mark,
         LANGS=core.LANGS, LANG_LABELS=core.LANG_LABELS, event_phase=core.event_phase,
         age_on=core.age_on, duration_hours=core.duration_hours,
         notification_text=core.notification_text,

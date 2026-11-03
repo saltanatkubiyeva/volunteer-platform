@@ -112,3 +112,12 @@ def icon(name, size=18, cls=""):
         f'<svg class="ic {cls}" width="{size}" height="{size}" viewBox="0 0 24 24" fill="none" '
         f'stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" '
         f'aria-hidden="true">{body}</svg>')
+
+
+LOGO_PATH = "M26 12 H52 C77 12 92 30 92 51 C92 73 75 90 52 90 H26 C18 90 12 84 12 76 V26 C12 18 18 12 26 12 Z M51 75 C46 70 30 60 30 46 C30 37 36 31 43 31 C47 31 50 33 51 37 C52 33 56 31 60 31 C67 31 73 37 73 46 C73 60 57 70 51 75 Z"
+
+
+def logo_mark(size=22):
+    """DEMEU mark: letter D whose inner space bends into a heart. Uses currentColor."""
+    return Markup(f'<svg class="logo-svg" width="{size}" height="{size}" viewBox="0 0 100 100" aria-hidden="true">'
+                  f'<path fill="currentColor" fill-rule="evenodd" d="{LOGO_PATH}"/></svg>')
