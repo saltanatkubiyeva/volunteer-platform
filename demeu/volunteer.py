@@ -1,5 +1,3 @@
-"""Volunteer cabinet: dashboard, applications, profile, parental consent,
-certificates and feedback."""
 from flask import (Blueprint, abort, flash, g, redirect, render_template,
                    request, url_for)
 

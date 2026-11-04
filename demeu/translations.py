@@ -1,5 +1,3 @@
-"""All interface texts in English, Russian and Kazakh.
-Every entry is key -> {"en": ..., "ru": ..., "kk": ...}."""
 from .tr_admin import T as _ADMIN
 from .tr_app import T as _APP
 from .tr_public import T as _PUBLIC

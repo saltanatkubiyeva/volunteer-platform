@@ -1,6 +1,4 @@
-# UI texts: accounts, cabinets, statuses, messages. key: (English, Russian, Kazakh)
 T = {
-    # --- auth
     "auth_side_title": ("Every hour of help counts", "Каждый час помощи на счету", "Көмектің әр сағаты есепте"),
     "auth_side_text": ("Join volunteers and organizations from 11 cities of Kazakhstan.", "Присоединяйтесь к волонтёрам и организациям из 11 городов Казахстана.",
                        "Қазақстанның 11 қаласындағы еріктілер мен ұйымдарға қосылыңыз."),
@@ -89,7 +87,6 @@ T = {
                               "Здесь будут решения по заявкам, подтверждённые часы и изменения ивентов.",
                               "Мұнда өтінімдер бойынша шешімдер, расталған сағаттар және іс-шара өзгерістері шығады."),
 
-    # --- volunteer cabinet
     "overview": ("Overview", "Обзор", "Шолу"),
     "parental_consent": ("Parental consent", "Согласие родителей", "Ата-ана келісімі"),
     "hello_name": ("Hello, {name}!", "Привет, {name}!", "Сәлем, {name}!"),
@@ -176,7 +173,6 @@ T = {
     "cert_code": ("Verification code", "Код проверки", "Тексеру коды"),
     "cert_verify_at": ("Verify at", "Проверить на", "Тексеру мекенжайы"),
 
-    # --- organization cabinet
     "new_event": ("New event", "Новый ивент", "Жаңа іс-шара"),
     "org_profile": ("Organization profile", "Профиль организации", "Ұйым профилі"),
     "org_pending_title": ("The organization is being verified", "Организация на проверке", "Ұйым тексерілуде"),
@@ -315,7 +311,6 @@ T = {
                           "Доля неявок = не пришли ÷ (пришли + не пришли). Помогает планировать количество мест.",
                           "Келмеу үлесі = келмегендер ÷ (келгендер + келмегендер). Орын санын жоспарлауға көмектеседі."),
 
-    # --- statuses
     "st_pending": ("Pending", "На рассмотрении", "Қаралуда"),
     "st_approved": ("Approved", "Одобрена", "Мақұлданды"),
     "st_rejected": ("Declined", "Отклонена", "Қабылданбады"),
@@ -334,7 +329,6 @@ T = {
     "st_in_progress": ("In progress", "В работе", "Жұмыста"),
     "st_closed": ("Closed", "Закрыто", "Жабылды"),
 
-    # --- flash messages
     "flash_login_required": ("Please log in to continue.", "Войдите, чтобы продолжить.", "Жалғастыру үшін кіріңіз."),
     "flash_welcome_back": ("You are logged in.", "Вы вошли в аккаунт.", "Сіз аккаунтқа кірдіңіз."),
     "flash_logged_out": ("You have logged out.", "Вы вышли из аккаунта.", "Сіз аккаунттан шықтыңыз."),
@@ -364,7 +358,6 @@ T = {
     "flash_attendance_saved": ("Attendance saved for {n} volunteers.", "Явка сохранена для {n} волонтёров.", "{n} ерікті үшін қатысу сақталды."),
     "flash_team_added": ("Coordinator added.", "Координатор добавлен.", "Үйлестіруші қосылды."),
 
-    # --- validation errors
     "err_required": ("Required field.", "Обязательное поле.", "Міндетті өріс."),
     "err_name": ("Enter the full name (at least 3 characters).", "Введите ФИО (не менее 3 символов).", "Аты-жөніңізді енгізіңіз (кемінде 3 таңба)."),
     "err_email": ("Enter a valid email.", "Введите корректный email.", "Дұрыс email енгізіңіз."),
@@ -411,7 +404,6 @@ T = {
     "err_self_block": ("You cannot block your own account.", "Нельзя заблокировать свой аккаунт.", "Өз аккаунтыңызды бұғаттауға болмайды."),
     "err_self_delete": ("You cannot delete your own account.", "Нельзя удалить свой аккаунт.", "Өз аккаунтыңызды жоюға болмайды."),
 
-    # --- business rules
     "rule_not_open": ("Registration for this event is closed.", "Запись на этот ивент закрыта.", "Бұл іс-шараға жазылу жабық."),
     "rule_started": ("The event has already started.", "Ивент уже начался.", "Іс-шара басталып кетті."),
     "rule_deadline": ("The application deadline has passed.", "Срок приёма заявок истёк.", "Өтінім қабылдау мерзімі өтті."),
@@ -443,7 +435,6 @@ T = {
                                     "Координатор отвечает за предстоящие ивенты. Сначала передайте их другому.",
                                     "Бұл үйлестіруші алдағы іс-шараларға жауапты. Алдымен оларды басқаға беріңіз."),
 
-    # --- notifications
     "n_welcome_volunteer": ("Welcome to DEMEU! Fill in your profile so organizers know you better.", "Добро пожаловать в DEMEU! Заполните профиль, чтобы организаторы лучше вас знали.",
                             "DEMEU-ға қош келдіңіз! Ұйымдастырушылар сізді жақсы білуі үшін профильді толтырыңыз."),
     "n_applied": ("Your application to “{event}” was sent.", "Заявка на «{event}» отправлена.", "«{event}» іс-шарасына өтінім жіберілді."),

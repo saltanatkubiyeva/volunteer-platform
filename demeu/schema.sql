@@ -1,12 +1,5 @@
--- DEMEU volunteer platform — database schema (SQLite)
--- Every table has a surrogate primary key; business rules are enforced by
--- NOT NULL, UNIQUE, CHECK and FOREIGN KEY constraints, not only by the app.
-
 PRAGMA foreign_keys = ON;
 
--- ---------------------------------------------------------------------------
--- Reference data (translated into EN / RU / KK)
--- ---------------------------------------------------------------------------
 CREATE TABLE cities (
     city_id     INTEGER PRIMARY KEY,
     name_en     TEXT NOT NULL UNIQUE,
@@ -28,10 +21,6 @@ CREATE TABLE directions (
                  CHECK (tone IN ('mint','sage','butter','sky','rose','lilac'))
 );
 
--- ---------------------------------------------------------------------------
--- Accounts. One login per person; the role decides which profile table
--- holds the person's details (volunteers or coordinators).
--- ---------------------------------------------------------------------------
 CREATE TABLE users (
     user_id        INTEGER PRIMARY KEY,
     email          TEXT NOT NULL UNIQUE COLLATE NOCASE,
@@ -48,26 +37,22 @@ CREATE TABLE volunteers (
     user_id       INTEGER NOT NULL UNIQUE REFERENCES users(user_id) ON DELETE RESTRICT,
     full_name     TEXT NOT NULL CHECK (length(trim(full_name)) >= 3),
     phone         TEXT NOT NULL CHECK (phone GLOB '+7[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]'),
-    birth_date    TEXT NOT NULL,               -- YYYY-MM-DD, age 14+ checked in the app
+    birth_date    TEXT NOT NULL,
     city_id       INTEGER NOT NULL REFERENCES cities(city_id) ON DELETE RESTRICT,
     about         TEXT,
-    skills        TEXT,                        -- free text, e.g. "first aid, English, driving"
+    skills        TEXT,
     avatar_path   TEXT,
-    is_public     INTEGER NOT NULL DEFAULT 1 CHECK (is_public IN (0,1)),     -- listed in the catalogue
-    show_contacts INTEGER NOT NULL DEFAULT 0 CHECK (show_contacts IN (0,1)), -- phone/email visible to everyone
+    is_public     INTEGER NOT NULL DEFAULT 1 CHECK (is_public IN (0,1)),
+    show_contacts INTEGER NOT NULL DEFAULT 0 CHECK (show_contacts IN (0,1)),
     created_at    TEXT NOT NULL DEFAULT (datetime('now','localtime'))
 );
 
--- M:N  volunteers <-> directions (what a volunteer is interested in)
 CREATE TABLE volunteer_directions (
     volunteer_id INTEGER NOT NULL REFERENCES volunteers(volunteer_id) ON DELETE CASCADE,
     direction_id INTEGER NOT NULL REFERENCES directions(direction_id) ON DELETE RESTRICT,
     PRIMARY KEY (volunteer_id, direction_id)
 );
 
--- ---------------------------------------------------------------------------
--- Organisations and their staff
--- ---------------------------------------------------------------------------
 CREATE TABLE organizations (
     org_id           INTEGER PRIMARY KEY,
     name             TEXT NOT NULL UNIQUE,
@@ -83,7 +68,7 @@ CREATE TABLE organizations (
     founded_year     INTEGER CHECK (founded_year BETWEEN 1950 AND 2100),
     status           TEXT NOT NULL DEFAULT 'pending'
                      CHECK (status IN ('pending','verified','rejected','suspended')),
-    status_comment   TEXT,                     -- reason for rejection / suspension
+    status_comment   TEXT,
     verified_at      TEXT,
     verified_by      INTEGER REFERENCES users(user_id) ON DELETE SET NULL,
     created_at       TEXT NOT NULL DEFAULT (datetime('now','localtime'))
@@ -102,13 +87,10 @@ CREATE TABLE coordinators (
     full_name      TEXT NOT NULL CHECK (length(trim(full_name)) >= 3),
     phone          TEXT NOT NULL,
     position       TEXT,
-    is_owner       INTEGER NOT NULL DEFAULT 0 CHECK (is_owner IN (0,1)),  -- can manage team & org profile
+    is_owner       INTEGER NOT NULL DEFAULT 0 CHECK (is_owner IN (0,1)),
     created_at     TEXT NOT NULL DEFAULT (datetime('now','localtime'))
 );
 
--- ---------------------------------------------------------------------------
--- Events and the registration process
--- ---------------------------------------------------------------------------
 CREATE TABLE events (
     event_id              INTEGER PRIMARY KEY,
     org_id                INTEGER NOT NULL REFERENCES organizations(org_id) ON DELETE RESTRICT,
@@ -116,17 +98,17 @@ CREATE TABLE events (
     direction_id          INTEGER NOT NULL REFERENCES directions(direction_id) ON DELETE RESTRICT,
     city_id               INTEGER NOT NULL REFERENCES cities(city_id) ON DELETE RESTRICT,
     title                 TEXT NOT NULL CHECK (length(trim(title)) >= 5),
-    summary               TEXT NOT NULL,       -- one line for cards
+    summary               TEXT NOT NULL,
     description           TEXT NOT NULL,
     address               TEXT NOT NULL,
-    starts_at             TEXT NOT NULL,       -- YYYY-MM-DD HH:MM
+    starts_at             TEXT NOT NULL,
     ends_at               TEXT NOT NULL,
     registration_deadline TEXT NOT NULL,
     max_volunteers        INTEGER NOT NULL CHECK (max_volunteers BETWEEN 1 AND 1000),
     min_age               INTEGER NOT NULL DEFAULT 14 CHECK (min_age BETWEEN 14 AND 99),
     requires_approval     INTEGER NOT NULL DEFAULT 1 CHECK (requires_approval IN (0,1)),
-    requirements          TEXT,                -- what to bring / skills needed
-    provided              TEXT,                -- what organisers provide (meals, gloves...)
+    requirements          TEXT,
+    provided              TEXT,
     cover_path            TEXT,
     status                TEXT NOT NULL DEFAULT 'published'
                           CHECK (status IN ('draft','published','cancelled','completed')),
@@ -137,7 +119,6 @@ CREATE TABLE events (
     CHECK (registration_deadline <= starts_at)
 );
 
--- Bridge table: resolves volunteers M:N events. One row = one volunteer at one event.
 CREATE TABLE registrations (
     registration_id INTEGER PRIMARY KEY,
     volunteer_id    INTEGER NOT NULL REFERENCES volunteers(volunteer_id) ON DELETE RESTRICT,
@@ -152,21 +133,19 @@ CREATE TABLE registrations (
     hours_confirmed REAL CHECK (hours_confirmed IS NULL OR (hours_confirmed > 0 AND hours_confirmed <= 24)),
     confirmed_by    INTEGER REFERENCES coordinators(coordinator_id) ON DELETE SET NULL,
     confirmed_at    TEXT,
-    UNIQUE (volunteer_id, event_id),                       -- no double registration
-    CHECK (status <> 'attended' OR hours_confirmed IS NOT NULL)  -- attendance always has hours
+    UNIQUE (volunteer_id, event_id),
+    CHECK (status <> 'attended' OR hours_confirmed IS NOT NULL)
 );
 
--- Volunteer gives feedback once per attended registration
 CREATE TABLE feedback (
     feedback_id     INTEGER PRIMARY KEY,
     registration_id INTEGER NOT NULL UNIQUE REFERENCES registrations(registration_id) ON DELETE CASCADE,
     rating          INTEGER NOT NULL CHECK (rating BETWEEN 1 AND 5),
     comment         TEXT,
-    is_hidden       INTEGER NOT NULL DEFAULT 0 CHECK (is_hidden IN (0,1)),  -- moderated by admin
+    is_hidden       INTEGER NOT NULL DEFAULT 0 CHECK (is_hidden IN (0,1)),
     created_at      TEXT NOT NULL DEFAULT (datetime('now','localtime'))
 );
 
--- Participation certificate with a public verification code
 CREATE TABLE certificates (
     certificate_id  INTEGER PRIMARY KEY,
     registration_id INTEGER NOT NULL UNIQUE REFERENCES registrations(registration_id) ON DELETE RESTRICT,
@@ -174,7 +153,6 @@ CREATE TABLE certificates (
     issued_at       TEXT NOT NULL DEFAULT (datetime('now','localtime'))
 );
 
--- Parental consent for volunteers under 18 (signed document uploaded as a file)
 CREATE TABLE consents (
     consent_id    INTEGER PRIMARY KEY,
     volunteer_id  INTEGER NOT NULL REFERENCES volunteers(volunteer_id) ON DELETE CASCADE,
@@ -188,20 +166,16 @@ CREATE TABLE consents (
     uploaded_at   TEXT NOT NULL DEFAULT (datetime('now','localtime'))
 );
 
--- ---------------------------------------------------------------------------
--- Communication and control
--- ---------------------------------------------------------------------------
 CREATE TABLE notifications (
     notification_id INTEGER PRIMARY KEY,
     user_id         INTEGER NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
-    kind            TEXT NOT NULL,            -- translation key, e.g. 'n_approved'
-    params          TEXT NOT NULL DEFAULT '{}', -- JSON values inserted into the text
+    kind            TEXT NOT NULL,
+    params          TEXT NOT NULL DEFAULT '{}',
     link            TEXT,
     is_read         INTEGER NOT NULL DEFAULT 0 CHECK (is_read IN (0,1)),
     created_at      TEXT NOT NULL DEFAULT (datetime('now','localtime'))
 );
 
--- Who changed what and when (hours, statuses, admin actions)
 CREATE TABLE audit_log (
     log_id     INTEGER PRIMARY KEY,
     user_id    INTEGER REFERENCES users(user_id) ON DELETE SET NULL,
@@ -235,7 +209,6 @@ CREATE TABLE contact_messages (
     created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
 );
 
--- Indexes for the most frequent searches and joins
 CREATE INDEX idx_events_city_date   ON events(city_id, starts_at);
 CREATE INDEX idx_events_direction   ON events(direction_id);
 CREATE INDEX idx_events_org         ON events(org_id);

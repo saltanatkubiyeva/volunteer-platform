@@ -1,15 +1,7 @@
-"""Real photographs for event covers and page imagery (Unsplash License: free to use,
-no attribution required; we still credit Unsplash in the footer).
-
-Photos are shown from the Unsplash CDN. Run `python download_photos.py` once with
-internet to save them into static/img/photos/ — then the site shows them offline too.
-If a photo cannot be loaded, the page falls back to the local illustration of the direction.
-"""
 import os
 
 from flask import current_app, url_for
 
-# direction slug -> Unsplash photo ids (candid, natural light)
 PHOTOS = {
     "ecology": ["1758599668186-c47df67d025d", "1758599668429-121d54188b9c", "1758599668508-d8ec9eca1be3",
                 "1758599668426-1cf242bb7667", "1598335624134-5bceb5de202d", "1710361006404-a13d01802ce9"],
@@ -28,8 +20,8 @@ PHOTOS = {
     "emergency": ["1541710005980-7ea80ff232d6", "1600336153113-d66c79de3e91", "1604275689235-fdc521556c16"],
     "digital": ["1785780224428-1e71ec3a1199", "1765896387377-e293914d1e69", "1579389083046-e3df9c2b3325"],
 }
-HERO = "1758599668186-c47df67d025d"      # volunteers cleaning a park together
-CITY = "1659651117607-d2b397cf100f"      # Almaty with the mountains
+HERO = "1758599668186-c47df67d025d"
+CITY = "1659651117607-d2b397cf100f"
 
 ALL_IDS = sorted({p for ids in PHOTOS.values() for p in ids} | {HERO, CITY})
 

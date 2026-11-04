@@ -1,4 +1,3 @@
-"""DEMEU — volunteer platform for Kazakhstan (Flask application factory)."""
 import os
 import secrets
 from datetime import timedelta
@@ -55,7 +54,6 @@ def create_app(test_config=None):
         resp.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
         return resp
 
-    # helpers available everywhere, including imported macros
     app.jinja_env.globals.update(
         _=core._, loc=core.loc, fmt_date=core.fmt_date, fmt_time=core.fmt_time,
         fmt_dt=core.fmt_dt, fmt_hours=core.fmt_hours, initials=core.initials,

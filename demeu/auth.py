@@ -1,4 +1,3 @@
-"""Sign-up, sign-in, sign-out and account settings."""
 import time
 
 from flask import (Blueprint, flash, g, redirect, render_template, request,
@@ -13,7 +12,6 @@ from .forms import (Errors, age_from, clean, normalize_phone, parse_date,
 
 bp = Blueprint("auth", __name__)
 
-# simple brute-force protection: 5 failed attempts -> 5 minutes lock (per email + IP)
 _FAILED = {}
 MAX_ATTEMPTS, LOCK_SECONDS = 5, 300
 ORG_TYPES = ("ngo", "foundation", "initiative", "university", "government", "business")

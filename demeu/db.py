@@ -1,4 +1,3 @@
-"""SQLite access helpers. One connection per request, foreign keys always on."""
 import sqlite3
 from flask import current_app, g
 
@@ -6,7 +5,7 @@ from flask import current_app, g
 def get_db():
     if "db" not in g:
         conn = sqlite3.connect(current_app.config["DATABASE"], timeout=10,
-                               isolation_level=None)  # autocommit; explicit BEGIN for transactions
+                               isolation_level=None)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON")
         g.db = conn
@@ -37,8 +36,6 @@ def execute(sql, args=()):
 
 
 class transaction:
-    """`with transaction(immediate=True):` — BEGIN IMMEDIATE takes the write lock
-    at the start, so two people cannot take the last free place at the same time."""
 
     def __init__(self, immediate=False):
         self.immediate = immediate

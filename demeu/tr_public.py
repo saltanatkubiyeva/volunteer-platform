@@ -1,6 +1,4 @@
-# UI texts: navigation, public pages. key: (English, Russian, Kazakh)
 T = {
-    # --- general
     "tagline": ("Volunteer platform of Kazakhstan", "Волонтёрская платформа Казахстана", "Қазақстанның еріктілер платформасы"),
     "meta_description": ("DEMEU connects volunteers with verified organisations and events across Kazakhstan, and confirms volunteer hours.",
                          "DEMEU объединяет волонтёров с проверенными организациями и мероприятиями по всему Казахстану и подтверждает волонтёрские часы.",
@@ -22,7 +20,7 @@ T = {
     "join": ("Join", "Присоединиться", "Қосылу"),
     "register": ("Sign up", "Регистрация", "Тіркелу"),
     "settings": ("Settings", "Настройки", "Баптаулар"),
-    "my_cabinet": ("My cabinet", "Личный кабинет", "Жеке кабинет"),
+    "my_cabinet": ("My account", "Личный кабинет", "Жеке кабинет"),
     "my_applications": ("My applications", "Мои заявки", "Менің өтінімдерім"),
     "my_public_profile": ("My public profile", "Мой публичный профиль", "Менің ашық профилім"),
     "org_cabinet": ("Organization cabinet", "Кабинет организации", "Ұйым кабинеті"),
@@ -122,7 +120,6 @@ T = {
     "to_home": ("To the home page", "На главную", "Басты бетке"),
     "public_page": ("Public page", "Публичная страница", "Ашық бет"),
 
-    # --- footer
     "footer_about": ("We connect volunteers with verified organisations across Kazakhstan and make every volunteer hour visible.",
                      "Мы соединяем волонтёров с проверенными организациями по всему Казахстану и делаем каждый волонтёрский час видимым.",
                      "Біз еріктілерді бүкіл Қазақстандағы тексерілген ұйымдармен байланыстырамыз және әр еріктілік сағатты көрнекі етеміз."),
@@ -135,7 +132,6 @@ T = {
     "footer_rights": ("Student project, Basics of Information Systems", "Учебный проект, Основы информационных систем",
                       "Оқу жобасы, Ақпараттық жүйелер негіздері"),
 
-    # --- home
     "home_open_events_note": ("open events are waiting for volunteers", "открытых ивентов ждут волонтёров", "ашық іс-шара еріктілерді күтуде"),
     "home_title_1": ("Help your city", "Помогайте своему городу", "Қалаңызға"),
     "home_title_2": ("together", "вместе", "бірге"),
@@ -188,7 +184,6 @@ T = {
                       "Зарегистрируйте организацию, пройдите быструю проверку и опубликуйте первый ивент уже сегодня.",
                       "Ұйымыңызды тіркеп, жылдам тексеруден өтіңіз және алғашқы іс-шараңызды бүгін жариялаңыз."),
 
-    # --- events catalogue & detail
     "events_title": ("Volunteer events", "Волонтёрские ивенты", "Еріктілік іс-шаралар"),
     "events_subtitle": ("Only events of verified organizations. Filter by city, direction and date.",
                         "Только ивенты проверенных организаций. Фильтруйте по городу, направлению и дате.",
@@ -250,7 +245,6 @@ T = {
     "cannot_apply": ("You cannot apply right now", "Сейчас подать заявку нельзя", "Қазір өтінім беру мүмкін емес"),
     "upload_consent": ("Upload parental consent", "Загрузить согласие родителей", "Ата-ана келісімін жүктеу"),
 
-    # --- volunteers & orgs catalogues
     "volunteers_title": ("Volunteers", "Волонтёры", "Еріктілер"),
     "volunteers_subtitle": ("People who help their cities. Profiles are shown only with the volunteer's consent.",
                             "Люди, которые помогают своим городам. Профили показываются только с согласия волонтёра.",
@@ -276,7 +270,6 @@ T = {
     "orgtype_government": ("State institution", "Госучреждение", "Мемлекеттік мекеме"),
     "orgtype_business": ("Business (CSR)", "Бизнес (КСО)", "Бизнес (КӘЖ)"),
 
-    # --- volunteer profile
     "member_since": ("On DEMEU since {d}", "На DEMEU с {d}", "DEMEU-да {d} бастап"),
     "hidden_profile": ("Hidden from catalogue", "Скрыт из каталога", "Каталогтан жасырылған"),
     "edit_profile": ("Edit profile", "Редактировать профиль", "Профильді өңдеу"),
@@ -299,7 +292,6 @@ T = {
                         "Волонтёр скрыл контакты. Организаторы видят их после подачи заявки.",
                         "Ерікті байланысын жасырған. Ұйымдастырушылар оны өтінімнен кейін көреді."),
 
-    # --- org profile
     "founded_in": ("Since {y}", "С {y} года", "{y} жылдан бері"),
     "stat_people_helped": ("volunteers took part", "волонтёров участвовало", "ерікті қатысты"),
     "stat_rating": ("rating · {n} reviews", "оценка · {n} отзывов", "баға · {n} пікір"),
@@ -314,7 +306,6 @@ T = {
     "bin": ("BIN", "БИН", "БСН"),
     "verified_by_demeu": ("Verified by DEMEU on {d}", "Проверено DEMEU {d}", "DEMEU {d} тексерді"),
 
-    # --- reports
     "reports_title": ("Volunteering in numbers", "Волонтёрство в цифрах", "Еріктілік сандармен"),
     "reports_subtitle": ("Open statistics built from confirmed hours.", "Открытая статистика по подтверждённым часам.", "Расталған сағаттар бойынша ашық статистика."),
     "stat_active_volunteers": ("volunteers took part", "волонтёров участвовали", "ерікті қатысты"),
@@ -333,7 +324,6 @@ T = {
                             "Часы учитываются, когда координатор отмечает волонтёра присутствующим; явка = пришли ÷ (пришли + не пришли).",
                             "Сағат үйлестіруші еріктіні қатысты деп белгілегенде есептеледі; келу деңгейі = келгендер ÷ (келгендер + келмегендер)."),
 
-    # --- about
     "about_eyebrow": ("Our mission", "Наша миссия", "Біздің миссия"),
     "about_title": ("Make helping easy and visible", "Сделать помощь простой и заметной", "Көмекті қарапайым әрі көрнекі ету"),
     "about_lead": ("DEMEU is one place where volunteers of Kazakhstan find trusted events, and organizations find reliable people — with every hour confirmed.",
@@ -423,7 +413,6 @@ T = {
                "Тек сіз өтінім берген ұйымдардың үйлестірушілері мен әкімшілер; басқалар — құпиялылық баптауларында қоссаңыз ғана."),
     "ask_question": ("Ask a question", "Задать вопрос", "Сұрақ қою"),
 
-    # --- contacts
     "contacts_title": ("Contacts", "Контакты", "Байланыс"),
     "contacts_subtitle": ("Head office in Astana and regional front offices. We answer within one working day.",
                           "Головной офис в Астане и региональные фронт-офисы. Отвечаем в течение рабочего дня.",
@@ -446,7 +435,6 @@ T = {
     "topic_technical": ("Technical problem", "Техническая проблема", "Техникалық мәселе"),
     "topic_partnership": ("Partnership", "Партнёрство", "Серіктестік"),
 
-    # --- search & verify
     "search_title": ("Search DEMEU", "Поиск по DEMEU", "DEMEU бойынша іздеу"),
     "search_everything_placeholder": ("Events, organizations, volunteers…", "Ивенты, организации, волонтёры…", "Іс-шаралар, ұйымдар, еріктілер…"),
     "search_hint_title": ("What are you looking for?", "Что вы ищете?", "Не іздеп жүрсіз?"),
@@ -470,7 +458,6 @@ T = {
     "certificate_invalid_text": ("Check the code. If it is correct, the certificate may have been revoked.", "Проверьте код. Если он верный, сертификат мог быть отозван.",
                                  "Кодты тексеріңіз. Егер дұрыс болса, сертификат кері қайтарылған болуы мүмкін."),
 
-    # --- errors
     "error_400_title": ("Bad request", "Некорректный запрос", "Қате сұраныс"),
     "error_400_text": ("The form has expired or the request is incorrect. Please go back, refresh the page and try again.",
                        "Форма устарела или запрос некорректен. Вернитесь, обновите страницу и попробуйте ещё раз.",

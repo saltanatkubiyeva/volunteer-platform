@@ -1,11 +1,3 @@
-"""Creates instance/demeu.db and fills it with realistic demo data.
-
-Dates are generated relative to *today*, so the demo always has past events
-(with confirmed hours and reviews) and upcoming events (with open registration).
-
-    python seed.py          # create the database if it does not exist
-    python seed.py --reset  # delete and recreate it
-"""
 import json
 import os
 import random
@@ -23,7 +15,7 @@ rnd = random.Random(2026)
 NOW = datetime.now().replace(second=0, microsecond=0)
 FMT = "%Y-%m-%d %H:%M"
 
-CITIES = [  # en, ru, kk, region, lat, lng
+CITIES = [
     ("Astana", "Астана", "Астана", "Astana city", 51.1694, 71.4491),
     ("Almaty", "Алматы", "Алматы", "Almaty city", 43.2389, 76.8897),
     ("Shymkent", "Шымкент", "Шымкент", "Shymkent city", 42.3417, 69.5901),
@@ -38,7 +30,7 @@ CITIES = [  # en, ru, kk, region, lat, lng
 ]
 C = {c[0]: i + 1 for i, c in enumerate(CITIES)}
 
-DIRECTIONS = [  # slug, en, ru, kk, icon, tone
+DIRECTIONS = [
     ("ecology", "Ecology & Nature", "Экология и природа", "Экология және табиғат", "leaf", "mint"),
     ("animals", "Animal Welfare", "Помощь животным", "Жануарларға көмек", "paw", "butter"),
     ("children", "Children & Youth", "Дети и молодёжь", "Балалар мен жастар", "smile", "sky"),
@@ -53,7 +45,6 @@ DIRECTIONS = [  # slug, en, ru, kk, icon, tone
 ]
 D = {d[0]: i + 1 for i, d in enumerate(DIRECTIONS)}
 
-# name, bin, type, city, address, email, phone, website, founded, status, directions, description
 ORGS = [
     ("Green Steppe", "180940011223", "ngo", "Astana", "Kabanbay Batyr Ave 11, office 304", "hello@greensteppe.kz",
      "+77172556677", "https://greensteppe.kz", 2018, "verified", ["ecology", "education"],
@@ -101,7 +92,6 @@ ORGS = [
      "Help for everyone in any situation. Write to us and we will find volunteers for you very fast."),
 ]
 
-# org index -> coordinators (name, email, phone, position, owner)
 COORDS = {
     1: [("Dana Serikbayeva", "org@demeu.kz", "+77015550101", "Programme director", 1),
         ("Arman Tulegenov", "arman@greensteppe.kz", "+77015550102", "Field coordinator", 0)],
@@ -144,7 +134,6 @@ ABOUT = [
     "Photographer. I take photos at charity events for free so organisations can use them.",
 ]
 
-# (direction, title, summary, description, requirements, provided, start hour, duration h, capacity, min_age, approval)
 TEMPLATES = [
     ("ecology", "City Park Clean-up",
      "Collect litter and sort it for recycling in one of the central parks.",
@@ -323,7 +312,6 @@ def main():
     admin_id = x("INSERT INTO users (email,password_hash,role,created_at) VALUES (?,?, 'admin', ?)",
                  ("admin@demeu.kz", pw, dt(NOW - timedelta(days=400)))).lastrowid
 
-    # ---------------- organisations & coordinators
     coord_ids = {}
     for i, o in enumerate(ORGS, start=1):
         name, bin_, typ, city, addr, email, phone, site, founded, status, dirs, desc = o
@@ -344,7 +332,6 @@ def main():
                     (uid, i, cn, cp, pos, owner, dt(created))).lastrowid
             coord_ids[i].append(cid)
 
-    # ---------------- volunteers (ids 1001..), Aruzhan = 1024 to match the Task 9 example
     city_pool = ["Astana"] * 6 + ["Almaty"] * 5 + ["Shymkent"] * 3 + ["Karaganda"] * 2 + ["Uralsk", "Kostanay",
                  "Ust-Kamenogorsk", "Pavlodar", "Aktobe", "Atyrau", "Turkestan"]
     vols = []
@@ -391,7 +378,6 @@ def main():
             x("INSERT INTO volunteer_directions VALUES (?,?)", (vid, d))
         vols.append(dict(id=vid, uid=uid, city=city, birth=birth, dirs=set(my_dirs), name=f"{first} {last}", created=created))
 
-    # consents: Dana approved, Nurbek pending
     x("""INSERT INTO consents (volunteer_id,parent_name,parent_phone,file_path,status,reviewed_by,reviewed_at,uploaded_at)
          VALUES (1012,'Marat Iskakov','+77017778899','consents/sample_consent.pdf','approved',?,?,?)""",
       (admin_id, dt(NOW - timedelta(days=40)), dt(NOW - timedelta(days=42))))
@@ -399,7 +385,6 @@ def main():
          VALUES (1005,'Gulmira Seilbekova','+77023334455','consents/sample_consent.pdf','pending',?)""",
       (dt(NOW - timedelta(hours=20)),))
 
-    # ---------------- events
     tpl = {t[1]: t for t in TEMPLATES}
     events = []
     eid = 300
@@ -426,7 +411,6 @@ def main():
         events.append(ev)
         return ev
 
-    # past events (last ~10 months), event 310 = City Park Clean-up in Astana
     past_specs = []
     for org, titles in ORG_TEMPLATES.items():
         for title in titles:
@@ -439,11 +423,9 @@ def main():
             make_event(1, "City Park Clean-up", NOW - timedelta(days=45), status="completed", cap=40)
             continue
         make_event(org, title, start, status="completed")
-    # finished recently, attendance not yet confirmed (for the coordinator demo)
     make_event(1, "Autumn Tree Planting", NOW - timedelta(days=2), status="published")
     make_event(2, "Weekend Dog Walking", NOW - timedelta(days=1), status="published")
     make_event(6, "Charity Book Fair", NOW - timedelta(days=3), status="published")
-    # upcoming
     up = [(1, "City Park Clean-up", 3), (1, "Eco-lesson for Schoolchildren", 9), (1, "Riverbank Restoration Day", 16),
           (2, "Weekend Dog Walking", 4), (2, "Adoption Day at the Mall", 11), (2, "Shelter Enclosure Repair", 18),
           (3, "Digital Literacy for Seniors", 5), (3, "Kids Robotics Workshop", 12), (3, "Free Maths & English Tutoring", 6),
@@ -458,10 +440,8 @@ def main():
     cancelled = make_event(8, "Half-Marathon Water Station", NOW + timedelta(days=6), status="cancelled")
     x("UPDATE events SET cancel_reason=? WHERE event_id=?",
       ("The city postponed the race because of the weather forecast. New date will be announced.", cancelled["id"]))
-    # a small event that is already full
     full_ev = make_event(2, "Adoption Day at the Mall", NOW + timedelta(days=2), cap=4, approval=0)
 
-    # ---------------- registrations
     def age_at(v, d):
         b = v["birth"]
         return d.year - b.year - ((d.month, d.day) < (b.month, b.day))
@@ -470,11 +450,10 @@ def main():
         a = age_at(v, ev["start"].date())
         if a < ev["min_age"]:
             return False
-        if a < 18 and v["id"] != 1012:  # only Dana has an approved consent
+        if a < 18 and v["id"] != 1012:
             return False
         return True
 
-    # Task 9 example: registration 5501 = Aruzhan (1024) at event 310
     ev310 = next(e for e in events if e["id"] == 310)
     x("""INSERT INTO registrations (registration_id,volunteer_id,event_id,status,motivation,applied_at,decided_at,
          hours_confirmed,confirmed_by,confirmed_at) VALUES (5501,1024,310,'attended',?,?,?,?,?,?)""",
@@ -484,7 +463,7 @@ def main():
     x("""INSERT INTO audit_log (user_id,action,entity,entity_id,old_value,new_value,created_at)
          VALUES ((SELECT user_id FROM coordinators WHERE coordinator_id=?),'hours_confirmed','registrations',5501,NULL,'3.0',?)""",
       (coord_ids[1][1], dt(ev310["end"] + timedelta(hours=3))))
-    taken_slots = {1024: [(ev310["start"], ev310["end"])]}  # volunteer -> (start, end) of active registrations
+    taken_slots = {1024: [(ev310["start"], ev310["end"])]}
 
     def overlaps(v, ev):
         return any(s < ev["end"] and e > ev["start"] for s, e in taken_slots.get(v["id"], []))
@@ -513,10 +492,10 @@ def main():
                 continue
             if is_past:
                 applied = ev["deadline"] - timedelta(hours=rnd.randint(2, 200))
-            else:  # upcoming: applications spread over the last two weeks
+            else:
                 applied = min(NOW - timedelta(hours=rnd.randint(2, 330)), ev["deadline"] - timedelta(hours=1))
                 applied = max(applied, ev["created"] + timedelta(hours=1))
-            if applied < v["created"]:  # account did not exist yet
+            if applied < v["created"]:
                 continue
             motivation = rnd.choice([None, None, "I have done similar work before and want to help.",
                                      "Looking for a meaningful weekend activity.", "Live nearby, can come early."])
@@ -525,7 +504,7 @@ def main():
                 status = rnd.choice(["approved", "pending"])
             elif is_past and ev["status"] == "completed":
                 status = rnd.choices(["attended", "no_show", "cancelled", "rejected"], [78, 9, 8, 5])[0]
-            elif is_past:  # finished, not marked yet
+            elif is_past:
                 status = rnd.choices(["approved", "cancelled"], [90, 10])[0]
             else:
                 if ev is full_ev:
@@ -571,7 +550,6 @@ def main():
                      VALUES ((SELECT user_id FROM coordinators WHERE coordinator_id=?),'marked_no_show','registrations',?,NULL,NULL,?)""",
                   (coord, rid, dt(ev["end"] + timedelta(hours=5))))
 
-    # extra history for Aruzhan so her profile shows real activity
     aru = next(v for v in vols if v["id"] == 1024)
     for ev in events:
         if ev["status"] != "completed" or ev["id"] == 310 or ev["city"] != "Astana":
@@ -591,7 +569,6 @@ def main():
        dt(ev310["end"] + timedelta(days=1))))
     x("INSERT INTO certificates (registration_id,code,issued_at) VALUES (5501,'DMU7K2Q9XA',?)",
       (dt(ev310["end"] + timedelta(days=2)),))
-    # one upcoming approved + one pending for Aruzhan
     for ev in events:
         if ev["status"] == "published" and ev["start"] > NOW and ev["city"] == "Astana" and not overlaps(aru, ev):
             if con.execute("SELECT 1 FROM registrations WHERE volunteer_id=1024 AND event_id=?", (ev["id"],)).fetchone():
@@ -605,7 +582,6 @@ def main():
             if st == "pending":
                 break
 
-    # ---------------- notifications for demo accounts
     def note(email, kind, link, ago_h, read=0, **params):
         uid = con.execute("SELECT user_id FROM users WHERE email=?", (email,)).fetchone()[0]
         x("INSERT INTO notifications (user_id,kind,params,link,is_read,created_at) VALUES (?,?,?,?,?,?)",
@@ -620,7 +596,6 @@ def main():
     note("admin@demeu.kz", "n_admin_new_consent", "/admin/consents/queue", 20, 0, name="Nurbek Seilbekov")
     note("admin@demeu.kz", "n_admin_new_org", "/admin/organizations/10/review", 70, 0, org="Pavlodar Food Share")
 
-    # ---------------- offices & contact messages
     offices = [
         ("Astana", 1, "Kabanbay Batyr Ave 11, office 301", "+77172000111", "astana@demeu.kz", "Mon–Fri 09:00–18:00", 51.1283, 71.4305),
         ("Almaty", 0, "Abay Ave 52, 3rd floor", "+77272000222", "almaty@demeu.kz", "Mon–Fri 09:00–18:00", 43.2405, 76.9172),
@@ -641,7 +616,6 @@ def main():
           (name, email, topic, text, "new" if ago < 10 else "in_progress", dt(NOW - timedelta(hours=ago))))
 
     con.commit()
-    # sample consent document so the admin can open it
     folder = os.path.join(BASE, "instance", "uploads", "consents")
     os.makedirs(folder, exist_ok=True)
     sample = os.path.join(BASE, "demeu", "static", "sample_consent.pdf")

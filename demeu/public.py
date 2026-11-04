@@ -1,5 +1,3 @@
-"""Public pages: home, catalogues (events, volunteers, organisations), profiles,
-reports, about, contacts, global search, certificate verification."""
 from datetime import date, datetime, timedelta
 
 from flask import (Blueprint, abort, flash, g, redirect, render_template,
@@ -27,7 +25,6 @@ def set_lang(code):
     return redirect(safe_next(request.args.get("next")) or url_for("public.home"))
 
 
-# --------------------------------------------------------------------- home
 @bp.route("/")
 def home():
     now = now_str()
@@ -62,7 +59,6 @@ def home():
                            top_orgs=top_orgs, org_hours=org_hours, reviews=recent_reviews, faces=faces, **ref())
 
 
-# --------------------------------------------------------------------- events
 @bp.route("/events")
 def events():
     q = clean(request.args.get("q"), 100)
@@ -143,7 +139,6 @@ def event_detail(event_id):
                            hours=S.duration_hours(ev["starts_at"], ev["ends_at"]))
 
 
-# --------------------------------------------------------------------- volunteers
 VOL_SELECT = """SELECT v.*, c.name_en AS city_name_en, c.name_ru AS city_name_ru, c.name_kk AS city_name_kk,
     COALESCE((SELECT SUM(hours_confirmed) FROM registrations r WHERE r.volunteer_id=v.volunteer_id
               AND r.status='attended'),0) AS hours,
@@ -223,7 +218,6 @@ def volunteer_profile(volunteer_id):
                            stats=S.volunteer_stats(volunteer_id))
 
 
-# --------------------------------------------------------------------- organisations
 ORG_SELECT = """SELECT o.*, c.name_en AS city_name_en, c.name_ru AS city_name_ru, c.name_kk AS city_name_kk,
     (SELECT COUNT(*) FROM events e WHERE e.org_id=o.org_id AND e.status IN ('published','completed')) AS n_events,
     (SELECT COUNT(*) FROM events e WHERE e.org_id=o.org_id AND e.status='published' AND e.ends_at >= datetime('now','localtime')) AS n_open,
@@ -289,7 +283,6 @@ def organization_profile(org_id):
                            own=own)
 
 
-# --------------------------------------------------------------------- reports
 @bp.route("/reports")
 def reports():
     city = arg_int("city")
@@ -337,7 +330,6 @@ def reports():
                            year=year, years=years or [year], **ref())
 
 
-# --------------------------------------------------------------------- about & contacts
 @bp.route("/about")
 def about():
     stats = dict(volunteers=scalar("SELECT COUNT(*) FROM volunteers"),
@@ -357,7 +349,7 @@ def contacts():
         f["name"] = person["full_name"] if person else ""
     if request.method == "POST":
         f = {k: clean(request.form.get(k), 3000 if k == "message" else 120) for k in ("name", "email", "topic", "message")}
-        if request.form.get("website"):  # honeypot field, invisible to people
+        if request.form.get("website"):
             return redirect(url_for("public.contacts"))
         if len(f["name"]) < 2:
             errors.add("name", "err_required")
@@ -377,7 +369,6 @@ def contacts():
     return render_template("public/contacts.html", offices=offices, f=f, errors=errors)
 
 
-# --------------------------------------------------------------------- search & verification
 @bp.route("/search")
 def search():
     q = clean(request.args.get("q"), 100)

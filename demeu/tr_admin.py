@@ -1,4 +1,3 @@
-# UI texts: admin panel and column names. key: (English, Russian, Kazakh)
 T = {
     "admin_subtitle": ("Queues, key numbers and recent actions on the platform.", "Очереди, ключевые цифры и последние действия на платформе.",
                        "Кезектер, негізгі көрсеткіштер және платформадағы соңғы әрекеттер."),
@@ -73,7 +72,6 @@ T = {
     "db_err_notnull": ("The database refused: a required value is empty ({detail}).", "База данных отказала: обязательное значение пустое ({detail}).",
                        "Дерекқор бас тартты: міндетті мән бос ({detail})."),
 
-    # --- column names (admin tables and forms)
     "col_user_id": ("User ID", "ID пользователя", "Пайдаланушы ID"),
     "col_email": ("Email", "Email", "Email"),
     "col_role": ("Role", "Роль", "Рөлі"),

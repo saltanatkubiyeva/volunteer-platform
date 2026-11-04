@@ -6,7 +6,6 @@
 {%- if ev.cover_path -%}{{ media_url(ev.cover_path) }}{%- else -%}{{ direction_photo(ev.dir_slug, ev.event_id, w) }}{%- endif -%}
 {%- endmacro %}
 
-{# <img> attributes for an event photo with a local fallback when the photo cannot load #}
 {% macro cover_attrs(ev, w=1000) -%}
 src="{{ cover_url(ev, w) }}" onerror="this.onerror=null;this.src='{{ fallback_url(ev.dir_slug) }}'"
 {%- endmacro %}

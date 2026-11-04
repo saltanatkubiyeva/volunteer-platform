@@ -1,7 +1,4 @@
-# Edited copy (short, concrete, no long dashes). Loaded last, so it overrides older texts.
-# key: (English, Russian, Kazakh)
 T = {
-    # --- home
     "hero_note": ("{n} open events in {c} cities", "{n} открытых ивентов в {c} городах", "{c} қалада {n} ашық іс-шара"),
     "home_h1_a": ("Help where", "Помогайте там,", "Өзің тұратын"),
     "home_h1_b": ("you live.", "где живёте.", "жерге көмектес."),
@@ -47,7 +44,6 @@ T = {
     "open_reports": ("All statistics", "Вся статистика", "Барлық статистика"),
     "photo_credit": ("Photos: Unsplash", "Фото: Unsplash", "Фото: Unsplash"),
 
-    # --- cabinets: no greetings
     "hello_name": ("{name}", "{name}", "{name}"),
     "volunteer_dash_subtitle": ("Applications, confirmed hours and events for you.", "Заявки, подтверждённые часы и ивенты для вас.",
                                 "Өтінімдер, расталған сағаттар және сізге арналған іс-шаралар."),
@@ -55,7 +51,6 @@ T = {
                           "Жаңа өтінімдер, жақын іс-шаралар және қатысу."),
     "all_milestones": ("All milestones reached", "Все достижения получены", "Барлық жетістік алынды"),
 
-    # --- texts without long dashes or exclamations
     "draft_banner": ("This is a draft. Only your team sees it.", "Это черновик. Его видит только ваша команда.", "Бұл жоба. Оны тек сіздің командаңыз көреді."),
     "minors_need_consent": ("Under 18 with parental consent", "До 18 лет с согласием родителей", "18 жасқа дейін ата-ана келісімімен"),
     "status_hint_approved": ("You are on the list. If your plans change, cancel the application so someone else can take the place.",
