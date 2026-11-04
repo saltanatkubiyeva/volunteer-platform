@@ -11,6 +11,7 @@ Requires **Python 3.9+**.
 ```bash
 cd demeu
 pip install -r requirements.txt      # only Flask
+python download_photos.py            # download photos
 python run.py                        # open http://127.0.0.1:5000
 ```
 
