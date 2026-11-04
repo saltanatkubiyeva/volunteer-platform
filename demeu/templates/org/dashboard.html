@@ -3,7 +3,7 @@
 {% block title %}{{ _('org_cabinet') }}{% endblock %}
 {% block cab %}
 <div class="cab-head">
-  <div><h1>{{ _('hello_name', name=g.coordinator.full_name.split()[0]) }}</h1><p>{{ _('org_dash_subtitle') }}</p></div>
+  <div><h1>{{ g.org.name }}</h1><p>{{ _('org_dash_subtitle') }}</p></div>
   <a class="btn btn-primary" href="{{ url_for('org.event_new') }}">{{ icon('plus') }} {{ _('new_event') }}</a>
 </div>
 <div class="grid grid-4">

@@ -33,7 +33,7 @@ def home():
     now = now_str()
     featured = query(S.EVENT_SELECT + f""" WHERE {S.PUBLIC_WHERE} AND e.status='published'
                      AND e.registration_deadline >= ? AND (SELECT COUNT(*) FROM registrations r WHERE r.event_id=e.event_id
-                     AND r.status IN ('approved','attended')) < e.max_volunteers ORDER BY e.starts_at LIMIT 6""", (now,))
+                     AND r.status IN ('approved','attended')) < e.max_volunteers ORDER BY e.starts_at LIMIT 9""", (now,))
     stats = dict(
         volunteers=scalar("SELECT COUNT(*) FROM volunteers"),
         orgs=scalar("SELECT COUNT(*) FROM organizations WHERE status='verified'"),
@@ -50,14 +50,16 @@ def home():
     top_orgs = query("""SELECT o.*, c.name_en AS city_name_en, c.name_ru AS city_name_ru, c.name_kk AS city_name_kk,
         (SELECT COUNT(*) FROM events e WHERE e.org_id=o.org_id AND e.status IN ('published','completed')) AS n_events
         FROM organizations o JOIN cities c USING (city_id) WHERE o.status='verified'
-        ORDER BY n_events DESC LIMIT 4""")
+        ORDER BY n_events DESC LIMIT 5""")
+    org_hours = {r["org_id"]: r["h"] for r in query("""SELECT e.org_id, COALESCE(SUM(r.hours_confirmed),0) AS h
+        FROM events e JOIN registrations r USING (event_id) WHERE r.status='attended' GROUP BY e.org_id""")}
     recent_reviews = query("""SELECT f.*, v.full_name, v.avatar_path, v.is_public, e.title, e.event_id
         FROM feedback f JOIN registrations r USING (registration_id) JOIN volunteers v USING (volunteer_id)
         JOIN events e USING (event_id) WHERE f.is_hidden=0 AND f.rating>=4 AND length(f.comment) > 20
         GROUP BY f.comment ORDER BY f.created_at DESC LIMIT 3""")
-    faces = query("SELECT full_name, avatar_path FROM volunteers WHERE is_public=1 ORDER BY created_at DESC LIMIT 3")
+    faces = query("SELECT full_name, avatar_path FROM volunteers WHERE is_public=1 ORDER BY created_at DESC LIMIT 4")
     return render_template("public/home.html", featured=featured, stats=stats, dir_counts=dir_counts,
-                           top_orgs=top_orgs, reviews=recent_reviews, faces=faces, **ref())
+                           top_orgs=top_orgs, org_hours=org_hours, reviews=recent_reviews, faces=faces, **ref())
 
 
 # --------------------------------------------------------------------- events

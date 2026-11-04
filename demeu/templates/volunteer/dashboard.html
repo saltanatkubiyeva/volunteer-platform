@@ -1,9 +1,9 @@
 {% extends "volunteer/_layout.html" %}
-{% from "partials/macros.html" import event_card, status, cover_url, dir_tag, empty %}
+{% from "partials/macros.html" import event_card, status, cover_url, cover_attrs, dir_tag, empty %}
 {% block title %}{{ _('my_cabinet') }}{% endblock %}
 {% block cab %}
 <div class="cab-head">
-  <div><h1>{{ _('hello_name', name=g.volunteer.full_name.split()[0]) }}</h1><p>{{ _('volunteer_dash_subtitle') }}</p></div>
+  <div><h1>{{ _('my_cabinet') }}</h1><p>{{ _('volunteer_dash_subtitle') }}</p></div>
   <a class="btn btn-primary" href="{{ url_for('public.events') }}">{{ icon('search') }} {{ _('find_event') }}</a>
 </div>
 
@@ -35,7 +35,7 @@
     <div class="row between mb-2"><h3 class="mb-0">{{ _('my_upcoming') }}</h3><a class="link-arrow small" href="{{ url_for('volunteer.applications') }}">{{ _('all_applications') }} {{ icon('arrow-right', 14) }}</a></div>
     {% for r in upcoming %}
     <div class="card list-card">
-      <a class="thumb" href="{{ url_for('public.event_detail', event_id=r.event_id) }}"><img src="{{ cover_url(r) }}" alt=""></a>
+      <a class="thumb" href="{{ url_for('public.event_detail', event_id=r.event_id) }}"><img {{ cover_attrs(r) }} alt=""></a>
       <div><h4><a href="{{ url_for('public.event_detail', event_id=r.event_id) }}">{{ r.title }}</a></h4>
         <div class="meta"><span>{{ icon('calendar', 14) }}{{ fmt_date(r.starts_at, True) }}, {{ fmt_time(r.starts_at) }}</span><span>{{ icon('map-pin', 14) }}{{ loc(r, 'city_name') }}</span></div></div>
       <div class="actions">{{ status(r.status) }}</div>

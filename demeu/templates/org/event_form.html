@@ -1,5 +1,5 @@
 {% extends "org/_layout.html" %}
-{% from "partials/macros.html" import field_error, cover_url %}
+{% from "partials/macros.html" import field_error, cover_url, cover_attrs %}
 {% block title %}{{ _('edit_event') if ev else _('new_event') }}{% endblock %}
 {% block cab %}
 <div class="cab-head"><div><h1>{{ _('edit_event') if ev else _('new_event') }}</h1><p>{{ _('event_form_subtitle') }}</p></div>
@@ -61,7 +61,7 @@
   <div class="form-section">
     <h3><span class="num">4</span>{{ _('cover_image') }}</h3>
     <div class="row">
-      {% if ev %}<img src="{{ cover_url(ev) }}" alt="" style="width:160px;height:90px;object-fit:cover;border-radius:14px">{% endif %}
+      {% if ev %}<img {{ cover_attrs(ev) }} alt="" style="width:160px;height:90px;object-fit:cover;border-radius:14px">{% endif %}
       <div class="field grow {{ 'has-error' if errors.cover }}"><input class="input" style="padding-top:10px" type="file" name="cover" accept=".jpg,.jpeg,.png,.webp">
         <span class="hint">{{ _('cover_hint') }}</span>{{ field_error(errors, 'cover') }}
         {% if ev and ev.cover_path %}<label class="check small"><input type="checkbox" name="remove_cover" value="1"> {{ _('remove_cover') }}</label>{% endif %}</div>

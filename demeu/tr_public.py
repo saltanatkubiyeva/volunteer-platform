@@ -123,9 +123,9 @@ T = {
     "public_page": ("Public page", "Публичная страница", "Ашық бет"),
 
     # --- footer
-    "footer_about": ("DEMEU means “support” in Kazakh. We connect volunteers with verified organisations across Kazakhstan and make every volunteer hour visible.",
-                     "«Демеу» по-казахски — «поддержка». Мы соединяем волонтёров с проверенными организациями по всему Казахстану и делаем каждый волонтёрский час видимым.",
-                     "«Демеу» — қолдау деген сөз. Біз еріктілерді бүкіл Қазақстандағы тексерілген ұйымдармен байланыстырамыз және әр еріктілік сағатты көрнекі етеміз."),
+    "footer_about": ("We connect volunteers with verified organisations across Kazakhstan and make every volunteer hour visible.",
+                     "Мы соединяем волонтёров с проверенными организациями по всему Казахстану и делаем каждый волонтёрский час видимым.",
+                     "Біз еріктілерді бүкіл Қазақстандағы тексерілген ұйымдармен байланыстырамыз және әр еріктілік сағатты көрнекі етеміз."),
     "footer_platform": ("Platform", "Платформа", "Платформа"),
     "footer_info": ("Information", "Информация", "Ақпарат"),
     "footer_for_orgs": ("For organizations", "Организациям", "Ұйымдарға"),

@@ -2,8 +2,13 @@
 {%- if path -%}{{ url_for('media.public_file', folder=path.split('/')[0], name=path.split('/')[1]) }}{%- endif -%}
 {%- endmacro %}
 
-{% macro cover_url(ev) -%}
-{%- if ev.cover_path -%}{{ media_url(ev.cover_path) }}{%- else -%}{{ url_for('static', filename='img/covers/' ~ (ev.dir_slug or 'ecology') ~ '.svg') }}{%- endif -%}
+{% macro cover_url(ev, w=1000) -%}
+{%- if ev.cover_path -%}{{ media_url(ev.cover_path) }}{%- else -%}{{ direction_photo(ev.dir_slug, ev.event_id, w) }}{%- endif -%}
+{%- endmacro %}
+
+{# <img> attributes for an event photo with a local fallback when the photo cannot load #}
+{% macro cover_attrs(ev, w=1000) -%}
+src="{{ cover_url(ev, w) }}" onerror="this.onerror=null;this.src='{{ fallback_url(ev.dir_slug) }}'"
 {%- endmacro %}
 
 {% macro avatar(path, name, cls='') -%}
@@ -26,35 +31,41 @@
 <span class="rating" aria-label="{{ n }}/5">{% for i in range(5) %}<span class="{{ '' if i < n else 'off' }}">{{ icon('star', 14) }}</span>{% endfor %}</span>
 {%- endmacro %}
 
-{% macro event_card(ev) -%}
+{% macro event_card(ev, cls='') -%}
 {% set phase = event_phase(ev) %}
 {% set left = ev.max_volunteers - ev.taken %}
-<article class="card card-hover event-card">
-  <a class="event-cover" href="{{ url_for('public.event_detail', event_id=ev.event_id) }}" tabindex="-1" aria-hidden="true">
-    <img src="{{ cover_url(ev) }}" alt="" loading="lazy">
-    <div class="tags">
-      {{ dir_tag(ev) }}
-      {% if phase == 'upcoming' and left <= 0 %}<span class="tag tone-rose">{{ _('full') }}</span>
-      {% elif phase == 'upcoming' and left <= 5 %}<span class="tag tone-butter">{{ _('spots_left', n=left) }}</span>{% endif %}
-      {% if phase == 'finished' %}<span class="tag tag-white">{{ _('st_finished') }}</span>{% endif %}
-      {% if not ev.requires_approval and phase == 'upcoming' %}<span class="tag tag-white">{{ icon('check', 12) }}{{ _('instant_join') }}</span>{% endif %}
-    </div>
-    <span class="when">{{ icon('calendar', 14) }}{{ fmt_date(ev.starts_at, True, False) }} · {{ fmt_time(ev.starts_at) }}</span>
+{% set pct = [100, (ev.taken * 100 // ev.max_volunteers) if ev.max_volunteers else 0]|min %}
+<article class="ev-card {{ cls }} {{ 'past' if phase in ('finished', 'cancelled') }}">
+  <a class="ev-photo" href="{{ url_for('public.event_detail', event_id=ev.event_id) }}" tabindex="-1" aria-hidden="true">
+    <img {{ cover_attrs(ev, 1200 if 'wide' in cls else 800) }} alt="" loading="lazy">
+    <span class="ev-cat">{{ dir_tag(ev) }}</span>
+    {% if phase == 'upcoming' and left <= 0 %}<span class="ev-flag tag tag-dark">{{ _('full') }}</span>
+    {% elif phase == 'upcoming' and left <= 5 %}<span class="ev-flag tag tag-white">{{ _('spots_left', n=left) }}</span>
+    {% elif phase in ('finished', 'cancelled') %}<span class="ev-flag tag tag-white">{{ _('st_' ~ phase) }}</span>{% endif %}
+    {% if phase == 'upcoming' %}<span class="ev-fill"><i style="width: {{ pct }}%"></i></span>{% endif %}
   </a>
-  <div class="event-body">
-    <div class="meta"><span>{{ icon('map-pin', 15) }}{{ loc(ev, 'city_name') }}</span><span>{{ icon('building', 15) }}{{ ev.org_name }}</span></div>
+  <div class="ev-body">
+    <div class="ev-meta"><span>{{ icon('map-pin') }}{{ loc(ev, 'city_name') }}</span><span>{{ icon('calendar') }}{{ fmt_date(ev.starts_at, True, False) }} · {{ fmt_time(ev.starts_at) }}</span></div>
     <h3><a href="{{ url_for('public.event_detail', event_id=ev.event_id) }}">{{ ev.title }}</a></h3>
-    <p class="summary">{{ ev.summary }}</p>
-    <div class="event-foot">
-      <div>
-        <div class="progress-label"><span>{{ _('joined_of', a=ev.taken, b=ev.max_volunteers) }}</span><span>{{ (ev.taken * 100 // ev.max_volunteers) if ev.max_volunteers else 0 }}%</span></div>
-        <div class="progress {{ 'full' if left <= 0 }}"><i style="width: {{ [100, (ev.taken * 100 // ev.max_volunteers)]|min }}%"></i></div>
-      </div>
-      <a class="btn {{ 'btn-primary' if phase == 'upcoming' and left > 0 else 'btn-ghost' }} btn-sm btn-block" href="{{ url_for('public.event_detail', event_id=ev.event_id) }}">
-        {{ _('view_and_join') if phase == 'upcoming' and left > 0 else _('details') }}</a>
+    <p class="ev-sum">{{ ev.summary }}</p>
+    <a class="ev-org" href="{{ url_for('public.organization_profile', org_id=ev.org_id) }}">{{ ev.org_name }}</a>
+    <div class="ev-foot">
+      <span class="ev-going">{{ icon('users', 16) }}<span>{{ _('n_going', n=ev.taken) }}{% if phase == 'upcoming' and left > 0 %} · {{ _('n_left', n=left) }}{% endif %}</span></span>
+      <span class="round-go" aria-hidden="true">{{ icon('arrow-right', 17) }}</span>
     </div>
   </div>
 </article>
+{%- endmacro %}
+
+{% macro event_row(ev) -%}
+{% set left = ev.max_volunteers - ev.taken %}
+<a class="ev-row" href="{{ url_for('public.event_detail', event_id=ev.event_id) }}">
+  <span class="ev-date"><b>{{ ev.starts_at[8:10] }}</b><span>{{ fmt_date(ev.starts_at, False, False).split(' ')[1] }}</span></span>
+  <span><h4>{{ ev.title }}</h4>
+    <span class="ev-meta"><span>{{ fmt_date(ev.starts_at, True, False).split(',')[0] }} · {{ fmt_time(ev.starts_at) }}</span><span>{{ loc(ev, 'city_name') }}</span><span>{{ ev.org_name }}</span></span></span>
+  <span class="places">{% if left > 0 %}{{ _('n_left', n=left) }}{% else %}{{ _('full') }}{% endif %}</span>
+  <span class="round-go">{{ icon('arrow-right', 17) }}</span>
+</a>
 {%- endmacro %}
 
 {% macro field_error(errors, name) -%}

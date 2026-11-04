@@ -8,6 +8,7 @@ from flask import Flask, g, render_template, request, session
 from . import core
 from .db import close_db
 from .icons import icon, logo_mark
+from . import photos
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
@@ -62,6 +63,8 @@ def create_app(test_config=None):
         LANGS=core.LANGS, LANG_LABELS=core.LANG_LABELS, event_phase=core.event_phase,
         age_on=core.age_on, duration_hours=core.duration_hours,
         notification_text=core.notification_text,
+        direction_photo=photos.direction_photo, photo_url=photos.photo_url,
+        fallback_url=photos.fallback_url, HERO_PHOTO=photos.HERO, CITY_PHOTO=photos.CITY,
     )
 
     @app.context_processor

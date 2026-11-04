@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "partials/macros.html" import cover_url, dir_tag, org_logo, avatar, rating, status, event_card %}
+{% from "partials/macros.html" import cover_url, cover_attrs, dir_tag, org_logo, avatar, rating, status, event_card %}
 {% block title %}{{ ev.title }}{% endblock %}
 {% block content %}
 {% set phase = event_phase(ev) %}
@@ -7,7 +7,7 @@
 <div class="wrap" style="padding-top:24px">
   <div class="crumbs"><a href="{{ url_for('public.home') }}">{{ _('home') }}</a>{{ icon('chevron-right', 14) }}
     <a href="{{ url_for('public.events') }}">{{ _('nav_events') }}</a>{{ icon('chevron-right', 14) }}<span>{{ ev.title }}</span></div>
-  <div class="detail-hero"><img src="{{ cover_url(ev) }}" alt=""></div>
+  <div class="detail-hero"><img {{ cover_attrs(ev) }} alt=""></div>
 
   <div class="detail-grid">
     <div>

@@ -4,6 +4,12 @@
   const $ = (s, el = document) => el.querySelector(s);
   const $$ = (s, el = document) => Array.from(el.querySelectorAll(s));
 
+  // header gets a border after scrolling
+  const header = $(".site-header");
+  const onScroll = () => header && header.classList.toggle("scrolled", window.scrollY > 8);
+  window.addEventListener("scroll", onScroll, { passive: true });
+  onScroll();
+
   // dropdown menus
   $$("[data-toggle]").forEach((btn) => {
     btn.addEventListener("click", (e) => {
