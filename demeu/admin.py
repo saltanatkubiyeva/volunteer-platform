@@ -1,5 +1,3 @@
-"""Admin panel: dashboard, verification queues, generic CRUD over every table
-(constraints of the database are reported as readable messages), audit log."""
 import sqlite3
 
 from flask import (Blueprint, abort, flash, g, redirect, render_template,
@@ -24,7 +22,6 @@ STATUS_EVENT = ("draft", "published", "cancelled", "completed")
 STATUS_REG = ("pending", "approved", "rejected", "cancelled", "attended", "no_show")
 TONES = ("mint", "sage", "butter", "sky", "rose", "lilac")
 
-# Every table the admin can manage. list_sql must expose the pk column and the list columns.
 ENTITIES = {
     "users": dict(
         table="users", pk="user_id", icon="lock", create=False,
@@ -158,7 +155,6 @@ def admin_ctx():
     return dict(ENTITIES=ENTITIES, NAV_GROUPS=NAV_GROUPS, queue_counts=counts)
 
 
-# --------------------------------------------------------------------- dashboard
 @bp.route("/")
 @admin_only
 def dashboard():
@@ -184,7 +180,6 @@ def dashboard():
                            new_messages=new_messages, recent_audit=recent_audit, daily=daily)
 
 
-# --------------------------------------------------------------------- verification queues
 @bp.route("/organizations/<int:org_id>/review", methods=["GET", "POST"])
 @admin_only
 def org_review(org_id):
@@ -274,7 +269,6 @@ def audit_log():
     return render_template("admin/audit.html", rows=rows, page=page, entity=entity, entities=entities)
 
 
-# --------------------------------------------------------------------- users: admin accounts & password reset
 @bp.route("/users/new-admin", methods=["GET", "POST"])
 @admin_only
 def new_admin():
@@ -312,7 +306,6 @@ def reset_password(user_id):
     return redirect(url_for("admin.entity_edit", entity="users", pk=user_id))
 
 
-# --------------------------------------------------------------------- generic CRUD
 def entity_or_404(entity):
     cfg = ENTITIES.get(entity)
     if not cfg:
@@ -452,7 +445,6 @@ def entity_edit(entity, pk):
 
 
 def _related(entity, pk):
-    """Small read-only context shown next to the edit form."""
     if entity == "events":
         return dict(kind="registrations", rows=query(
             """SELECT r.registration_id, v.full_name, r.status, r.hours_confirmed FROM registrations r

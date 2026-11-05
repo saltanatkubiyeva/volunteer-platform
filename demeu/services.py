@@ -1,5 +1,3 @@
-"""Business rules of the main process: a volunteer applies -> the coordinator decides ->
-the volunteer attends -> the coordinator confirms hours -> certificate & feedback."""
 import secrets
 import string
 from datetime import datetime
@@ -28,7 +26,6 @@ JOIN directions d    ON d.direction_id = e.direction_id
 JOIN cities c        ON c.city_id = e.city_id
 """
 
-# Events that anyone may see: published or completed, by a verified organisation
 PUBLIC_WHERE = "e.status IN ('published','completed') AND o.status = 'verified'"
 
 
@@ -37,7 +34,6 @@ def get_event(event_id):
 
 
 class RuleError(Exception):
-    """Raised with a translation key when a business rule blocks an action."""
 
     def __init__(self, key, **params):
         super().__init__(key)
@@ -52,7 +48,6 @@ def consent_status(volunteer_id):
 
 
 def eligibility(volunteer, ev):
-    """Why this volunteer cannot apply right now (translation key) or None."""
     now = now_str()
     if ev["status"] != "published" or ev["org_status"] != "verified":
         return "rule_not_open"
@@ -86,8 +81,6 @@ def eligibility(volunteer, ev):
 
 
 def apply(volunteer, event_id, motivation):
-    """One transaction: lock -> re-check every rule (incl. free places) -> insert -> commit.
-    BEGIN IMMEDIATE means a second volunteer waits until the first one finishes."""
     with transaction(immediate=True):
         ev = get_event(event_id)
         if not ev:
@@ -99,7 +92,7 @@ def apply(volunteer, event_id, motivation):
         decided = None if ev["requires_approval"] else now_str()
         existing = query("SELECT registration_id FROM registrations WHERE volunteer_id=? AND event_id=?",
                          (volunteer["volunteer_id"], event_id), one=True)
-        if existing:  # re-applying after own cancellation
+        if existing:
             reg_id = existing["registration_id"]
             execute("""UPDATE registrations SET status=?, motivation=?, applied_at=?, decided_at=?,
                        decided_by=NULL, decision_note=NULL WHERE registration_id=?""",
@@ -164,7 +157,6 @@ def decide(coordinator, registration_id, approve, note=None):
 
 
 def mark_attendance(coordinator, registration_id, attended, hours=None):
-    """Confirm hours (attended) or mark no-show. Every change of hours goes to the audit log."""
     with transaction():
         reg = query("""SELECT r.*, e.title, e.org_id, e.starts_at, e.ends_at, e.status AS ev_status,
                               v.user_id AS vol_user

@@ -1,10 +1,13 @@
-// DEMEU — small progressive enhancements. Every page works without JavaScript.
 (function () {
   "use strict";
   const $ = (s, el = document) => el.querySelector(s);
   const $$ = (s, el = document) => Array.from(el.querySelectorAll(s));
 
-  // dropdown menus
+  const header = $(".site-header");
+  const onScroll = () => header && header.classList.toggle("scrolled", window.scrollY > 8);
+  window.addEventListener("scroll", onScroll, { passive: true });
+  onScroll();
+
   $$("[data-toggle]").forEach((btn) => {
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -17,7 +20,6 @@
     $$(".dropdown.open").forEach((d) => { if (!d.contains(e.target)) d.classList.remove("open"); });
   });
 
-  // flash messages: close button + auto hide for success/info
   $$(".flash").forEach((f) => {
     const close = () => { f.style.transition = "opacity .3s"; f.style.opacity = "0"; setTimeout(() => f.remove(), 300); };
     const b = $("button", f);
@@ -25,14 +27,12 @@
     if (!f.classList.contains("error")) setTimeout(close, 6000);
   });
 
-  // filter forms: submit on change of selects / radios / checkboxes
   $$("form[data-autosubmit]").forEach((form) => {
     form.addEventListener("change", (e) => {
       if (e.target.matches("select, input[type=radio], input[type=checkbox]")) form.submit();
     });
   });
 
-  // confirmation dialog for dangerous actions: <form data-confirm="text">
   const dlg = $("#confirm-dialog");
   $$("form[data-confirm]").forEach((form) => {
     form.addEventListener("submit", (e) => {
@@ -45,7 +45,6 @@
     });
   });
 
-  // open a <dialog> by id
   $$("[data-dialog]").forEach((btn) => {
     btn.addEventListener("click", () => {
       const d = document.getElementById(btn.dataset.dialog);
@@ -54,7 +53,6 @@
   });
   $$("dialog [data-close]").forEach((b) => b.addEventListener("click", () => b.closest("dialog").close()));
 
-  // demo accounts on the login page
   $$("[data-demo]").forEach((b) => {
     b.addEventListener("click", () => {
       $("#email").value = b.dataset.demo;
@@ -63,7 +61,6 @@
     });
   });
 
-  // attendance table: hours field follows the attended / no-show choice
   $$("[data-attendance-row]").forEach((row) => {
     const hours = $("input[type=number]", row);
     const sync = () => {
@@ -74,7 +71,6 @@
     sync();
   });
 
-  // show password
   $$("[data-show-pw]").forEach((b) => {
     b.addEventListener("click", () => {
       const inp = document.getElementById(b.dataset.showPw);
@@ -82,7 +78,6 @@
     });
   });
 
-  // character counters
   $$("textarea[maxlength]").forEach((t) => {
     const c = document.createElement("div");
     c.className = "hint";
@@ -93,3 +88,4 @@
     upd();
   });
 })();
+

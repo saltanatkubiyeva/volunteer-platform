@@ -1,5 +1,3 @@
-"""Organisation cabinet (coordinators): events, applications, attendance & hours,
-organisation profile, team and reports."""
 import csv
 import io
 from datetime import datetime, timedelta
@@ -295,7 +293,7 @@ def export(event_id):
         FROM registrations r JOIN volunteers v USING (volunteer_id) JOIN users u ON u.user_id=v.user_id
         WHERE r.event_id=? AND r.status IN ('pending','approved','attended','no_show') ORDER BY v.full_name""", (event_id,))
     buf = io.StringIO()
-    buf.write("﻿")  # BOM so Excel opens Cyrillic correctly
+    buf.write("﻿")
     w = csv.writer(buf)
     w.writerow(["Full name", "Phone", "Email", "Birth date", "Status", "Applied at", "Confirmed hours"])
     for r in rows:
@@ -306,7 +304,6 @@ def export(event_id):
                     headers={"Content-Disposition": f"attachment; filename=event_{ev['event_id']}_participants.csv"})
 
 
-# --------------------------------------------------------------------- organisation profile & team
 @bp.route("/profile", methods=["GET", "POST"])
 @coordinator_only
 def profile():
@@ -363,7 +360,7 @@ def profile():
                 for d in set(selected):
                     if scalar("SELECT 1 FROM directions WHERE direction_id=?", (d,)):
                         execute("INSERT INTO organization_directions VALUES (?,?)", (o["org_id"], d))
-                if o["status"] == "rejected":  # resubmit for review after fixing
+                if o["status"] == "rejected":
                     execute("UPDATE organizations SET status='pending', status_comment=NULL WHERE org_id=?", (o["org_id"],))
                     for admin in query("SELECT user_id FROM users WHERE role='admin' AND is_active=1"):
                         notify(admin["user_id"], "n_admin_new_org", url_for("admin.org_review", org_id=o["org_id"]),

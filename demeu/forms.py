@@ -1,4 +1,3 @@
-"""Input validation shared by all forms. Each check returns a translation key on error."""
 import re
 from datetime import date, datetime
 
@@ -13,7 +12,6 @@ def clean(value, max_len=None):
 
 
 def normalize_phone(raw):
-    """Accepts +7 701 123 45 67, 8 701 1234567, 7011234567 -> +77011234567 (Kazakhstan format)."""
     digits = re.sub(r"\D", "", raw or "")
     if len(digits) == 11 and digits[0] in "78":
         digits = digits[1:]
@@ -42,7 +40,6 @@ def parse_date(value):
 
 
 def parse_local_dt(value):
-    """<input type=datetime-local> sends 2026-11-05T10:00"""
     for fmt in ("%Y-%m-%dT%H:%M", "%Y-%m-%d %H:%M"):
         try:
             return datetime.strptime(value or "", fmt)
@@ -57,7 +54,6 @@ def age_from(birth):
 
 
 class Errors(dict):
-    """field -> translation key"""
 
     def add(self, field, key):
         self.setdefault(field, key)

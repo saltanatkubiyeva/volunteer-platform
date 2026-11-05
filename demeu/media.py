@@ -1,5 +1,3 @@
-"""Serving uploaded files. Avatars, logos and covers are public; consent documents
-contain personal data of minors and are shown only to their owner and admins."""
 import os
 
 from flask import Blueprint, abort, current_app, g, send_from_directory

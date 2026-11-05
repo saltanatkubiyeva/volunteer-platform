@@ -1,6 +1,3 @@
-"""End-to-end checks of the main process and of the rules.
-Run:  python -m unittest discover tests -v
-Each run uses a fresh temporary copy of the demo database."""
 import os
 import re
 import sqlite3
@@ -12,7 +9,7 @@ from datetime import datetime, timedelta
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, BASE)
-from demeu import create_app  # noqa: E402
+from demeu import create_app
 
 PW = "Demeu2026!"
 
@@ -58,7 +55,6 @@ class FlowTest(unittest.TestCase):
             AND e.event_id NOT IN (SELECT event_id FROM registrations WHERE volunteer_id=1024)
             ORDER BY e.starts_at""", (now, approval))
 
-    # ------------------------------------------------------------------ public
     def test_public_pages_in_three_languages(self):
         c = self.client()
         for lang in ("en", "ru", "kk"):
@@ -78,7 +74,6 @@ class FlowTest(unittest.TestCase):
         self.assertIn("Aruzhan Kassymova", c.get("/verify?code=DMU7K2Q9XA").get_data(as_text=True))
         self.assertIn("not found", c.get("/verify?code=AAAAAAAAAA").get_data(as_text=True))
 
-    # ------------------------------------------------------------------ security
     def test_post_without_csrf_is_rejected(self):
         r = self.app.test_client().post("/login", data={"email": "admin@demeu.kz", "password": PW})
         self.assertEqual(r.status_code, 400)
@@ -91,7 +86,7 @@ class FlowTest(unittest.TestCase):
         self.assertEqual(org.get("/admin/users").status_code, 403)
         other = self.sql("SELECT event_id FROM events WHERE org_id <> 1 LIMIT 1")[0][0]
         self.assertEqual(org.get(f"/org/events/{other}").status_code, 404)
-        self.assertEqual(self.client().get("/me/").status_code, 302)  # redirect to login
+        self.assertEqual(self.client().get("/me/").status_code, 302)
 
     def test_consent_document_is_private(self):
         cid = self.sql("SELECT consent_id FROM consents WHERE volunteer_id=1005")[0][0]
@@ -111,36 +106,30 @@ class FlowTest(unittest.TestCase):
         html = self.client().get(f"/volunteers/{hidden[0]}").get_data(as_text=True)
         self.assertNotIn(hidden[1], html)
 
-    # ------------------------------------------------------------------ main process
     def test_full_process_apply_approve_attend(self):
         ev = self.open_event(approval=1)[0]
         vol = self.client("volunteer@demeu.kz")
-        # avoid a time clash with Aruzhan's other events for this test
         self.sql("SELECT 1")
         r = self.post(vol, f"/me/apply/{ev['event_id']}", {"motivation": "Test"})
         self.assertEqual(r.status_code, 302)
         reg = self.sql("SELECT * FROM registrations WHERE volunteer_id=1024 AND event_id=?", (ev["event_id"],))
-        if not reg:  # time clash with another of her events is a valid refusal; try the next event
+        if not reg:
             self.skipTest("time clash with demo data")
         self.assertEqual(reg[0]["status"], "pending")
-        # second application to the same event is refused (UNIQUE + rule)
         self.post(vol, f"/me/apply/{ev['event_id']}")
         self.assertEqual(len(self.sql("SELECT 1 FROM registrations WHERE volunteer_id=1024 AND event_id=?",
                                       (ev["event_id"],))), 1)
-        # the coordinator of that organisation approves
         owner = self.sql("""SELECT u.email FROM coordinators c JOIN users u USING (user_id)
                             WHERE c.org_id=? AND c.is_owner=1""", (ev["org_id"],))[0][0]
         org = self.client(owner)
         self.post(org, f"/org/registrations/{reg[0]['registration_id']}/decide", {"decision": "approve"})
         self.assertEqual(self.sql("SELECT status FROM registrations WHERE registration_id=?",
                                   (reg[0]["registration_id"],))[0][0], "approved")
-        # attendance cannot be marked before the event starts
         self.post(org, f"/org/events/{ev['event_id']}/attendance",
                   {"registration_id": reg[0]["registration_id"], f"mark_{reg[0]['registration_id']}": "attended",
                    f"hours_{reg[0]['registration_id']}": "2"})
         self.assertEqual(self.sql("SELECT status FROM registrations WHERE registration_id=?",
                                   (reg[0]["registration_id"],))[0][0], "approved")
-        # volunteer cancels -> place is free again
         self.post(vol, f"/me/applications/{reg[0]['registration_id']}/cancel")
         self.assertEqual(self.sql("SELECT status FROM registrations WHERE registration_id=?",
                                   (reg[0]["registration_id"],))[0][0], "cancelled")
@@ -154,7 +143,7 @@ class FlowTest(unittest.TestCase):
                          (ev["org_id"],))[0][0]
         org = self.client(owner)
         before = len(self.sql("SELECT 1 FROM audit_log WHERE entity='registrations' AND entity_id=?", (reg,)))
-        self.post(org, f"/org/events/{ev['event_id']}/attendance",  # 30 h is more than the event length
+        self.post(org, f"/org/events/{ev['event_id']}/attendance",
                   {"registration_id": reg, f"mark_{reg}": "attended", f"hours_{reg}": "30"})
         self.assertEqual(self.sql("SELECT status FROM registrations WHERE registration_id=?", (reg,))[0][0], "approved")
         self.post(org, f"/org/events/{ev['event_id']}/attendance",
@@ -208,16 +197,16 @@ class FlowTest(unittest.TestCase):
         with self.assertRaises(sqlite3.IntegrityError):
             con.execute("UPDATE registrations SET hours_confirmed=30 WHERE registration_id=5501")
         with self.assertRaises(sqlite3.IntegrityError):
-            con.execute("INSERT INTO registrations (volunteer_id, event_id) VALUES (1024, 310)")  # duplicate
+            con.execute("INSERT INTO registrations (volunteer_id, event_id) VALUES (1024, 310)")
         with self.assertRaises(sqlite3.IntegrityError):
-            con.execute("INSERT INTO registrations (volunteer_id, event_id) VALUES (1024, 99999)")  # orphan
+            con.execute("INSERT INTO registrations (volunteer_id, event_id) VALUES (1024, 99999)")
         con.close()
 
     def test_volunteer_registration_validation(self):
         c = self.app.test_client()
         r = self.post(c, "/register/volunteer", {"full_name": "Te", "email": "bad", "phone": "123",
                                                   "birth_date": "2020-01-01", "password": "short"})
-        self.assertEqual(r.status_code, 200)  # form shown again with errors
+        self.assertEqual(r.status_code, 200)
         r = self.post(c, "/register/volunteer", {"full_name": "Test Volunteer", "email": "new.vol@mail.kz",
                                                   "phone": "8 701 555 44 33", "birth_date": "2001-05-05", "city_id": 1,
                                                   "directions": ["1", "2"], "password": "Secret123", "password2": "Secret123",

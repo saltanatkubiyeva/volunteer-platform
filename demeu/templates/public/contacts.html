@@ -58,7 +58,7 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
 <script>
 (function () {
-  if (!window.L) return; // offline: keep the text fallback
+  if (!window.L) return;
   var offices = [{% for o in offices %}{lat: {{ o.lat }}, lng: {{ o.lng }}, title: {{ loc(o, 'city_name')|tojson }}, addr: {{ o.address|tojson }}, head: {{ 'true' if o.is_head else 'false' }}}{{ ',' if not loop.last }}{% endfor %}];
   var el = document.getElementById('map');
   el.innerHTML = '';

@@ -1,5 +1,5 @@
 {% extends "volunteer/_layout.html" %}
-{% from "partials/macros.html" import status, cover_url, rating, empty %}
+{% from "partials/macros.html" import status, cover_url, cover_attrs, rating, empty %}
 {% block title %}{{ _('my_applications') }}{% endblock %}
 {% block cab %}
 <div class="cab-head"><div><h1>{{ _('my_applications') }}</h1><p>{{ _('applications_subtitle') }}</p></div></div>
@@ -10,7 +10,7 @@
 </nav>
 {% for r in rows %}
 <div class="card list-card">
-  <a class="thumb" href="{{ url_for('public.event_detail', event_id=r.event_id) }}"><img src="{{ cover_url(r) }}" alt=""></a>
+  <a class="thumb" href="{{ url_for('public.event_detail', event_id=r.event_id) }}"><img {{ cover_attrs(r) }} alt=""></a>
   <div>
     <h4><a href="{{ url_for('public.event_detail', event_id=r.event_id) }}">{{ r.title }}</a></h4>
     <div class="meta"><span>{{ icon('calendar', 14) }}{{ fmt_date(r.starts_at, True) }}, {{ fmt_time(r.starts_at) }}–{{ fmt_time(r.ends_at) }}</span>

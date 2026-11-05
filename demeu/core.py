@@ -1,5 +1,3 @@
-"""Cross-cutting helpers: languages, current user, access control, CSRF,
-uploads, notifications, audit log, formatting."""
 import json
 import math
 import os
@@ -31,7 +29,6 @@ WEEKDAYS = {
 }
 
 
-# ---------------------------------------------------------------- language
 def get_lang():
     lang = session.get("lang")
     if lang in LANGS:
@@ -41,7 +38,6 @@ def get_lang():
 
 
 def _(key, **params):
-    """Translate a UI key into the current language. Falls back to English, then the key."""
     entry = TRANSLATIONS.get(key)
     if entry is None:
         text = key
@@ -57,7 +53,6 @@ def _(key, **params):
 
 
 def loc(row, field):
-    """Localised column: loc(city, 'name') -> name_ru when the UI is Russian."""
     if row is None:
         return ""
     lang = g.get("lang", "en")
@@ -68,7 +63,6 @@ def loc(row, field):
     return ""
 
 
-# ---------------------------------------------------------------- formatting
 def parse_dt(value):
     if not value:
         return None
@@ -127,7 +121,6 @@ def now_str():
 
 
 def fmt_phone(value):
-    """+77011234567 -> +7 701 123 45 67"""
     v = value or ""
     if len(v) == 12 and v.startswith("+7"):
         return f"+7 {v[2:5]} {v[5:8]} {v[8:10]} {v[10:12]}"
@@ -147,7 +140,6 @@ def duration_hours(starts_at, ends_at):
 
 
 def event_phase(ev):
-    """upcoming / ongoing / finished / cancelled / draft — derived from status and time."""
     if ev["status"] in ("cancelled", "draft"):
         return ev["status"]
     now = datetime.now()
@@ -164,7 +156,6 @@ def nl2br(text):
     return Markup("<br>".join(escape(line) for line in str(text).splitlines()))
 
 
-# ---------------------------------------------------------------- current user
 def load_user():
     g.user = g.volunteer = g.coordinator = g.org = None
     uid = session.get("uid")
@@ -212,7 +203,6 @@ def role_required(*roles):
     return deco
 
 
-# ---------------------------------------------------------------- CSRF
 def csrf_token():
     tok = session.get("csrf")
     if not tok:
@@ -232,14 +222,11 @@ def check_csrf():
             abort(400, description="CSRF token missing or invalid")
 
 
-# ---------------------------------------------------------------- uploads
 IMAGE_EXT = {"png", "jpg", "jpeg", "webp"}
 DOC_EXT = {"pdf", "png", "jpg", "jpeg"}
 
 
 def save_upload(file, allowed, subdir):
-    """Validate and store an uploaded file under a random name. Returns the
-    relative path or raises ValueError with a translation key."""
     if not file or not file.filename:
         return None
     ext = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else ""
@@ -265,7 +252,6 @@ def save_upload(file, allowed, subdir):
     return f"{subdir}/{name}"
 
 
-# ---------------------------------------------------------------- notifications & audit
 def notify(user_id, kind, link=None, **params):
     execute("INSERT INTO notifications (user_id, kind, params, link) VALUES (?,?,?,?)",
             (user_id, kind, json.dumps(params, ensure_ascii=False), link))
@@ -293,7 +279,6 @@ def unread_count():
                   (g.user["user_id"],))
 
 
-# ---------------------------------------------------------------- pagination
 class Page:
     def __init__(self, total, page, per_page):
         self.total = total
@@ -330,7 +315,6 @@ def arg_int(name, default=None):
 
 
 def safe_next(target):
-    """Allow only local redirects after login (no open redirect)."""
     if target and target.startswith("/") and not target.startswith("//"):
         return target
     return None

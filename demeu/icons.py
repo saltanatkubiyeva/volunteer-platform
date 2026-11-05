@@ -1,4 +1,3 @@
-"""Inline SVG icons (stroke style, 24x24). Kept local so the site works offline."""
 from markupsafe import Markup
 
 _USER = '<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>'
@@ -118,6 +117,5 @@ LOGO_PATH = "M26 12 H52 C77 12 92 30 92 51 C92 73 75 90 52 90 H26 C18 90 12 84 1
 
 
 def logo_mark(size=22):
-    """DEMEU mark: letter D whose inner space bends into a heart. Uses currentColor."""
     return Markup(f'<svg class="logo-svg" width="{size}" height="{size}" viewBox="0 0 100 100" aria-hidden="true">'
                   f'<path fill="currentColor" fill-rule="evenodd" d="{LOGO_PATH}"/></svg>')
