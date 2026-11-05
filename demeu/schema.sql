@@ -137,7 +137,6 @@ CREATE TABLE events (
     CHECK (registration_deadline <= starts_at)
 );
 
--- Bridge table: resolves volunteers M:N events. One row = one volunteer at one event.
 CREATE TABLE registrations (
     registration_id INTEGER PRIMARY KEY,
     volunteer_id    INTEGER NOT NULL REFERENCES volunteers(volunteer_id) ON DELETE RESTRICT,
