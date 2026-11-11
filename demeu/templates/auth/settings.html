@@ -16,6 +16,19 @@
       <button class="btn btn-dark btn-sm" type="submit">{{ _('save') }}</button>
     </div>
   </form>
+  {% if subs %}
+  <form class="card card-pad mt-3" method="post" id="subscriptions">
+    {{ csrf_field() }}<input type="hidden" name="action" value="subscriptions">
+    <h3>{{ icon('bell') }} {{ _('subs_title') }}</h3>
+    <p class="small muted">{{ _('subs_hint') }}</p>
+    <h4 class="mt-2 mb-1">{{ _('subs_cities') }}</h4>
+    <div class="check-grid">{% for c in subs.all_cities %}<label class="check-chip"><input type="checkbox" name="cities" value="{{ c.city_id }}" {{ 'checked' if c.city_id in subs.cities }}><span>{{ icon('map-pin', 15) }}{{ loc(c, 'name') }}</span></label>{% endfor %}</div>
+    <h4 class="mt-2 mb-1">{{ _('subs_directions') }}</h4>
+    <div class="check-grid">{% for d in subs.all_directions %}<label class="check-chip"><input type="checkbox" name="directions" value="{{ d.direction_id }}" {{ 'checked' if d.direction_id in subs.directions }}><span>{{ icon(d.icon, 15) }}{{ loc(d, 'name') }}</span></label>{% endfor %}</div>
+    <p class="xs muted mt-2">{{ _('subs_rule') }}</p>
+    <button class="btn btn-dark mt-1" type="submit">{{ _('save') }}</button>
+  </form>
+  {% endif %}
   <form class="card card-pad mt-3" method="post" novalidate>
     {{ csrf_field() }}<input type="hidden" name="action" value="password">
     <h3>{{ icon('lock') }} {{ _('change_password') }}</h3>

@@ -94,3 +94,10 @@ src="{{ cover_url(ev, w) }}" onerror="this.onerror=null;this.src='{{ fallback_ur
 {% if placeholder %}<option value="">{{ placeholder }}</option>{% endif %}
 {% for r in rows %}<option value="{{ r[value_key] }}" {{ 'selected' if selected|string == r[value_key]|string }}>{{ loc(r, label_field) }}</option>{% endfor %}
 {%- endmacro %}
+
+{% macro reliability_badge(rel) -%}
+{% if not rel or rel.level == 'new' %}<span class="tag tone-sky">{{ _('rel_new') }}</span>
+{% else %}<span class="tag {{ {'good': 'tone-mint', 'mid': 'tone-butter', 'low': 'tone-rose'}[rel.level] }}">{{ _('rel_rate', n=rel.rate) }}</span>
+<div class="xs muted mt-1">{{ _('rel_counts', m=rel.no_show, t=rel.total) }}</div>
+{% if rel.alert %}<div class="rel-alert">{{ icon('alert', 13) }} {{ _('rel_alert', n=rel.streak) }}</div>{% endif %}{% endif %}
+{%- endmacro %}

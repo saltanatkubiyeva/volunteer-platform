@@ -4,6 +4,8 @@ from flask import (Blueprint, flash, g, redirect, render_template, request,
                    session, url_for)
 from werkzeug.security import check_password_hash, generate_password_hash
 
+from . import resets as R
+from . import services as S
 from .core import (_, audit, csrf_token, form_int, login_required, notify,
                    now_str, safe_next)
 from .db import execute, query, scalar, transaction
@@ -61,6 +63,46 @@ def login():
             flash(_("flash_welcome_back"), "success")
             return redirect(safe_next(request.args.get("next")) or home_for(user))
     return render_template("auth/login.html", email=email)
+
+
+@bp.route("/forgot", methods=["GET", "POST"])
+def forgot_password():
+    if g.user:
+        return redirect(url_for("auth.settings"))
+    email, sent_to = "", None
+    if request.method == "POST":
+        email = clean(request.form.get("email"), 120).lower()
+        if not valid_email(email):
+            flash(_("err_email"), "error")
+        else:
+            result = R.request_reset(email)
+            if result == "sent":
+                sent_to = R.mask_email(email)
+            else:
+                flash(_({"unknown": "err_reset_unknown", "blocked": "err_account_blocked",
+                         "limited": "err_reset_limited"}[result]), "error")
+    return render_template("auth/forgot.html", email=email, sent_to=sent_to)
+
+
+@bp.route("/reset/<token>", methods=["GET", "POST"])
+def reset_password(token):
+    row = R.find_valid(token)
+    if not row:
+        return render_template("auth/reset.html", invalid=True, errors=Errors()), 410
+    errors = Errors()
+    if request.method == "POST":
+        pw, pw2 = request.form.get("password", ""), request.form.get("password2", "")
+        problem = password_problem(pw)
+        if problem:
+            errors.add("password", problem)
+        elif pw != pw2:
+            errors.add("password2", "err_password_match")
+        if not errors and R.complete_reset(token, generate_password_hash(pw)):
+            for key in [k for k in _FAILED if k.startswith(row["email"] + "|")]:
+                _FAILED.pop(key, None)
+            flash(_("flash_password_reset_done"), "success")
+            return redirect(url_for("auth.login"))
+    return render_template("auth/reset.html", invalid=False, errors=errors, email=R.mask_email(row["email"]))
 
 
 @bp.route("/logout", methods=["POST"])
@@ -237,6 +279,12 @@ def settings():
                 g.lang = lang
                 flash(_("flash_saved"), "success")
                 return redirect(url_for("auth.settings"))
+        elif action == "subscriptions" and g.volunteer:
+            def ids(name):
+                return [int(x) for x in request.form.getlist(name) if x.isdigit()]
+            S.save_subscriptions(g.volunteer["volunteer_id"], ids("cities"), ids("directions"))
+            flash(_("flash_subscriptions_saved"), "success")
+            return redirect(url_for("auth.settings") + "#subscriptions")
         elif action == "password":
             current = request.form.get("current", "")
             pw, pw2 = request.form.get("password", ""), request.form.get("password2", "")
@@ -253,7 +301,12 @@ def settings():
                 audit("password_changed", "users", g.user["user_id"])
                 flash(_("flash_password_changed"), "success")
                 return redirect(url_for("auth.settings"))
-    return render_template("auth/settings.html", errors=errors)
+    subs = None
+    if g.volunteer:
+        subs = dict(zip(("cities", "directions"), S.subscriptions(g.volunteer["volunteer_id"])),
+                    all_cities=query("SELECT * FROM cities ORDER BY name_en"),
+                    all_directions=query("SELECT * FROM directions ORDER BY direction_id"))
+    return render_template("auth/settings.html", errors=errors, subs=subs)
 
 
 @bp.route("/notifications")

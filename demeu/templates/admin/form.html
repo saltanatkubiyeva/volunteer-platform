@@ -57,6 +57,10 @@
   {% endif %}
 
   {% if entity == 'users' and not is_new %}
+  <form class="card card-pad mt-3 row between" method="post" action="{{ url_for('admin.send_reset_link', user_id=pk) }}">
+    {{ csrf_field() }}<div><h3 class="mb-0">{{ icon('mail') }} {{ _('send_reset_link') }}</h3><p class="small muted mb-0">{{ _('send_reset_link_hint') }}</p></div>
+    <button class="btn btn-primary btn-sm">{{ icon('mail', 15) }} {{ _('send_reset_link') }}</button>
+  </form>
   <form class="card card-pad mt-3" method="post" action="{{ url_for('admin.reset_password', user_id=pk) }}">
     {{ csrf_field() }}<h3>{{ icon('lock') }} {{ _('reset_password') }}</h3>
     <div class="row"><input class="input" name="password" type="text" autocomplete="off" placeholder="{{ _('new_password') }}" style="max-width:280px">

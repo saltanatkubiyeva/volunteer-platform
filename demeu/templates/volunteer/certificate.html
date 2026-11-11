@@ -15,6 +15,9 @@
   <div class="name">{{ cert.full_name }}</div>
   <p style="font-size:18px">{{ _('cert_text', event=cert.title, org=cert.org_name, date=fmt_date(cert.starts_at), city=loc(cert, 'city_name')) }}</p>
   <p style="font-size:22px"><b>{{ _('cert_hours', h=fmt_hours(cert.hours_confirmed)) }}</b></p>
+  {% if cert.all_shifts %}<p style="font-size:16px">{{ _('shift') }}: <b>{{ _('all_shifts') }}, {{ fmt_time(cert.starts_at) }}–{{ fmt_time(cert.ends_at) }}</b></p>
+  {% elif cert.shift_title %}<p style="font-size:16px">{{ _('shift') }}: <b>{{ cert.shift_title }}, {{ fmt_time(cert.shift_start) }}–{{ fmt_time(cert.shift_end) }}</b></p>{% endif %}
+  {% if cert.is_team_lead %}<p style="font-size:16px">{{ _('cert_role') }}: <b>{{ _('team_leader') }}</b></p>{% endif %}
   <div class="sig">
     <div>{{ cert.confirmed_name or '—' }}{% if cert.confirmed_position %}, {{ cert.confirmed_position }}{% endif %}<br>{{ cert.org_name }}</div>
     <div>{{ _('cert_code') }}: <b class="mono" style="color:var(--ink)">{{ cert.code }}</b><br>{{ _('cert_verify_at') }} {{ request.host }}{{ url_for('public.verify') }}</div>

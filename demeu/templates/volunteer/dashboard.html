@@ -30,6 +30,29 @@
   <div class="milestone mt-2">{% for m in [10, 20, 50, 100, 200] %}<span class="{{ 'got' if m in stats.badges }}">{{ icon('award', 13) }}{{ m }} {{ _('h_short') }}</span>{% endfor %}</div>
 </div>
 
+<div class="card card-pad mt-3">
+  <h3>{{ icon('file-text') }} {{ _('mcert_block_title') }}</h3>
+  <p class="small muted">{{ _('mcert_block_text') }}</p>
+  <div class="mcert-tiles">
+    {% for m in milestones %}
+    <div class="mcert-tile {{ 'done' if m.code else 'ready' if m.reached else '' }}">
+      <div class="h">{{ m.hours }} {{ _('h_short') }}</div>
+      {% if m.code %}
+        <a class="btn btn-dark btn-sm" href="{{ url_for('volunteer.certificate', code=m.code) }}">{{ icon('award', 14) }} {{ _('open_certificate') }}</a>
+        <span class="xs muted mono">{{ m.code }}</span>
+      {% elif m.reached %}
+        <form method="post" action="{{ url_for('volunteer.milestone_issue', hours=m.hours) }}">{{ csrf_field() }}
+          <button class="btn btn-primary btn-sm">{{ icon('award', 14) }} {{ _('get_certificate') }}</button></form>
+        <span class="xs muted">{{ _('mcert_ready') }}</span>
+      {% else %}
+        <button class="btn btn-ghost btn-sm" disabled>{{ icon('lock', 14) }} {{ _('mcert_locked') }}</button>
+        <span class="xs muted">{{ _('mcert_left', n=fmt_hours(m.left)) }}</span>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
 <div class="grid split mt-3">
   <div>
     <div class="row between mb-2"><h3 class="mb-0">{{ _('my_upcoming') }}</h3><a class="link-arrow small" href="{{ url_for('volunteer.applications') }}">{{ _('all_applications') }} {{ icon('arrow-right', 14) }}</a></div>
@@ -80,6 +103,19 @@
     {% endif %}
   </div>
 </div>
+
+<div class="row between mt-4">
+  <h3 class="mb-0">{{ icon('bell') }} {{ _('new_for_you') }}</h3>
+  <a class="link-arrow small" href="{{ url_for('auth.settings') }}#subscriptions">{{ _('subs_manage') if has_subs else _('subs_setup') }} {{ icon('arrow-right', 14) }}</a>
+</div>
+{% if not has_subs %}
+<p class="small muted">{{ _('new_for_you_setup') }}</p>
+{% elif for_you %}
+<p class="small muted">{{ _('new_for_you_hint') }}</p>
+<div class="grid grid-3">{% for ev in for_you %}{{ event_card(ev) }}{% endfor %}</div>
+{% else %}
+<p class="small muted">{{ _('new_for_you_empty') }}</p>
+{% endif %}
 
 {% if recommended %}
 <h3 class="mt-4">{{ _('recommended_for_you') }}</h3>

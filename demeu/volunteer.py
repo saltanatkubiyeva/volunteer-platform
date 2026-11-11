@@ -14,8 +14,10 @@ REG_SELECT = """SELECT r.*, e.title, e.starts_at, e.ends_at, e.address, e.status
     e.event_id, e.cover_path, o.name AS org_name, o.org_id,
     d.slug AS dir_slug, d.name_en AS dir_name_en, d.name_ru AS dir_name_ru, d.name_kk AS dir_name_kk, d.icon AS dir_icon, d.tone AS dir_tone,
     c.name_en AS city_name_en, c.name_ru AS city_name_ru, c.name_kk AS city_name_kk,
-    ce.code AS cert_code, f.rating AS my_rating
+    ce.code AS cert_code, f.rating AS my_rating,
+    sh.title AS shift_title, sh.starts_at AS shift_start, sh.ends_at AS shift_end
     FROM registrations r JOIN events e USING (event_id) JOIN organizations o ON o.org_id = e.org_id
+    LEFT JOIN event_shifts sh ON sh.shift_id = r.shift_id
     JOIN directions d ON d.direction_id = e.direction_id JOIN cities c ON c.city_id = e.city_id
     LEFT JOIN certificates ce ON ce.registration_id = r.registration_id
     LEFT JOIN feedback f ON f.registration_id = r.registration_id"""
@@ -44,8 +46,15 @@ def dashboard():
     notifications = query("SELECT * FROM notifications WHERE user_id=? ORDER BY created_at DESC, notification_id DESC LIMIT 5",
                           (g.user["user_id"],))
     profile_missing = [k for k in ("about", "skills", "avatar_path") if not g.volunteer[k]]
+<<<<<<< Updated upstream
     return render_template("volunteer/dashboard.html", upcoming=upcoming, to_review=to_review, recent=recent,
                            recommended=recommended, stats=S.volunteer_stats(vid), age=age,
+=======
+    has_subs = bool(scalar("SELECT 1 FROM subscriptions WHERE volunteer_id=?", (vid,)))
+    return render_template("volunteer/dashboard.html", milestones=S.milestone_certificates(vid),
+                           has_subs=has_subs, for_you=S.new_for_you(g.volunteer, 3) if has_subs else [], upcoming=upcoming, to_review=to_review, recent=recent,
+                           recommended=recommended, rec_other_cities=rec_other_cities, my_city=city_row, stats=S.volunteer_stats(vid), age=age,
+>>>>>>> Stashed changes
                            consent=S.consent_status(vid), notifications=notifications,
                            profile_missing=profile_missing)
 
@@ -65,7 +74,12 @@ def applications():
     rows = query(REG_SELECT + f" WHERE r.volunteer_id=? AND {cond} ORDER BY {order}", [vid] + extra)
     counts = {k: scalar(f"SELECT COUNT(*) FROM registrations r JOIN events e USING (event_id) WHERE r.volunteer_id=? AND {c}",
                         [vid] + x) for k, (c, x, _o) in conditions.items()}
-    return render_template("volunteer/applications.html", rows=rows, tab=tab, counts=counts)
+    waiting = query(S.EVENT_SELECT + """ JOIN waitlist w ON w.event_id = e.event_id
+        WHERE w.volunteer_id=? AND e.status='published' AND e.starts_at > ? ORDER BY e.starts_at""", (vid, now))
+    positions = {ev["event_id"]: S.waitlist_position(vid, ev["event_id"]) for ev in waiting}
+    counts["active"] += len(waiting)
+    return render_template("volunteer/applications.html", rows=rows, tab=tab, counts=counts,
+                           waiting=waiting if tab == "active" else [], positions=positions)
 
 
 @bp.route("/apply/<int:event_id>", methods=["POST"])
@@ -73,11 +87,33 @@ def applications():
 def apply(event_id):
     motivation = clean(request.form.get("motivation"), 500)
     try:
-        status = S.apply(g.volunteer, event_id, motivation)
+        status = S.apply(g.volunteer, event_id, motivation, request.form.get("shift_pref"))
         flash(_("flash_applied_pending" if status == "pending" else "flash_applied_approved"), "success")
     except S.RuleError as e:
         flash(_(e.key, **e.params), "error")
     return redirect(url_for("public.event_detail", event_id=event_id))
+
+
+@bp.route("/waitlist/<int:event_id>", methods=["POST"])
+@volunteer_only
+def waitlist_join(event_id):
+    try:
+        pos = S.join_waitlist(g.volunteer, event_id, clean(request.form.get("motivation"), 500))
+        flash(_("flash_waitlist_joined", n=pos), "success")
+    except S.RuleError as e:
+        flash(_(e.key, **e.params), "error")
+    return redirect(url_for("public.event_detail", event_id=event_id))
+
+
+@bp.route("/waitlist/<int:event_id>/leave", methods=["POST"])
+@volunteer_only
+def waitlist_leave(event_id):
+    try:
+        S.leave_waitlist(g.volunteer, event_id)
+        flash(_("flash_waitlist_left"), "info")
+    except S.RuleError as e:
+        flash(_(e.key, **e.params), "error")
+    return redirect(request.referrer or url_for("volunteer.applications"))
 
 
 @bp.route("/applications/<int:registration_id>/cancel", methods=["POST"])
@@ -121,16 +157,41 @@ def certificate_issue(registration_id):
         return redirect(url_for("volunteer.applications", tab="history"))
 
 
+@bp.route("/milestones/<int:hours>", methods=["POST"])
+@volunteer_only
+def milestone_issue(hours):
+    try:
+        code = S.issue_milestone_certificate(g.volunteer, hours)
+        return redirect(url_for("volunteer.certificate", code=code))
+    except S.RuleError as e:
+        flash(_(e.key, **e.params), "error")
+        return redirect(url_for("volunteer.dashboard"))
+
+
 @bp.route("/certificate/<code>")
 @volunteer_only
 def certificate(code):
-    cert = query("""SELECT ce.*, r.hours_confirmed, r.volunteer_id, v.full_name, e.title, e.starts_at, e.ends_at,
-        e.address, o.name AS org_name, co.full_name AS confirmed_name, co.position AS confirmed_position,
-        c.name_en AS city_name_en, c.name_ru AS city_name_ru, c.name_kk AS city_name_kk
-        FROM certificates ce JOIN registrations r USING (registration_id) JOIN volunteers v USING (volunteer_id)
-        JOIN events e USING (event_id) JOIN organizations o ON o.org_id=e.org_id JOIN cities c ON c.city_id=e.city_id
-        LEFT JOIN coordinators co ON co.coordinator_id=r.confirmed_by WHERE ce.code=?""", (code,), one=True)
-    if not cert or cert["volunteer_id"] != g.volunteer["volunteer_id"]:
+    vid = g.volunteer["volunteer_id"]
+    base = query("SELECT * FROM certificates WHERE code=?", (code,), one=True)
+    if not base:
+        abort(404)
+    if base["type"] == "milestone":
+        if base["volunteer_id"] != vid:
+            abort(404)
+        events = S.milestone_events(vid, base["issued_at"])
+        return render_template("volunteer/milestone_certificate.html", cert=base, events=events,
+                               hours=sum(e["hours_confirmed"] for e in events),
+                               orgs=len({e["org_name"] for e in events}))
+    cert = query("""SELECT ce.code, ce.issued_at, r.hours_confirmed, r.volunteer_id, r.is_team_lead, r.all_shifts,
+        sh.title AS shift_title, sh.starts_at AS shift_start, sh.ends_at AS shift_end, v.full_name,
+        e.title, e.starts_at, e.ends_at, e.address, o.name AS org_name, co.full_name AS confirmed_name,
+        co.position AS confirmed_position, c.name_en AS city_name_en, c.name_ru AS city_name_ru, c.name_kk AS city_name_kk
+        FROM certificates ce JOIN registrations r ON r.registration_id=ce.registration_id
+        JOIN volunteers v ON v.volunteer_id=r.volunteer_id JOIN events e ON e.event_id=r.event_id
+        JOIN organizations o ON o.org_id=e.org_id JOIN cities c ON c.city_id=e.city_id
+        LEFT JOIN coordinators co ON co.coordinator_id=r.confirmed_by
+        LEFT JOIN event_shifts sh ON sh.shift_id=r.shift_id WHERE ce.code=?""", (code,), one=True)
+    if not cert or cert["volunteer_id"] != vid:
         abort(404)
     return render_template("volunteer/certificate.html", cert=cert)
 

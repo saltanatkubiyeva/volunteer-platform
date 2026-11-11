@@ -89,3 +89,54 @@
   });
 })();
 
+(function () {
+  var box = document.querySelector("[data-shifts]");
+  if (!box) return;
+  var toggle = box.querySelector("[data-shifts-toggle]");
+  var area = box.querySelector("[data-shifts-box]");
+  var rows = box.querySelector("[data-shift-rows]");
+  var sum = box.querySelector("[data-shift-sum]");
+  var cap = document.getElementById("max_volunteers");
+  function update() {
+    var total = 0;
+    rows.querySelectorAll("input[name=shift_need]").forEach(function (i) { total += parseInt(i.value, 10) || 0; });
+    sum.textContent = sum.dataset.template.replace("{n}", total).replace("{m}", cap ? cap.value || 0 : 0);
+  }
+  toggle.addEventListener("change", function () { area.hidden = !toggle.checked; });
+  box.querySelector("[data-shift-add]").addEventListener("click", function () {
+    var all = rows.querySelectorAll("[data-shift-row]");
+    if (all.length >= 6) return;
+    var copy = all[all.length - 1].cloneNode(true);
+    copy.querySelectorAll("input").forEach(function (i) { i.value = ""; });
+    rows.appendChild(copy);
+    update();
+  });
+  rows.addEventListener("click", function (e) {
+    var btn = e.target.closest("[data-shift-remove]");
+    if (!btn) return;
+    var all = rows.querySelectorAll("[data-shift-row]");
+    var row = btn.closest("[data-shift-row]");
+    if (all.length > 1) { row.remove(); } else { row.querySelectorAll("input").forEach(function (i) { i.value = ""; }); }
+    update();
+  });
+  rows.addEventListener("input", update);
+  if (cap) cap.addEventListener("input", update);
+  update();
+})();
+
+(function () {
+  var start = document.getElementById("starts_at");
+  var deadline = document.getElementById("registration_deadline");
+  if (!start || !deadline || !deadline.dataset.auto) return;
+  var touched = false;
+  deadline.addEventListener("input", function () { touched = true; });
+  start.addEventListener("change", function () {
+    if (touched || !start.value) return;
+    var d = new Date(start.value);
+    if (isNaN(d)) return;
+    d.setHours(d.getHours() - 24);
+    if (d < new Date()) { d = new Date(start.value); d.setHours(d.getHours() - 1); }
+    var pad = function (n) { return String(n).padStart(2, "0"); };
+    deadline.value = d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()) + "T" + pad(d.getHours()) + ":" + pad(d.getMinutes());
+  });
+})();

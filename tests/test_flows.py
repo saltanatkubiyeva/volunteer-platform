@@ -202,6 +202,204 @@ class FlowTest(unittest.TestCase):
             con.execute("INSERT INTO registrations (volunteer_id, event_id) VALUES (1024, 99999)")
         con.close()
 
+    def test_reliability_shown_to_coordinator(self):
+        eid = self.sql("""SELECT event_id FROM events WHERE title='Riverbank Restoration Day' AND status='published'
+                          ORDER BY starts_at DESC LIMIT 1""")[0][0]
+        org = self.client("org@demeu.kz")
+        org.get("/lang/en")
+        html = org.get(f"/org/events/{eid}?tab=pending").get_data(as_text=True)
+        self.assertIn("3 no-shows in a row", html)
+        self.assertIn("No history yet", html)
+        self.assertIn("row-alert", html)
+
+    def test_reliability_view_matches_registrations(self):
+        row = self.sql("SELECT * FROM volunteer_reliability WHERE volunteer_id=1024")[0]
+        came = self.sql("SELECT COUNT(*) FROM registrations WHERE volunteer_id=1024 AND status='attended'")[0][0]
+        missed = self.sql("SELECT COUNT(*) FROM registrations WHERE volunteer_id=1024 AND status='no_show'")[0][0]
+        self.assertEqual((row["attended"], row["no_show"]), (came, missed))
+        self.assertEqual(row["attendance_rate"], round(100 * came / (came + missed)))
+
+    def test_backup_and_restore(self):
+        self.assertEqual(self.client("volunteer@demeu.kz").get("/admin/backups").status_code, 403)
+        admin = self.client("admin@demeu.kz")
+        r = self.post(admin, "/admin/backups/create")
+        self.assertEqual(r.status_code, 302)
+        folder = os.path.join(self.tmp, "backups")
+        name = max(f for f in os.listdir(folder) if f.endswith("_manual.db"))
+        original = self.sql("SELECT name_en FROM cities WHERE city_id=1")[0][0]
+        con = sqlite3.connect(self.db)
+        con.execute("UPDATE cities SET name_en='Changed' WHERE city_id=1")
+        con.commit()
+        con.close()
+        self.post(admin, "/admin/backups/restore", {"name": name})
+        self.assertEqual(self.sql("SELECT name_en FROM cities WHERE city_id=1")[0][0], original)
+        self.assertTrue(any(f.endswith("_beforerestore.db") for f in os.listdir(folder)))
+        self.assertIn(name, admin.get("/admin/backups").get_data(as_text=True))
+
+    def test_waitlist_gives_freed_place_to_first_in_line(self):
+        eid = self.sql("SELECT event_id FROM waitlist ORDER BY joined_at LIMIT 1")[0][0]
+        con = sqlite3.connect(self.db)
+        con.execute("UPDATE events SET requires_approval=0 WHERE event_id=?", (eid,))
+        con.commit()
+        con.close()
+        first = self.sql("SELECT volunteer_id FROM waitlist WHERE event_id=? ORDER BY joined_at LIMIT 1", (eid,))[0][0]
+        before = self.sql("SELECT COUNT(*) FROM waitlist WHERE event_id=?", (eid,))[0][0]
+        part = self.sql("""SELECT r.registration_id, u.email FROM registrations r JOIN volunteers v USING (volunteer_id)
+                           JOIN users u ON u.user_id=v.user_id WHERE r.event_id=? AND r.status='approved'
+                           AND v.volunteer_id NOT IN (1005) LIMIT 1""", (eid,))[0]
+        vol = self.client(part["email"])
+        self.post(vol, f"/me/applications/{part['registration_id']}/cancel")
+        got = self.sql("SELECT status FROM registrations WHERE event_id=? AND volunteer_id=?", (eid, first))
+        self.assertEqual(got[0][0], "approved")
+        self.assertEqual(self.sql("SELECT COUNT(*) FROM waitlist WHERE event_id=?", (eid,))[0][0], before - 1)
+        kinds = [r[0] for r in self.sql("""SELECT n.kind FROM notifications n JOIN volunteers v ON v.user_id=n.user_id
+                                           WHERE v.volunteer_id=?""", (first,))]
+        self.assertIn("n_waitlist_promoted", kinds)
+
+    def test_cannot_join_waitlist_when_places_are_free(self):
+        ev = self.open_event(approval=1)[0]
+        vol = self.client("volunteer@demeu.kz")
+        self.post(vol, f"/me/waitlist/{ev['event_id']}")
+        self.assertFalse(self.sql("SELECT 1 FROM waitlist WHERE event_id=? AND volunteer_id=1024", (ev["event_id"],)))
+
+    def test_milestone_certificate_and_verify(self):
+        vol = self.client("volunteer@demeu.kz")
+        r = self.post(vol, "/me/milestones/20")
+        self.assertEqual(r.status_code, 302)
+        code = self.sql("SELECT code FROM certificates WHERE type='milestone' AND volunteer_id=1024 AND milestone_hours=20")[0][0]
+        page = vol.get(f"/me/certificate/{code}").get_data(as_text=True)
+        self.assertIn("City Park Clean-up", page)
+        c = self.client()
+        c.get("/lang/en")
+        self.assertIn("reached 20 volunteer hours", c.get(f"/verify?code={code}").get_data(as_text=True))
+        self.post(vol, "/me/milestones/100")
+        self.assertFalse(self.sql("SELECT 1 FROM certificates WHERE volunteer_id=1024 AND milestone_hours=100"))
+
+    def test_subscribers_get_notified_about_new_event(self):
+        from demeu import services as S
+        ev = self.sql("""SELECT e.* FROM events e JOIN directions d USING (direction_id) JOIN cities c USING (city_id)
+                         WHERE d.slug='ecology' AND c.name_en='Astana' AND e.org_id=1 LIMIT 1""")[0]
+        con = sqlite3.connect(self.db)
+        start = (datetime.now() + timedelta(days=20)).strftime("%Y-%m-%d 10:00")
+        end = (datetime.now() + timedelta(days=20)).strftime("%Y-%m-%d 13:00")
+        new_id = con.execute("""INSERT INTO events (title, summary, description, address, direction_id, city_id, coordinator_id,
+            starts_at, ends_at, registration_deadline, max_volunteers, min_age, requires_approval, org_id, status)
+            VALUES ('Subscription test', 's', 'd', 'a', ?, ?, ?, ?, ?, ?, 10, 16, 1, 1, 'published')""",
+                             (ev["direction_id"], ev["city_id"], ev["coordinator_id"], start, end, start)).lastrowid
+        con.commit()
+        con.close()
+        with self.app.test_request_context():
+            self.assertGreaterEqual(S.notify_subscribers(new_id), 1)
+        rows = self.sql("""SELECT n.params FROM notifications n JOIN volunteers v ON v.user_id=n.user_id
+                           WHERE v.volunteer_id=1024 AND n.kind='n_new_for_you'""")
+        self.assertTrue(any("Subscription test" in r[0] for r in rows))
+
+    def test_team_leader_sees_group_phones(self):
+        rid, eid = self.sql("SELECT registration_id, event_id FROM registrations WHERE volunteer_id=1024 AND is_team_lead=1")[0]
+        vol = self.client("volunteer@demeu.kz")
+        vol.get("/lang/en")
+        html = vol.get(f"/events/{eid}").get_data(as_text=True)
+        self.assertIn("You are the team leader of this event", html)
+        other = self.sql("""SELECT r.registration_id FROM registrations r WHERE r.event_id=? AND r.status='approved'
+                            AND r.volunteer_id<>1024 LIMIT 1""", (eid,))[0][0]
+        org = self.client("org@demeu.kz")
+        self.post(org, f"/org/registrations/{other}/team-lead", {"on": "1"})
+        self.assertEqual(self.sql("SELECT is_team_lead FROM registrations WHERE registration_id=?", (other,))[0][0], 1)
+
+    def test_shift_preference_and_assignment(self):
+        eid = self.sql("SELECT event_id FROM event_shifts WHERE title='Clearing the riverbank'")[0][0]
+        org = self.client("org@demeu.kz")
+        html = org.get(f"/org/events/{eid}?tab=participants&propose=1").get_data(as_text=True)
+        self.assertIn("proposed", html)
+        picks = dict(re.findall(r'name="shift_(\d+)" form="shifts-form">.*?<option value="([^"]*)" selected', html, re.S))
+        self.assertTrue(picks)
+        self.post(org, f"/org/events/{eid}/shifts", {f"shift_{k}": v for k, v in picks.items()})
+        need = {r["shift_id"]: r["max_volunteers"] for r in self.sql("SELECT * FROM event_shifts WHERE event_id=?", (eid,))}
+        for sid, cap in need.items():
+            n = self.sql("""SELECT COUNT(*) FROM registrations WHERE event_id=? AND status IN ('approved','attended')
+                            AND (shift_id=? OR all_shifts=1)""", (eid, sid))[0][0]
+            self.assertLessEqual(n, cap)
+        wished = self.sql("""SELECT COUNT(*) FROM registrations WHERE event_id=? AND status='approved'
+                             AND preferred_shift_id IS NOT NULL AND shift_id = preferred_shift_id""", (eid,))[0][0]
+        self.assertGreater(wished, 0)
+        self.assertTrue(self.sql("SELECT 1 FROM notifications WHERE kind IN ('n_shift_assigned','n_shift_all')"))
+
+    def test_apply_with_preferred_shift(self):
+        eid = self.sql("SELECT event_id FROM event_shifts WHERE title='Info points and navigation'")[0][0]
+        sid = self.sql("SELECT shift_id FROM event_shifts WHERE event_id=? ORDER BY position LIMIT 1", (eid,))[0][0]
+        row = self.sql("""SELECT u.email, v.volunteer_id FROM volunteers v JOIN users u ON u.user_id=v.user_id
+            WHERE v.birth_date <= date('now','-18 years') AND v.volunteer_id NOT IN
+            (SELECT volunteer_id FROM registrations WHERE event_id=?) AND v.volunteer_id NOT IN
+            (SELECT r.volunteer_id FROM registrations r JOIN events e USING (event_id) WHERE r.status IN ('pending','approved')
+             AND e.starts_at < (SELECT ends_at FROM events WHERE event_id=?) AND e.ends_at > (SELECT starts_at FROM events WHERE event_id=?))
+            AND v.volunteer_id NOT IN (SELECT volunteer_id FROM waitlist) LIMIT 1""", (eid, eid, eid))[0]
+        vol = self.client(row["email"])
+        self.post(vol, f"/me/apply/{eid}", {"shift_pref": str(sid)})
+        got = self.sql("SELECT preferred_shift_id, prefers_all_shifts FROM registrations WHERE event_id=? AND volunteer_id=?",
+                       (eid, row["volunteer_id"]))[0]
+        self.assertEqual((got[0], got[1]), (sid, 0))
+
+    def test_password_reset_by_link(self):
+        email = self.sql("SELECT u.email FROM users u JOIN volunteers v USING (user_id) WHERE v.volunteer_id=1030")[0][0]
+        c = self.client()
+        c.get("/lang/en")
+        html = self.post(c, "/forgot", {"email": email}).get_data(as_text=True)
+        self.assertIn("We sent a link to " + email[0] + "****" + email.split("@")[0][-1] + "@" + email.split("@")[1], html)
+        self.assertIn("No account with this email", self.post(c, "/forgot", {"email": "nobody@nowhere.kz"}).get_data(as_text=True))
+        link = self.sql("SELECT link FROM outbox WHERE to_email=? ORDER BY message_id DESC LIMIT 1", (email,))[0][0]
+        token = link.rsplit("/", 1)[1]
+        stored = self.sql("SELECT token_hash FROM password_resets ORDER BY reset_id DESC LIMIT 1")[0][0]
+        self.assertNotEqual(stored, token)
+        path = "/reset/" + token
+        self.assertEqual(c.get(path).status_code, 200)
+        self.post(c, path, {"password": "NewPass2026", "password2": "NewPass2026"})
+        r = self.post(self.app.test_client(), "/login", {"email": email, "password": "NewPass2026"})
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(c.get(path).status_code, 410)
+        con = sqlite3.connect(self.db)
+        con.execute("UPDATE password_resets SET used_at=NULL, expires_at='2000-01-01 00:00:00', created_at='1999-01-01 00:00:00'")
+        con.commit()
+        con.close()
+        self.assertEqual(c.get(path).status_code, 410)
+
+    def test_report_event_and_admin_resolves(self):
+        eid = self.sql("SELECT event_id FROM complaints WHERE status='new' AND event_id IS NOT NULL LIMIT 1")[0][0]
+        vol = self.client("volunteer@demeu.kz")
+        self.post(vol, "/report", {"event_id": eid, "reason": "other", "details": "short"})
+        self.assertFalse(self.sql("SELECT 1 FROM complaints c JOIN users u ON u.user_id=c.reporter_id WHERE u.email='volunteer@demeu.kz'"))
+        self.post(vol, "/report", {"event_id": eid, "reason": "unsafe", "details": "No safety briefing announced."})
+        self.post(vol, "/report", {"event_id": eid, "reason": "unsafe", "details": "Second time."})
+        mine = self.sql("""SELECT COUNT(*) FROM complaints c JOIN users u ON u.user_id=c.reporter_id
+                           WHERE u.email='volunteer@demeu.kz' AND c.event_id=?""", (eid,))[0][0]
+        self.assertEqual(mine, 1)
+        org = self.client("org@demeu.kz")
+        own_event = self.sql("SELECT event_id FROM events WHERE org_id=1 AND status='published' LIMIT 1")[0][0]
+        self.post(org, "/report", {"event_id": own_event, "reason": "fake"})
+        self.assertFalse(self.sql("SELECT 1 FROM complaints WHERE event_id=?", (own_event,)))
+        admin = self.client("admin@demeu.kz")
+        self.assertEqual(admin.get("/admin/complaints").status_code, 200)
+        self.assertEqual(admin.get("/admin/complaints?tab=handled").status_code, 200)
+        cid = self.sql("SELECT complaint_id FROM complaints WHERE event_id=? AND status='new' LIMIT 1", (eid,))[0][0]
+        open_before = self.sql("SELECT COUNT(*) FROM complaints WHERE event_id=? AND status='new'", (eid,))[0][0]
+        self.post(admin, f"/admin/complaints/{cid}", {"decision": "resolved", "action": "event_cancelled",
+                                                      "note": "Payment for participation is not allowed."})
+        self.assertEqual(self.sql("SELECT status FROM events WHERE event_id=?", (eid,))[0][0], "cancelled")
+        self.assertEqual(self.sql("SELECT COUNT(*) FROM complaints WHERE event_id=? AND status='resolved'", (eid,))[0][0],
+                         open_before)
+        self.assertTrue(self.sql("SELECT 1 FROM notifications WHERE kind='n_report_resolved'"))
+
+    def test_block_account_from_report(self):
+        oid = self.sql("SELECT org_id FROM complaints WHERE status='new' AND org_id IS NOT NULL LIMIT 1")[0][0]
+        cid = self.sql("SELECT complaint_id FROM complaints WHERE org_id=? AND status='new'", (oid,))[0][0]
+        owner = self.sql("""SELECT u.user_id FROM coordinators c JOIN users u USING (user_id) WHERE c.org_id=?
+                            ORDER BY c.is_owner DESC LIMIT 1""", (oid,))[0][0]
+        admin = self.client("admin@demeu.kz")
+        self.post(admin, f"/admin/complaints/{cid}", {"decision": "resolved", "action": "account_blocked", "note": "x"})
+        self.assertEqual(self.sql("SELECT status FROM complaints WHERE complaint_id=?", (cid,))[0][0], "new")
+        self.post(admin, f"/admin/complaints/{cid}", {"decision": "resolved", "action": "account_blocked",
+                                                      "note": "Advertising after a warning."})
+        self.assertEqual(self.sql("SELECT is_active FROM users WHERE user_id=?", (owner,))[0][0], 0)
+
     def test_volunteer_registration_validation(self):
         c = self.app.test_client()
         r = self.post(c, "/register/volunteer", {"full_name": "Te", "email": "bad", "phone": "123",

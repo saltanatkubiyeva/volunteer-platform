@@ -1,12 +1,16 @@
+import os
 import sqlite3
 
-from flask import (Blueprint, abort, flash, g, redirect, render_template,
-                   request, url_for)
+from flask import (Blueprint, abort, current_app, flash, g, redirect, render_template,
+                   request, send_file, url_for)
 from werkzeug.security import generate_password_hash
 
+from . import backups as B
+from . import complaints as C
+from . import resets as R
 from . import services as S
 from .core import (Page, _, audit, notify, now_str, page_arg, role_required)
-from .db import execute, get_db, query, scalar, transaction
+from .db import close_db, execute, get_db, query, scalar, transaction
 from .forms import Errors, clean, password_problem, valid_email
 
 bp = Blueprint("admin", __name__, url_prefix="/admin")
@@ -94,10 +98,13 @@ ENTITIES = {
         fields=[F("rating", "int", True), F("comment", "textarea"), F("is_hidden", "bool")]),
     "certificates": dict(
         table="certificates", pk="certificate_id", icon="award", create=False, edit=False,
-        list_sql="""SELECT ce.*, v.full_name AS volunteer, e.title AS event FROM certificates ce
-                    JOIN registrations r USING (registration_id) JOIN volunteers v USING (volunteer_id)
-                    JOIN events e USING (event_id)""",
-        search=("ce.code", "v.full_name"), columns=("certificate_id", "code", "volunteer", "event", "issued_at"),
+        list_sql="""SELECT ce.certificate_id, ce.type, ce.code, ce.issued_at, v.full_name AS volunteer,
+                    COALESCE(e.title, ce.milestone_hours || ' h') AS event FROM certificates ce
+                    LEFT JOIN registrations r ON r.registration_id = ce.registration_id
+                    JOIN volunteers v ON v.volunteer_id = COALESCE(r.volunteer_id, ce.volunteer_id)
+                    LEFT JOIN events e ON e.event_id = r.event_id""",
+        search=("ce.code", "v.full_name"), filters={"type": ("event", "milestone")},
+        columns=("certificate_id", "type", "code", "volunteer", "event", "issued_at"),
         fields=[]),
     "directions": dict(
         table="directions", pk="direction_id", icon="target", create=True,
@@ -151,6 +158,7 @@ def admin_ctx():
         organizations=scalar("SELECT COUNT(*) FROM organizations WHERE status='pending'"),
         consents=scalar("SELECT COUNT(*) FROM consents WHERE status='pending'"),
         messages=scalar("SELECT COUNT(*) FROM contact_messages WHERE status='new'"),
+        complaints=scalar("SELECT COUNT(*) FROM complaints WHERE status='new'"),
     )
     return dict(ENTITIES=ENTITIES, NAV_GROUPS=NAV_GROUPS, queue_counts=counts)
 
@@ -267,6 +275,126 @@ def audit_log():
     rows = query(f"{base} ORDER BY a.created_at DESC, a.log_id DESC LIMIT ? OFFSET ?", args + [page.per_page, page.offset])
     entities = [r["entity"] for r in query("SELECT DISTINCT entity FROM audit_log ORDER BY entity")]
     return render_template("admin/audit.html", rows=rows, page=page, entity=entity, entities=entities)
+
+
+@bp.route("/users/<int:user_id>/send-reset", methods=["POST"])
+@admin_only
+def send_reset_link(user_id):
+    user = query("SELECT * FROM users WHERE user_id=?", (user_id,), one=True)
+    if not user:
+        abort(404)
+    if R.request_reset(user["email"], requested_by=g.user["user_id"]) == "sent":
+        audit("password_reset_link_sent", "users", user_id)
+        flash(_("flash_reset_link_sent", email=R.mask_email(user["email"])), "success")
+    else:
+        flash(_("flash_reset_link_failed"), "error")
+    return redirect(url_for("admin.entity_edit", entity="users", pk=user_id))
+
+
+@bp.route("/outbox")
+@admin_only
+def outbox():
+    rows = query("SELECT * FROM outbox ORDER BY created_at DESC, message_id DESC LIMIT 100")
+    return render_template("admin/outbox.html", rows=rows)
+
+
+@bp.route("/complaints")
+@admin_only
+def complaints():
+    tab = "handled" if request.args.get("tab") == "handled" else "new"
+    rows = query(f"""SELECT c.*, u.email AS reporter_email, COALESCE(v.full_name, co.full_name, u.email) AS reporter_name,
+            e.title AS event_title, e.status AS event_status, e.starts_at, o.name AS org_name, o.status AS org_status,
+            COALESCE(c.org_id, e.org_id) AS target_org, h.email AS handled_email,
+            (SELECT COUNT(*) FROM complaints c2 WHERE c2.status='new' AND
+               ((c.event_id IS NOT NULL AND c2.event_id = c.event_id) OR (c.org_id IS NOT NULL AND c2.org_id = c.org_id))) AS same_open
+        FROM complaints c JOIN users u ON u.user_id = c.reporter_id
+        LEFT JOIN volunteers v ON v.user_id = u.user_id LEFT JOIN coordinators co ON co.user_id = u.user_id
+        LEFT JOIN events e ON e.event_id = c.event_id
+        LEFT JOIN organizations o ON o.org_id = COALESCE(c.org_id, e.org_id)
+        LEFT JOIN users h ON h.user_id = c.handled_by
+        WHERE c.status {"= 'new'" if tab == "new" else "<> 'new'"}
+        ORDER BY {"c.created_at" if tab == "new" else "c.handled_at DESC"} LIMIT 100""")
+    blockable = {}
+    for r in rows:
+        if r["status"] == "new":
+            t = C.target(r["event_id"], r["org_id"])
+            users = C.blockable_users(t) if t else []
+            blockable[r["complaint_id"]] = users[0] if users else None
+    groups = []
+    if tab == "new":
+        index = {}
+        for r in rows:
+            key = ("e", r["event_id"]) if r["event_id"] else ("o", r["org_id"])
+            if key not in index:
+                index[key] = dict(main=r, items=[])
+                groups.append(index[key])
+            index[key]["items"].append(r)
+    else:
+        groups = [dict(main=r, items=[r]) for r in rows]
+    counts = dict(new=scalar("SELECT COUNT(*) FROM complaints WHERE status='new'"),
+                  handled=scalar("SELECT COUNT(*) FROM complaints WHERE status<>'new'"))
+    return render_template("admin/complaints.html", groups=groups, tab=tab, counts=counts, blockable=blockable)
+
+
+@bp.route("/complaints/<int:complaint_id>", methods=["POST"])
+@admin_only
+def complaint_decide(complaint_id):
+    try:
+        n = C.decide(g.user, complaint_id, request.form.get("decision"), request.form.get("action"),
+                     clean(request.form.get("note"), 500))
+        flash(_("flash_complaints_closed", n=n), "success")
+    except S.RuleError as e:
+        flash(_(e.key, **e.params), "error")
+    return redirect(url_for("admin.complaints"))
+
+
+@bp.route("/backups")
+@admin_only
+def backups():
+    db_path = current_app.config["DATABASE"]
+    rows = B.list_backups(db_path)
+    return render_template("admin/backups.html", rows=rows, keep=B.KEEP,
+                           db_size=os.path.getsize(db_path))
+
+
+@bp.route("/backups/create", methods=["POST"])
+@admin_only
+def backup_create():
+    try:
+        name = B.create_backup(current_app.config["DATABASE"], "manual")
+        audit("backup_created", "backups", None, new=name)
+        flash(_("flash_backup_created", name=name), "success")
+    except (OSError, RuntimeError, sqlite3.Error):
+        flash(_("flash_backup_failed"), "error")
+    return redirect(url_for("admin.backups"))
+
+
+@bp.route("/backups/restore", methods=["POST"])
+@admin_only
+def backup_restore():
+    name = request.form.get("name", "")
+    db_path = current_app.config["DATABASE"]
+    if not B.find_backup(db_path, name):
+        abort(404)
+    close_db()
+    try:
+        safety = B.restore_backup(db_path, name)
+    except (OSError, RuntimeError, sqlite3.Error):
+        flash(_("flash_restore_failed"), "error")
+        return redirect(url_for("admin.backups"))
+    if scalar("SELECT 1 FROM users WHERE user_id=?", (g.user["user_id"],)):
+        audit("backup_restored", "backups", None, old=safety, new=name)
+    flash(_("flash_backup_restored", name=name, safety=safety), "success")
+    return redirect(url_for("admin.backups"))
+
+
+@bp.route("/backups/<name>/download")
+@admin_only
+def backup_download(name):
+    b = B.find_backup(current_app.config["DATABASE"], name)
+    if not b:
+        abort(404)
+    return send_file(b["path"], as_attachment=True, download_name=b["name"])
 
 
 @bp.route("/users/new-admin", methods=["GET", "POST"])

@@ -33,7 +33,7 @@
       <div class="field {{ 'has-error' if errors.ends_at }}"><label class="req" for="ends_at">{{ _('ends_at') }}</label>
         <input class="input" type="datetime-local" id="ends_at" name="ends_at" value="{{ f.ends_at or '' }}">{{ field_error(errors, 'ends_at') }}</div>
       <div class="field {{ 'has-error' if errors.registration_deadline }}"><label class="req" for="registration_deadline">{{ _('registration_deadline') }}</label>
-        <input class="input" type="datetime-local" id="registration_deadline" name="registration_deadline" value="{{ f.registration_deadline or '' }}">
+        <input class="input" type="datetime-local" id="registration_deadline" name="registration_deadline" value="{{ f.registration_deadline or '' }}" {{ 'data-auto=1' if not ev }}>
         <span class="hint">{{ _('deadline_hint') }}</span>{{ field_error(errors, 'registration_deadline') }}</div>
       <div class="field {{ 'has-error' if errors.city_id }}"><label class="req" for="city_id">{{ _('city') }}</label>
         <select class="select" id="city_id" name="city_id">{% for c in cities %}<option value="{{ c.city_id }}" {{ 'selected' if f.city_id|string == c.city_id|string }}>{{ loc(c, 'name') }}</option>{% endfor %}</select>{{ field_error(errors, 'city_id') }}</div>
@@ -52,6 +52,31 @@
         <span class="hint">{{ _('min_age_hint') }}</span>{{ field_error(errors, 'min_age') }}</div>
       <div class="field span-2"><label class="check"><input type="checkbox" name="requires_approval" value="1" {{ 'checked' if f.requires_approval }}>
         <span><b>{{ _('requires_approval') }}</b><br><span class="small muted">{{ _('requires_approval_hint') }}</span></span></label></div>
+      <div class="field span-2 shifts-field {{ 'has-error' if errors.shifts }}" data-shifts>
+        <label class="check"><input type="checkbox" name="has_shifts" value="1" data-shifts-toggle {{ 'checked' if f.has_shifts }}>
+          <span><b>{{ _('has_shifts') }}</b><br><span class="small muted">{{ _('has_shifts_hint') }}</span></span></label>
+        <div class="shifts-box" data-shifts-box {{ 'hidden' if not f.has_shifts }}>
+          <div class="shift-row shift-head"><span>{{ _('shift_name') }}</span><span>{{ _('shift_start') }}</span><span>{{ _('shift_end') }}</span><span>{{ _('shift_need') }}</span><span></span></div>
+          <div data-shift-rows>
+          {% set rows = f.shifts if f.shifts else [{'id': '', 'title': '', 'start': '', 'end': '', 'need': ''}, {'id': '', 'title': '', 'start': '', 'end': '', 'need': ''}] %}
+          {% for r in rows %}
+          <div class="shift-row" data-shift-row>
+            <input type="hidden" name="shift_id" value="{{ r.id }}">
+            <input class="input" name="shift_title" value="{{ r.title }}" maxlength="80" placeholder="{{ _('shift_name_placeholder') }}" aria-label="{{ _('shift_name') }}">
+            <input class="input" type="time" name="shift_start" value="{{ r.start }}" aria-label="{{ _('shift_start') }}">
+            <input class="input" type="time" name="shift_end" value="{{ r.end }}" aria-label="{{ _('shift_end') }}">
+            <input class="input" type="number" min="1" max="1000" name="shift_need" value="{{ r.need }}" aria-label="{{ _('shift_need') }}">
+            <button class="icon-btn" type="button" data-shift-remove title="{{ _('remove') }}">{{ icon('x', 16) }}</button>
+          </div>
+          {% endfor %}
+          </div>
+          <div class="row between mt-1">
+            <button class="btn btn-ghost btn-sm" type="button" data-shift-add>{{ icon('plus', 15) }} {{ _('add_shift') }}</button>
+            <span class="xs muted" data-shift-sum data-template="{{ _('shifts_sum') }}"></span>
+          </div>
+          {{ field_error(errors, 'shifts') }}
+        </div>
+      </div>
       <div class="field"><label for="requirements">{{ _('requirements') }}</label>
         <textarea class="textarea" id="requirements" name="requirements" maxlength="600" rows="3" style="min-height:90px" placeholder="{{ _('requirements_placeholder') }}">{{ f.requirements or '' }}</textarea></div>
       <div class="field"><label for="provided">{{ _('provided') }}</label>

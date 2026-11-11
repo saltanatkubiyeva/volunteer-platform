@@ -5,7 +5,7 @@ from datetime import timedelta
 from flask import Flask, g, render_template, request, session
 
 from . import core
-from .db import close_db
+from .db import close_db, upgrade_db
 from .icons import icon, logo_mark
 from . import photos
 
@@ -40,6 +40,8 @@ def create_app(test_config=None):
         app.config.update(test_config)
 
     app.teardown_appcontext(close_db)
+    if os.path.exists(app.config["DATABASE"]):
+        upgrade_db(app.config["DATABASE"], os.path.join(os.path.dirname(__file__), "schema.sql"))
 
     @app.before_request
     def before():

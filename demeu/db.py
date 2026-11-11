@@ -1,3 +1,4 @@
+import re
 import sqlite3
 from flask import current_app, g
 
@@ -57,5 +58,37 @@ def init_db(path, schema_path):
     conn = sqlite3.connect(path)
     with open(schema_path, encoding="utf-8") as f:
         conn.executescript(f.read())
+    conn.commit()
+    conn.close()
+
+
+def upgrade_db(path, schema_path):
+    with open(schema_path, encoding="utf-8") as f:
+        schema = f.read()
+    conn = sqlite3.connect(path)
+    for sql in re.findall(r"CREATE (?:TABLE|INDEX|VIEW) IF NOT EXISTS .*?;", schema, re.S):
+        conn.execute(sql)
+    reg_cols = [r[1] for r in conn.execute("PRAGMA table_info(registrations)")]
+    new_cols = [
+        ("is_team_lead", "INTEGER NOT NULL DEFAULT 0 CHECK (is_team_lead IN (0,1))"),
+        ("preferred_shift_id", "INTEGER REFERENCES event_shifts(shift_id) ON DELETE SET NULL"),
+        ("prefers_all_shifts", "INTEGER NOT NULL DEFAULT 0 CHECK (prefers_all_shifts IN (0,1))"),
+        ("shift_id", "INTEGER REFERENCES event_shifts(shift_id) ON DELETE SET NULL"),
+        ("all_shifts", "INTEGER NOT NULL DEFAULT 0 CHECK (all_shifts IN (0,1))"),
+    ]
+    for name, definition in new_cols:
+        if name not in reg_cols:
+            conn.execute(f"ALTER TABLE registrations ADD COLUMN {name} {definition}")
+    cert_cols = [r[1] for r in conn.execute("PRAGMA table_info(certificates)")]
+    if "type" not in cert_cols:
+        create = re.search(r"CREATE TABLE certificates \(.*?\n\);", schema, re.S).group(0)
+        conn.execute("PRAGMA foreign_keys = OFF")
+        conn.execute("BEGIN")
+        conn.execute(create.replace("CREATE TABLE certificates", "CREATE TABLE certificates_new", 1))
+        conn.execute("""INSERT INTO certificates_new (certificate_id, type, registration_id, code, issued_at)
+                        SELECT certificate_id, 'event', registration_id, code, issued_at FROM certificates""")
+        conn.execute("DROP TABLE certificates")
+        conn.execute("ALTER TABLE certificates_new RENAME TO certificates")
+        conn.execute("COMMIT")
     conn.commit()
     conn.close()

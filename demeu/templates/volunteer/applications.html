@@ -8,6 +8,22 @@
   <a class="{{ 'on' if tab == key }}" href="{{ url_for('volunteer.applications', tab=key) }}">{{ _('apps_tab_' ~ key) }} <span class="n">{{ counts[key] }}</span></a>
   {% endfor %}
 </nav>
+{% for ev in waiting %}
+<div class="card list-card waitlist-card">
+  <a class="thumb" href="{{ url_for('public.event_detail', event_id=ev.event_id) }}"><img {{ cover_attrs(ev) }} alt=""></a>
+  <div>
+    <h4><a href="{{ url_for('public.event_detail', event_id=ev.event_id) }}">{{ ev.title }}</a></h4>
+    <div class="meta"><span>{{ icon('calendar', 14) }}{{ fmt_date(ev.starts_at, True) }}, {{ fmt_time(ev.starts_at) }}–{{ fmt_time(ev.ends_at) }}</span>
+      <span>{{ icon('map-pin', 14) }}{{ loc(ev, 'city_name') }}</span><span>{{ icon('building', 14) }}{{ ev.org_name }}</span></div>
+    <p class="xs muted mt-1 mb-0">{{ _('waitlist_you_are_hint') }}</p>
+  </div>
+  <div class="actions">
+    <span class="tag tone-sky">{{ icon('hourglass', 12) }}{{ _('waitlist_pos_short', n=positions[ev.event_id]) }}</span>
+    <form method="post" action="{{ url_for('volunteer.waitlist_leave', event_id=ev.event_id) }}" data-confirm="{{ _('confirm_leave_waitlist') }}">
+      {{ csrf_field() }}<button class="btn btn-ghost btn-xs">{{ icon('x', 14) }} {{ _('waitlist_leave') }}</button></form>
+  </div>
+</div>
+{% endfor %}
 {% for r in rows %}
 <div class="card list-card">
   <a class="thumb" href="{{ url_for('public.event_detail', event_id=r.event_id) }}"><img {{ cover_attrs(r) }} alt=""></a>
@@ -22,6 +38,9 @@
   </div>
   <div class="actions">
     {% if r.ev_status == 'cancelled' %}{{ status('cancelled') }}{% else %}{{ status(r.status) }}{% endif %}
+    {% if r.all_shifts %}<span class="tag tone-mint">{{ icon('clock', 12) }}{{ _('all_shifts') }}</span>
+    {% elif r.shift_title %}<span class="tag tone-mint" title="{{ fmt_time(r.shift_start) }}–{{ fmt_time(r.shift_end) }}">{{ icon('clock', 12) }}{{ r.shift_title }} · {{ fmt_time(r.shift_start) }}–{{ fmt_time(r.shift_end) }}</span>{% endif %}
+    {% if r.is_team_lead and r.status in ('approved', 'attended') %}<span class="tag tone-lilac">{{ icon('flag', 12) }}{{ _('team_leader') }}</span>{% endif %}
     {% if r.status == 'attended' %}
       <span class="tag tone-mint">{{ icon('clock', 12) }}{{ fmt_hours(r.hours_confirmed) }} {{ _('h_short') }}</span>
       {% if r.cert_code %}
@@ -48,6 +67,6 @@
 </form>
 {% endif %}
 {% else %}
-  {{ empty('clipboard-check', _('no_apps_' ~ tab), _('no_apps_text'), url_for('public.events'), _('find_event')) }}
+  {% if not waiting %}{{ empty('clipboard-check', _('no_apps_' ~ tab), _('no_apps_text'), url_for('public.events'), _('find_event')) }}{% endif %}
 {% endfor %}
 {% endblock %}

@@ -1,5 +1,5 @@
 {% extends "org/_layout.html" %}
-{% from "partials/macros.html" import avatar, status, empty, dir_tag %}
+{% from "partials/macros.html" import avatar, status, empty, dir_tag, reliability_badge %}
 {% block title %}{{ ev.title }}{% endblock %}
 {% block cab %}
 {% set phase = event_phase(ev) %}
@@ -28,19 +28,22 @@
   <a class="{{ 'on' if tab == 'pending' }}" href="?tab=pending">{{ _('tab_applications') }} <span class="n">{{ groups.pending|length }}</span></a>
   <a class="{{ 'on' if tab == 'participants' }}" href="?tab=participants">{{ _('tab_participants') }} <span class="n">{{ groups.participants|length }}</span></a>
   {% if started and ev.status in ('published', 'completed') %}<a class="{{ 'on' if tab == 'attendance' }}" href="?tab=attendance">{{ _('tab_attendance') }}{% if unmarked %} <span class="n">{{ unmarked }}</span>{% endif %}</a>{% endif %}
+  <a class="{{ 'on' if tab == 'waitlist' }}" href="?tab=waitlist">{{ _('tab_waitlist') }} <span class="n">{{ waiting|length }}</span></a>
   <a class="{{ 'on' if tab == 'closed' }}" href="?tab=closed">{{ _('tab_closed') }} <span class="n">{{ groups.closed|length }}</span></a>
 </nav>
 
 {% if tab == 'pending' %}
   {% if groups.pending %}
   <div class="table-wrap"><table class="table">
-    <thead><tr><th>{{ _('volunteer') }}</th><th>{{ _('age') }}</th><th>{{ _('experience') }}</th><th>{{ _('motivation') }}</th><th>{{ _('applied') }}</th><th></th></tr></thead>
+    <thead><tr><th>{{ _('volunteer') }}</th><th>{{ _('age') }}</th><th>{{ _('rel_title') }}</th><th>{{ _('motivation') }}</th><th>{{ _('applied') }}</th><th></th></tr></thead>
     <tbody>
     {% for r in groups.pending %}
-      <tr><td><a class="person" href="{{ url_for('public.volunteer_profile', volunteer_id=r.volunteer_id) }}">{{ avatar(r.avatar_path, r.full_name, 'sm') }}{{ r.full_name }}</a></td>
+      {% set rl = rel.get(r.volunteer_id) %}
+      <tr class="{{ 'row-alert' if rl and rl.alert }}"><td><a class="person" href="{{ url_for('public.volunteer_profile', volunteer_id=r.volunteer_id) }}">{{ avatar(r.avatar_path, r.full_name, 'sm') }}{{ r.full_name }}</a>
+          {% if shifts %}<div class="xs muted mt-1">{{ _('preferred_shift') }}: {{ _('all_shifts') if r.prefers_all_shifts else (r.pref_title or _('no_preference')) }}</div>{% endif %}</td>
         <td>{{ age_on(r.birth_date) }}</td>
-        <td class="small">{{ _('n_attended', n=r.done) }}{% if r.missed %} · <span style="color:var(--danger)">{{ _('n_missed', n=r.missed) }}</span>{% endif %}</td>
-        <td class="small cell-clip" title="{{ r.motivation or '' }}">{{ r.motivation or '—' }}</td>
+        <td class="nowrap">{{ reliability_badge(rl) }}</td>
+        <td class="small cell-clip" style="max-width:190px" title="{{ r.motivation or '' }}">{{ r.motivation or '—' }}</td>
         <td class="small nowrap">{{ fmt_dt(r.applied_at) }}</td>
         <td class="nowrap">
           {% if ev.status == 'published' and not started %}
@@ -50,18 +53,56 @@
           {% endif %}</td></tr>
     {% endfor %}
     </tbody></table></div>
+  <p class="xs muted mt-1">{{ icon('info', 12) }} {{ _('rel_hint') }}</p>
   {% if ev.taken >= ev.max_volunteers %}<p class="small muted mt-1">{{ _('full_cannot_approve') }}</p>{% endif %}
   {% else %}{{ empty('inbox', _('no_pending_apps')) }}{% endif %}
 
 {% elif tab == 'participants' %}
   {% if groups.participants %}
+  {% set can_assign = shifts and ev.status == 'published' and not finished %}
+  {% if shifts %}
+  <div class="shift-counters">
+    {% for sh in shifts %}<span class="tag {{ 'tone-mint' if load[sh.shift_id] >= sh.max_volunteers else 'tone-butter' }}">{{ icon('clock', 12) }}{{ sh.title }} · {{ fmt_time(sh.starts_at) }}–{{ fmt_time(sh.ends_at) }} · {{ load[sh.shift_id] }}/{{ sh.max_volunteers }}</span>{% endfor %}
+    <span class="tag {{ 'tone-rose' if unassigned else 'tone-sky' }}">{{ _('not_assigned') }} · {{ unassigned }}</span>
+  </div>
+  {% if can_assign %}
+  <form id="shifts-form" method="post" action="{{ url_for('org.shifts_save', event_id=ev.event_id) }}">{{ csrf_field() }}</form>
+  <div class="row mb-2">
+    <a class="btn btn-ghost btn-sm" href="?tab=participants&propose=1">{{ icon('sparkles', 15) }} {{ _('assign_by_preference') }}</a>
+    <button class="btn btn-dark btn-sm" form="shifts-form" type="submit">{{ icon('check', 15) }} {{ _('save_shifts') }}</button>
+    {% if proposal %}<span class="small" style="color:var(--violet)">{{ _('proposal_hint') }}</span>{% else %}<span class="xs muted">{{ _('assign_shifts_hint') }}</span>{% endif %}
+  </div>
+  {% endif %}
+  {% endif %}
   <div class="table-wrap"><table class="table">
-    <thead><tr><th>{{ _('volunteer') }}</th><th>{{ _('phone') }}</th><th>Email</th><th>{{ _('status') }}</th><th class="num">{{ _('hours_col') }}</th></tr></thead>
+    <thead><tr><th>{{ _('volunteer') }}</th><th>{{ _('contacts') }}</th>{% if shifts %}<th>{{ _('shift') }}</th>{% endif %}<th>{{ _('status') }}</th>{% if started %}<th class="num">{{ _('hours_col') }}</th>{% endif %}<th>{{ _('team_leader') }}</th></tr></thead>
     <tbody>{% for r in groups.participants %}
-      <tr><td><a class="person" href="{{ url_for('public.volunteer_profile', volunteer_id=r.volunteer_id) }}">{{ avatar(r.avatar_path, r.full_name, 'sm') }}{{ r.full_name }}</a></td>
-        <td class="nowrap"><a href="tel:{{ r.phone }}">{{ r.phone|phone }}</a></td><td><a href="mailto:{{ r.email }}">{{ r.email }}</a></td>
-        <td>{{ status(r.status) }}</td><td class="num">{{ fmt_hours(r.hours_confirmed) if r.hours_confirmed else '—' }}</td></tr>
+      <tr class="{{ 'row-lead' if r.is_team_lead }}"><td><a class="person" href="{{ url_for('public.volunteer_profile', volunteer_id=r.volunteer_id) }}">{{ avatar(r.avatar_path, r.full_name, 'sm') }}{{ r.full_name }}</a>
+          {% if r.volunteer_id in candidates and not r.is_team_lead %}<br><span class="tag tag-rec" style="margin-top:4px" title="{{ _('lead_recommended_hint') }}">{{ icon('star', 12) }}{{ _('lead_recommended') }}</span>{% endif %}</td>
+        <td class="small"><a class="nowrap" href="tel:{{ r.phone }}">{{ r.phone|phone }}</a><br><a class="muted" href="mailto:{{ r.email }}">{{ r.email }}</a></td>
+        {% if shifts %}<td>
+          {% set cur = 'all' if r.all_shifts else (r.shift_id|string if r.shift_id else '') %}
+          {% set val = proposal.get(r.registration_id, cur) if proposal else cur %}
+          {% if can_assign and r.status == 'approved' %}
+          <select class="select shift-select {{ 'proposed' if proposal and r.registration_id in proposal }}" name="shift_{{ r.registration_id }}" form="shifts-form">
+            <option value="" {{ 'selected' if val == '' }}>{{ _('not_assigned') }}</option>
+            {% for sh in shifts %}<option value="{{ sh.shift_id }}" {{ 'selected' if val == sh.shift_id|string }} title="{{ fmt_time(sh.starts_at) }}–{{ fmt_time(sh.ends_at) }}">{{ sh.title }}</option>{% endfor %}
+            <option value="all" {{ 'selected' if val == 'all' }}>{{ _('all_shifts') }}</option>
+          </select>
+          <div class="xs muted mt-1">{{ _('wish') }}: {{ _('all_shifts') if r.prefers_all_shifts else (r.pref_title or _('no_preference')) }}</div>
+          {% else %}<span class="small">{{ _('all_shifts') if r.all_shifts else (r.shift_title or '—') }}</span>{% endif %}
+        </td>{% endif %}
+        <td>{{ status(r.status) }}</td>{% if started %}<td class="num">{{ fmt_hours(r.hours_confirmed) if r.hours_confirmed else '—' }}</td>{% endif %}
+        <td class="nowrap">
+          {% if r.status == 'approved' and ev.status == 'published' and not finished %}
+          <form method="post" action="{{ url_for('org.team_lead', registration_id=r.registration_id) }}">{{ csrf_field() }}
+            <input type="hidden" name="on" value="{{ '0' if r.is_team_lead else '1' }}">
+            {% if r.is_team_lead %}<span class="tag tone-lilac">{{ icon('flag', 12) }}{{ _('team_leader') }}</span> <button class="btn btn-text btn-xs">{{ _('remove') }}</button>
+            {% else %}<button class="btn btn-ghost btn-xs btn-lead">{{ icon('flag', 14) }} {{ _('make_team_lead') }}</button>{% endif %}
+          </form>
+          {% elif r.is_team_lead %}<span class="tag tone-lilac">{{ icon('flag', 12) }}{{ _('team_leader') }}</span>{% else %}—{% endif %}</td></tr>
     {% endfor %}</tbody></table></div>
+  <p class="xs muted mt-1">{{ icon('flag', 12) }} {{ _('team_lead_hint') }}</p>
   <p class="xs muted mt-1">{{ icon('lock', 12) }} {{ _('contacts_privacy_coord') }}</p>
   {% else %}{{ empty('users', _('no_participants')) }}{% endif %}
 
@@ -77,7 +118,9 @@
           <td><div class="seg">
             <input type="radio" id="a{{ r.registration_id }}" name="mark_{{ r.registration_id }}" value="attended" {{ 'checked' if r.status in ('attended', 'approved') }}><label class="yes" for="a{{ r.registration_id }}">{{ _('came') }}</label>
             <input type="radio" id="n{{ r.registration_id }}" name="mark_{{ r.registration_id }}" value="no_show" {{ 'checked' if r.status == 'no_show' }}><label class="no" for="n{{ r.registration_id }}">{{ _('no_show') }}</label></div></td>
-          <td><input class="input hours-input" type="number" step="0.5" min="0.5" max="{{ hours }}" name="hours_{{ r.registration_id }}" value="{{ fmt_hours(r.hours_confirmed) if r.hours_confirmed else fmt_hours(hours) }}" aria-label="{{ _('hours_col') }}"></td>
+          {% set h = duration_hours(r.shift_start, r.shift_end) if r.shift_id and not r.all_shifts else hours %}
+          <td><input class="input hours-input" type="number" step="0.5" min="0.5" max="{{ h }}" name="hours_{{ r.registration_id }}" value="{{ fmt_hours(r.hours_confirmed) if r.hours_confirmed else fmt_hours(h) }}" aria-label="{{ _('hours_col') }}">
+            {% if shifts %}<div class="xs muted mt-1">{{ _('all_shifts') if r.all_shifts else (r.shift_title ~ ' · ' ~ fmt_time(r.shift_start) ~ '–' ~ fmt_time(r.shift_end) if r.shift_id else _('not_assigned')) }}</div>{% endif %}</td>
           <td>{{ status(r.status) }}</td></tr>
       {% endfor %}</tbody></table></div>
     <div class="row mt-2"><button class="btn btn-dark">{{ icon('check', 16) }} {{ _('save_attendance') }}</button>
@@ -89,6 +132,20 @@
     <button class="btn btn-primary" {{ 'disabled' if unmarked }}>{{ icon('check-circle', 16) }} {{ _('complete_event') }}</button></form>
   {% endif %}
   {% else %}{{ empty('users', _('no_participants')) }}{% endif %}
+
+{% elif tab == 'waitlist' %}
+  {% if waiting %}
+  <div class="table-wrap"><table class="table">
+    <thead><tr><th class="num">#</th><th>{{ _('volunteer') }}</th><th>{{ _('age') }}</th><th>{{ _('rel_title') }}</th><th>{{ _('message') }}</th><th>{{ _('waitlist_joined_at') }}</th></tr></thead>
+    <tbody>{% for w in waiting %}{% set rl = rel.get(w.volunteer_id) %}
+      <tr class="{{ 'row-alert' if rl and rl.alert }}"><td class="num"><b>{{ loop.index }}</b></td>
+        <td><a class="person" href="{{ url_for('public.volunteer_profile', volunteer_id=w.volunteer_id) }}">{{ avatar(w.avatar_path, w.full_name, 'sm') }}{{ w.full_name }}</a></td>
+        <td>{{ age_on(w.birth_date) }}</td><td class="nowrap">{{ reliability_badge(rl) }}</td>
+        <td class="small cell-clip" style="max-width:190px" title="{{ w.motivation or '' }}">{{ w.motivation or '—' }}</td>
+        <td class="small nowrap">{{ fmt_dt(w.joined_at) }}</td></tr>
+    {% endfor %}</tbody></table></div>
+  <p class="xs muted mt-1">{{ icon('info', 12) }} {{ _('waitlist_org_hint') }}</p>
+  {% else %}{{ empty('users', _('waitlist_empty')) }}{% endif %}
 
 {% else %}
   {% if groups.closed %}

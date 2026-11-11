@@ -1,0 +1,31 @@
+{% extends "admin/_layout.html" %}
+{% from "partials/macros.html" import empty %}
+{% block title %}{{ _('adm_backups') }}{% endblock %}
+{% block admin %}
+<div class="cab-head">
+  <div><h1>{{ _('adm_backups') }}</h1><p>{{ _('adm_backups_subtitle', n=keep) }}</p></div>
+  <form method="post" action="{{ url_for('admin.backup_create') }}">{{ csrf_field() }}
+    <button class="btn btn-primary" type="submit">{{ icon('plus', 16) }} {{ _('backup_create') }}</button></form>
+</div>
+<div class="grid grid-3 mb-3">
+  <div class="stat"><div class="num">{{ rows|length }}/{{ keep }}</div><div class="lbl">{{ _('backups_stored') }}</div></div>
+  <div class="stat"><div class="num" style="font-size:26px">{{ fmt_dt(rows[0].created.strftime('%Y-%m-%d %H:%M')) if rows else '—' }}</div><div class="lbl">{{ _('backup_last') }}</div></div>
+  <div class="stat"><div class="num">{{ (db_size / 1024)|round|int }} KB</div><div class="lbl">{{ _('backup_db_size') }}</div></div>
+</div>
+{% if rows %}
+<div class="table-wrap"><table class="table">
+  <thead><tr><th>{{ _('backup_file') }}</th><th>{{ _('date') }}</th><th>{{ _('backup_kind') }}</th><th class="num">{{ _('backup_size') }}</th><th></th></tr></thead>
+  <tbody>{% for b in rows %}
+    <tr><td class="mono small">{{ b.name }}</td>
+      <td class="small nowrap">{{ fmt_dt(b.created.strftime('%Y-%m-%d %H:%M')) }}</td>
+      <td><span class="tag {{ 'tone-sky' if b.kind == 'auto' else 'tone-butter' if b.kind == 'beforerestore' else 'tone-mint' }}">{{ _('backup_kind_' ~ b.kind) }}</span></td>
+      <td class="num small">{{ (b.size / 1024)|round|int }} KB</td>
+      <td class="nowrap">
+        <a class="btn btn-ghost btn-xs" href="{{ url_for('admin.backup_download', name=b.name) }}">{{ icon('download', 14) }} {{ _('download') }}</a>
+        <form method="post" action="{{ url_for('admin.backup_restore') }}" class="inline-form" data-confirm="{{ _('confirm_restore', name=b.name) }}">{{ csrf_field() }}
+          <input type="hidden" name="name" value="{{ b.name }}">
+          <button class="btn btn-dark btn-xs" type="submit">{{ icon('history', 14) }} {{ _('backup_restore') }}</button></form></td></tr>
+  {% endfor %}</tbody></table></div>
+{% else %}{{ empty('package', _('no_backups')) }}{% endif %}
+<p class="xs muted mt-2">{{ icon('info', 12) }} {{ _('backup_hint') }}</p>
+{% endblock %}

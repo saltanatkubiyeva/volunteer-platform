@@ -550,6 +550,24 @@ def main():
                      VALUES ((SELECT user_id FROM coordinators WHERE coordinator_id=?),'marked_no_show','registrations',?,NULL,NULL,?)""",
                   (coord, rid, dt(ev["end"] + timedelta(hours=5))))
 
+    river = con.execute("""SELECT event_id FROM events WHERE title='Riverbank Restoration Day' AND status='published'
+                           ORDER BY starts_at DESC LIMIT 1""").fetchone()
+    if river:
+        flaky = con.execute("""SELECT r.volunteer_id FROM registrations r
+            WHERE r.event_id=? AND r.status='pending' AND r.volunteer_id NOT IN (1011, 1024)
+            ORDER BY (SELECT COUNT(*) FROM registrations x WHERE x.volunteer_id=r.volunteer_id
+                      AND x.status IN ('attended','no_show')) DESC LIMIT 1""", (river[0],)).fetchone()
+        if flaky:
+            last = [r[0] for r in con.execute("""SELECT r.registration_id FROM registrations r JOIN events e USING (event_id)
+                WHERE r.volunteer_id=? AND r.status IN ('attended','no_show') ORDER BY e.starts_at DESC LIMIT 3""", (flaky[0],))]
+            for rid in last:
+                x("DELETE FROM feedback WHERE registration_id=?", (rid,))
+                x("DELETE FROM certificates WHERE registration_id=?", (rid,))
+                x("""UPDATE registrations SET status='no_show', hours_confirmed=NULL, confirmed_by=NULL, confirmed_at=NULL
+                     WHERE registration_id=?""", (rid,))
+                x("""UPDATE audit_log SET action='marked_no_show', new_value=NULL
+                     WHERE entity='registrations' AND entity_id=? AND action='hours_confirmed'""", (rid,))
+
     aru = next(v for v in vols if v["id"] == 1024)
     for ev in events:
         if ev["status"] != "completed" or ev["id"] == 310 or ev["city"] != "Astana":
@@ -581,6 +599,77 @@ def main():
             taken_slots.setdefault(1024, []).append((ev["start"], ev["end"]))
             if st == "pending":
                 break
+
+    astana = con.execute("SELECT city_id FROM cities WHERE name_en='Astana'").fetchone()[0]
+    x("INSERT INTO subscriptions (volunteer_id, city_id) VALUES (1024, ?)", (astana,))
+    for slug in ("ecology", "animals"):
+        x("INSERT INTO subscriptions (volunteer_id, direction_id) SELECT 1024, direction_id FROM directions WHERE slug=?", (slug,))
+
+    full = con.execute("""SELECT e.event_id, e.starts_at, e.ends_at, e.min_age FROM events e
+        WHERE e.status='published' AND e.starts_at > ? AND e.max_volunteers <=
+              (SELECT COUNT(*) FROM registrations r WHERE r.event_id=e.event_id AND r.status IN ('approved','attended'))
+        ORDER BY e.starts_at LIMIT 1""", (dt(NOW),)).fetchone()
+    if full:
+        waiting = con.execute("""SELECT v.volunteer_id FROM volunteers v
+            WHERE v.volunteer_id NOT IN (1005, 1011, 1024) AND v.birth_date <= date(?, '-' || ? || ' years')
+            AND NOT EXISTS (SELECT 1 FROM registrations r WHERE r.volunteer_id=v.volunteer_id AND r.event_id=?)
+            AND NOT EXISTS (SELECT 1 FROM registrations r JOIN events e USING (event_id) WHERE r.volunteer_id=v.volunteer_id
+                            AND r.status IN ('pending','approved') AND e.starts_at < ? AND e.ends_at > ?)
+            ORDER BY v.volunteer_id LIMIT 2""", (full[1][:10], max(full[3], 18), full[0], full[2], full[1])).fetchall()
+        for i, (vid,) in enumerate(waiting):
+            x("INSERT INTO waitlist (volunteer_id, event_id, joined_at) VALUES (?,?,?)",
+              (vid, full[0], dt(NOW - timedelta(hours=30 - i * 5))))
+
+    shift_plan = {
+        "Riverbank Restoration Day": [("Clearing the riverbank", 0, 2, 20), ("Planting and waste sorting", 2, 4, 15)],
+        "City Day Festival Volunteers": [("Info points and navigation", 0, 2, 40), ("Children's zone and clean-up", 2, 4, 40)],
+    }
+    for title, plan in shift_plan.items():
+        row = con.execute("""SELECT event_id, starts_at FROM events WHERE title=? AND status='published' AND starts_at > ?
+                             ORDER BY starts_at LIMIT 1""", (title, dt(NOW))).fetchone()
+        if not row:
+            continue
+        start = datetime.strptime(row[1], "%Y-%m-%d %H:%M")
+        ids = [x("""INSERT INTO event_shifts (event_id, title, starts_at, ends_at, max_volunteers, position)
+                    VALUES (?,?,?,?,?,?)""", (row[0], name, dt(start + timedelta(hours=a)), dt(start + timedelta(hours=b)), need, pos)).lastrowid
+               for pos, (name, a, b, need) in enumerate(plan)]
+        for (rid,) in con.execute("SELECT registration_id FROM registrations WHERE event_id=? AND status IN ('pending','approved')",
+                                  (row[0],)).fetchall():
+            pick = rid % 4
+            if pick < 2:
+                x("UPDATE registrations SET preferred_shift_id=? WHERE registration_id=?", (ids[pick], rid))
+            elif pick == 2:
+                x("UPDATE registrations SET prefers_all_shifts=1 WHERE registration_id=?", (rid,))
+
+    reporters = [r[0] for r in con.execute(
+        "SELECT user_id FROM volunteers WHERE volunteer_id IN (1003, 1008, 1015, 1021) ORDER BY volunteer_id")]
+    target_ev = con.execute("""SELECT event_id FROM events WHERE status='published' AND starts_at > ? AND org_id <> 1
+                               AND event_id NOT IN (SELECT event_id FROM event_shifts)
+                               AND event_id NOT IN (SELECT event_id FROM waitlist)
+                               AND title NOT IN ('Concert in a Care Home', 'Weekend Dog Walking')
+                               ORDER BY max_volunteers DESC, starts_at LIMIT 1""", (dt(NOW),)).fetchone()
+    if target_ev and len(reporters) >= 4:
+        x("""INSERT INTO complaints (reporter_id, event_id, reason, details, created_at) VALUES (?,?,?,?,?)""",
+          (reporters[0], target_ev[0], "fraud", "The coordinator wrote in the group chat that every volunteer must pay 5,000 tenge for a T-shirt before the event.",
+           dt(NOW - timedelta(hours=20))))
+        x("""INSERT INTO complaints (reporter_id, event_id, reason, details, created_at) VALUES (?,?,?,?,?)""",
+          (reporters[1], target_ev[0], "fraud", "Asked for a payment by Kaspi transfer to take part.", dt(NOW - timedelta(hours=6))))
+        org2 = con.execute("SELECT org_id FROM organizations WHERE org_id <> 1 AND status='verified' ORDER BY org_id DESC LIMIT 1").fetchone()[0]
+        x("""INSERT INTO complaints (reporter_id, org_id, reason, details, created_at) VALUES (?,?,?,?,?)""",
+          (reporters[2], org2, "inappropriate", "The organization page has advertising of a private shop in the description.",
+           dt(NOW - timedelta(days=3))))
+        x("""INSERT INTO complaints (reporter_id, event_id, reason, details, status, action, admin_note, handled_by,
+             created_at, handled_at) VALUES (?,?,?,?,?,?,?,?,?,?)""",
+          (reporters[3], target_ev[0], "other", "The start time in the description differs from the time on the page.",
+           "dismissed", "none", "Checked with the organizer: the time on the page is correct, the description was updated.",
+           con.execute("SELECT user_id FROM users WHERE email='admin@demeu.kz'").fetchone()[0],
+           dt(NOW - timedelta(days=9)), dt(NOW - timedelta(days=8))))
+
+    lead = con.execute("""SELECT r.registration_id FROM registrations r JOIN events e USING (event_id)
+        WHERE r.volunteer_id=1024 AND r.status='approved' AND e.starts_at > ? ORDER BY e.starts_at LIMIT 1""",
+                       (dt(NOW),)).fetchone()
+    if lead:
+        x("UPDATE registrations SET is_team_lead=1 WHERE registration_id=?", lead)
 
     def note(email, kind, link, ago_h, read=0, **params):
         uid = con.execute("SELECT user_id FROM users WHERE email=?", (email,)).fetchone()[0]

@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% from "partials/macros.html" import cover_url, cover_attrs, dir_tag, org_logo, avatar, rating, status, event_card %}
 {% block title %}{{ ev.title }}{% endblock %}
+{% from "partials/report.html" import report_button with context %}
 {% block content %}
 {% set phase = event_phase(ev) %}
 {% set left = ev.max_volunteers - ev.taken %}
@@ -28,6 +29,13 @@
         <h3>{{ _('about_event') }}</h3>
         <p>{{ ev.description|nl2br }}</p>
       </div>
+      {% if shifts %}
+      <h3 class="mt-3">{{ _('shifts') }}</h3>
+      <ul class="shift-list">{% for sh in shifts %}
+        <li><span class="t">{{ fmt_time(sh.starts_at) }}–{{ fmt_time(sh.ends_at) }}</span><span class="grow">{{ sh.title }}</span><span class="small muted nowrap">{{ _('shift_people', n=sh.max_volunteers) }}</span></li>
+      {% endfor %}</ul>
+      <p class="xs muted mt-1">{{ _('shifts_assigned_later') }}</p>
+      {% endif %}
       <div class="info-boxes">
         {% if ev.requirements %}<div class="info-box"><h4>{{ icon('clipboard-check', 18) }} {{ _('requirements') }}</h4><p class="small mb-0">{{ ev.requirements }}</p></div>{% endif %}
         {% if ev.provided %}<div class="info-box"><h4>{{ icon('package', 18) }} {{ _('provided') }}</h4><p class="small mb-0">{{ ev.provided }}</p></div>{% endif %}
@@ -73,7 +81,7 @@
           <div><span class="ic-wrap">{{ icon('calendar') }}</span><div><b>{{ fmt_date(ev.starts_at, True) }}</b><span>{{ fmt_time(ev.starts_at) }}–{{ fmt_time(ev.ends_at) }} · {{ _('n_hours', n=fmt_hours(hours)) }}</span></div></div>
           <div><span class="ic-wrap">{{ icon('map-pin') }}</span><div><b>{{ loc(ev, 'city_name') }}</b><span>{{ ev.address }}</span></div></div>
           <div><span class="ic-wrap">{{ icon('users') }}</span><div><b>{{ _('joined_of', a=ev.taken, b=ev.max_volunteers) }}</b>
-            <span>{% if phase != 'upcoming' %}{{ _('registration_closed') }}{% elif left > 0 %}{{ _('spots_left', n=left) }}{% else %}{{ _('no_spots') }}{% endif %}{% if phase == 'upcoming' and ev.pending and ev.requires_approval %} · {{ _('n_pending_apps', n=ev.pending) }}{% endif %}</span></div></div>
+            <span>{% if phase != 'upcoming' %}{{ _('registration_closed') }}{% elif left > 0 %}{{ _('spots_left', n=left) }}{% else %}{{ _('no_spots') }}{% endif %}{% if phase == 'upcoming' and waitlist_size %} · {{ _('n_in_waitlist', n=waitlist_size) }}{% endif %}{% if phase == 'upcoming' and ev.pending and ev.requires_approval %} · {{ _('n_pending_apps', n=ev.pending) }}{% endif %}</span></div></div>
           <div><span class="ic-wrap">{{ icon('user') }}</span><div><b>{{ _('age_from', n=ev.min_age) }}</b><span>{{ _('minors_need_consent') if ev.min_age < 18 else _('adults_only') }}</span></div></div>
           <div><span class="ic-wrap">{{ icon('hourglass') }}</span><div><b>{{ _('apply_until') }}</b><span>{{ fmt_dt(ev.registration_deadline) }}</span></div></div>
         </div>
@@ -97,6 +105,23 @@
               {{ icon('info') }}<div><b>{{ _('your_status') }}: {{ _('st_' ~ my_reg.status) }}</b>
               <p class="small">{{ _('status_hint_' ~ my_reg.status) }}</p>
               {% if my_reg.decision_note and my_reg.status == 'rejected' %}<p class="small"><i>{{ my_reg.decision_note }}</i></p>{% endif %}</div></div>
+            {% if shifts and my_reg.status in ('pending', 'approved', 'attended') %}
+            {% set mine = (shifts|selectattr('shift_id', 'equalto', my_reg.shift_id)|list)[0] if my_reg.shift_id else None %}
+            {% set pref = (shifts|selectattr('shift_id', 'equalto', my_reg.preferred_shift_id)|list)[0] if my_reg.preferred_shift_id else None %}
+            <div class="lead-box" style="background:#f4fbdc">
+              {% if my_reg.all_shifts %}<b>{{ icon('clock', 16) }} {{ _('your_shift') }}: {{ _('all_shifts') }}, {{ fmt_time(ev.starts_at) }}–{{ fmt_time(ev.ends_at) }}</b>
+              {% elif mine %}<b>{{ icon('clock', 16) }} {{ _('your_shift') }}: {{ mine.title }}, {{ fmt_time(mine.starts_at) }}–{{ fmt_time(mine.ends_at) }}</b>
+              {% else %}<b>{{ icon('clock', 16) }} {{ _('preferred_shift') }}: {% if my_reg.prefers_all_shifts %}{{ _('all_shifts') }}{% elif pref %}{{ pref.title }}, {{ fmt_time(pref.starts_at) }}–{{ fmt_time(pref.ends_at) }}{% else %}{{ _('no_preference') }}{% endif %}</b>
+                <p class="xs muted mb-0">{{ _('shift_not_assigned_yet') }}</p>{% endif %}
+            </div>
+            {% endif %}
+            {% if team %}
+            <div class="lead-box">
+              <b>{{ icon('flag', 16) }} {{ _('you_are_team_lead') }}</b>
+              <p class="xs muted mb-0">{{ _('you_are_team_lead_hint') }}</p>
+              <ul>{% for p in team %}<li><span>{{ p.full_name }}{% if p.is_team_lead %} <span class="xs muted">· {{ _('team_leader') }}</span>{% endif %}</span><a class="nowrap small" href="tel:{{ p.phone }}">{{ p.phone|phone }}</a></li>{% endfor %}</ul>
+            </div>
+            {% endif %}
             {% if my_reg.status in ('pending', 'approved') and phase == 'upcoming' %}
               <form method="post" action="{{ url_for('volunteer.cancel', registration_id=my_reg.registration_id) }}" class="mt-2" data-confirm="{{ _('confirm_cancel_application') }}">
                 {{ csrf_field() }}<button class="btn btn-ghost btn-block" type="submit">{{ _('cancel_application') }}</button></form>
@@ -111,8 +136,34 @@
               <div class="field"><label for="motivation">{{ _('motivation_label') }} <span class="label-note">({{ _('optional') }})</span></label>
                 <textarea class="textarea" id="motivation" name="motivation" maxlength="500" rows="3" style="min-height:90px" placeholder="{{ _('motivation_placeholder') }}"></textarea></div>
               {% endif %}
+              {% if shifts %}
+              <div class="field"><label>{{ _('preferred_shift') }} <span class="label-note">({{ _('optional') }})</span></label>
+                <div class="shift-pick">
+                  {% for sh in shifts %}<label><input type="radio" name="shift_pref" value="{{ sh.shift_id }}"><span><b>{{ sh.title }}</b> · {{ fmt_time(sh.starts_at) }}–{{ fmt_time(sh.ends_at) }}</span></label>{% endfor %}
+                  <label><input type="radio" name="shift_pref" value="all"><span><b>{{ _('all_shifts') }}</b> · {{ fmt_time(ev.starts_at) }}–{{ fmt_time(ev.ends_at) }}</span></label>
+                  <label><input type="radio" name="shift_pref" value="" checked><span>{{ _('no_preference') }}</span></label>
+                </div>
+                <span class="hint">{{ _('shift_pref_hint', start=fmt_time(ev.starts_at), end=fmt_time(ev.ends_at)) }}</span></div>
+              {% endif %}
               <button class="btn btn-primary btn-block btn-lg mt-2" type="submit">{{ icon('check') }} {{ _('apply_btn') if ev.requires_approval else _('join_btn') }}</button>
               <p class="xs muted center mt-1 mb-0">{{ _('apply_hint_approval') if ev.requires_approval else _('apply_hint_instant') }}</p>
+            </form>
+          {% elif wait_pos %}
+            <div class="alert alert-info">{{ icon('hourglass') }}<div><b>{{ _('waitlist_you_are', n=wait_pos) }}</b>
+              <p class="small">{{ _('waitlist_you_are_hint') }}</p></div></div>
+            <form method="post" action="{{ url_for('volunteer.waitlist_leave', event_id=ev.event_id) }}" class="mt-2" data-confirm="{{ _('confirm_leave_waitlist') }}">
+              {{ csrf_field() }}<button class="btn btn-ghost btn-block" type="submit">{{ _('waitlist_leave') }}</button></form>
+          {% elif reason == 'rule_full' and phase == 'upcoming' %}
+            <div class="alert alert-warn">{{ icon('users') }}<div><b>{{ _('no_spots') }}</b>
+              <p class="small">{{ _('waitlist_offer', n=waitlist_size) if waitlist_size else _('waitlist_offer_first') }}</p></div></div>
+            <form method="post" action="{{ url_for('volunteer.waitlist_join', event_id=ev.event_id) }}" class="mt-2">
+              {{ csrf_field() }}
+              {% if ev.requires_approval %}
+              <div class="field"><label for="motivation">{{ _('motivation_label') }} <span class="label-note">({{ _('optional') }})</span></label>
+                <textarea class="textarea" id="motivation" name="motivation" maxlength="500" rows="3" style="min-height:90px" placeholder="{{ _('motivation_placeholder') }}"></textarea></div>
+              {% endif %}
+              <button class="btn btn-dark btn-block btn-lg" type="submit">{{ icon('hourglass') }} {{ _('waitlist_join') }}</button>
+              <p class="xs muted center mt-1 mb-0">{{ _('waitlist_join_hint_approval') if ev.requires_approval else _('waitlist_join_hint') }}</p>
             </form>
           {% else %}
             <div class="alert alert-warn">{{ icon('alert') }}<div><b>{{ _('cannot_apply') }}</b><p class="small">{{ _(reason) }}</p>
@@ -121,6 +172,7 @@
         {% endif %}
         </div>
       </div>
+      {% if not own_org %}<div class="report-row">{{ report_button('event', ev.event_id, ev.title) }}</div>{% endif %}
     </aside>
   </div>
 

@@ -7,8 +7,10 @@ if not os.path.exists(os.path.join(BASE, "instance", "demeu.db")):
     subprocess.check_call([sys.executable, os.path.join(BASE, "seed.py")])
 
 from demeu import create_app
+from demeu.backups import daily_backup
 
 app = create_app()
+daily_backup(app.config["DATABASE"])
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))

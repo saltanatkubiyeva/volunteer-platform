@@ -1,5 +1,5 @@
 {% extends "org/_layout.html" %}
-{% from "partials/macros.html" import avatar, status, empty %}
+{% from "partials/macros.html" import avatar, status, empty, reliability_badge %}
 {% block title %}{{ _('org_cabinet') }}{% endblock %}
 {% block cab %}
 <div class="cab-head">
@@ -13,6 +13,11 @@
   <div class="stat"><div class="ic-wrap">{{ icon('star') }}</div><div class="num">{{ stats.rating or '—' }}</div><div class="lbl">{{ _('stat_rating', n=stats.reviews) }}</div></div>
 </div>
 
+{% for x in need_shifts %}
+<div class="alert alert-warn mb-2">{{ icon('clock') }}<div><b>{{ _('assign_shifts_title', event=x.title) }}</b>
+  <p class="small">{{ _('assign_shifts_text', n=x.n) }}</p>
+  <a class="btn btn-dark btn-sm" href="{{ url_for('org.event_manage', event_id=x.event_id, tab='participants') }}">{{ _('assign_shifts_btn') }}</a></div></div>
+{% endfor %}
 {% if to_mark %}
 <div class="alert alert-lime mt-3">{{ icon('clipboard-check') }}<div><b>{{ _('to_mark_title') }}</b><p class="small">{{ _('to_mark_text') }}</p>
   <div class="row tight">{% for ev in to_mark %}<a class="btn btn-dark btn-xs" href="{{ url_for('org.event_manage', event_id=ev.event_id, tab='attendance') }}">{{ ev.title }} · {{ fmt_date(ev.starts_at, False, False) }}</a>{% endfor %}</div></div></div>
@@ -24,7 +29,9 @@
     {% for r in pending %}
     <div class="queue-item">
       <a href="{{ url_for('public.volunteer_profile', volunteer_id=r.volunteer_id) }}">{{ avatar(r.avatar_path, r.full_name) }}</a>
+      {% set rl = rel.get(r.volunteer_id) %}
       <div class="grow"><b class="small">{{ r.full_name }}</b> <span class="xs muted">· {{ _('age_n', n=age_on(r.birth_date)) }}</span>
+        <div class="rel-line">{{ reliability_badge(rl) }}</div>
         <div class="xs muted"><a class="muted" href="{{ url_for('org.event_manage', event_id=r.event_id) }}">{{ r.title }}</a> · {{ fmt_date(r.starts_at, False, False) }}</div>
         {% if r.motivation %}<div class="xs mt-1">“{{ r.motivation }}”</div>{% endif %}</div>
       <form method="post" action="{{ url_for('org.decide', registration_id=r.registration_id) }}" class="row tight">{{ csrf_field() }}

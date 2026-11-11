@@ -13,9 +13,17 @@
   </div>
 </section>
 <div class="wrap" style="max-width:760px;padding:28px 24px 72px">
-  {% if code and cert %}
+  {% if code and cert and cert.type == 'milestone' %}
+    <div class="alert alert-ok">{{ icon('check-circle', 22) }}<div><b>{{ _('certificate_valid') }}</b>
+      <p class="mb-0">{{ _('mcert_valid_text', name=cert.full_name, n=cert.milestone_hours, h=fmt_hours(cert.hours), e=cert.n_events, o=cert.n_orgs) }}</p>
+      <p class="xs mt-1 mb-0">{{ _('mcert_type') }} · {{ _('issued_on', d=fmt_date(cert.issued_at)) }} · <span class="mono">{{ cert.code }}</span></p></div></div>
+    <div class="table-wrap mt-2"><table class="table">
+      <thead><tr><th>{{ _('date') }}</th><th>{{ _('event') }}</th><th>{{ _('organization') }}</th><th class="num">{{ _('hours_col') }}</th></tr></thead>
+      <tbody>{% for e in events %}<tr><td class="small nowrap">{{ fmt_date(e.starts_at) }}</td><td>{{ e.title }}</td><td class="small">{{ e.org_name }}</td><td class="num">{{ fmt_hours(e.hours_confirmed) }}</td></tr>{% endfor %}</tbody></table></div>
+  {% elif code and cert %}
     <div class="alert alert-ok">{{ icon('check-circle', 22) }}<div><b>{{ _('certificate_valid') }}</b>
       <p class="mb-0">{{ _('certificate_valid_text', name=cert.full_name, hours=fmt_hours(cert.hours_confirmed), event=cert.title, org=cert.org_name, date=fmt_date(cert.starts_at)) }}</p>
+      {% if cert.is_team_lead %}<p class="small mb-0">{{ _('cert_role') }}: <b>{{ _('team_leader') }}</b></p>{% endif %}
       <p class="xs mt-1 mb-0">{{ _('issued_on', d=fmt_date(cert.issued_at)) }} · <span class="mono">{{ cert.code }}</span></p></div></div>
   {% elif code %}
     <div class="alert alert-danger">{{ icon('x-circle', 22) }}<div><b>{{ _('certificate_invalid') }}</b><p class="mb-0">{{ _('certificate_invalid_text') }}</p></div></div>

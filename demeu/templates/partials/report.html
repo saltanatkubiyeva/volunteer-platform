@@ -1,0 +1,21 @@
+{% macro report_button(kind, target_id, name) -%}
+{% if not g.user %}
+<a class="report-link" href="{{ url_for('auth.login', next=request.path) }}">{{ icon('flag', 14) }} {{ _('report') }}</a>
+{% elif can_report %}
+<button class="report-link" type="button" data-dialog="report-dlg">{{ icon('flag', 14) }} {{ _('report') }}</button>
+<dialog id="report-dlg"><form class="dlg" method="post" action="{{ url_for('public.report') }}">
+  {{ csrf_field() }}<input type="hidden" name="{{ 'event_id' if kind == 'event' else 'org_id' }}" value="{{ target_id }}">
+  <h3>{{ _('report_title_event') if kind == 'event' else _('report_title_org') }}</h3>
+  <p class="small muted">{{ name }}</p>
+  <div class="report-reasons">
+    {% for r in ['fake', 'unsafe', 'inappropriate', 'fraud', 'other'] %}
+    <label><input type="radio" name="reason" value="{{ r }}" required {{ 'checked' if loop.first }}><span><b>{{ _('reason_' ~ r) }}</b><br><span class="xs muted">{{ _('reason_' ~ r ~ '_hint') }}</span></span></label>
+    {% endfor %}
+  </div>
+  <label for="details" class="mt-2">{{ _('report_details') }}</label>
+  <textarea class="textarea" id="details" name="details" maxlength="1000" rows="3" style="min-height:80px" placeholder="{{ _('report_details_placeholder') }}"></textarea>
+  <p class="xs muted mt-1">{{ _('report_note') }}</p>
+  <div class="row mt-2"><button class="btn btn-danger">{{ icon('flag', 15) }} {{ _('report_send') }}</button><button class="btn btn-ghost" type="button" data-close>{{ _('close') }}</button></div>
+</form></dialog>
+{% endif %}
+{%- endmacro %}

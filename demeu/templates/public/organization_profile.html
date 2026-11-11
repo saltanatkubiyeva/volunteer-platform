@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% from "partials/macros.html" import org_logo, dir_tag, event_card, avatar, rating, status, empty %}
 {% block title %}{{ o.name }}{% endblock %}
+{% from "partials/report.html" import report_button with context %}
 {% block content %}
 <div class="profile-cover"></div>
 <div class="wrap">
@@ -11,7 +12,8 @@
         <h1>{{ o.name }} {% if o.status == 'verified' %}<span class="verified" title="{{ _('st_verified') }}">{{ icon('shield-check', 24) }}</span>{% endif %}</h1>
         <div class="meta"><span>{{ icon('briefcase', 15) }}{{ _('orgtype_' ~ o.org_type) }}</span><span>{{ icon('map-pin', 15) }}{{ loc(o, 'city_name') }}</span>
           {% if o.founded_year %}<span>{{ icon('calendar', 15) }}{{ _('founded_in', y=o.founded_year) }}</span>{% endif %}
-          {% if o.status != 'verified' %}{{ status(o.status) }}{% endif %}</div>
+          {% if o.status != 'verified' %}{{ status(o.status) }}{% endif %}
+          {% if not own %}{{ report_button('organization', o.org_id, o.name) }}{% endif %}</div>
       </div>
       {% if own and g.coordinator.is_owner %}<a class="btn btn-ghost" href="{{ url_for('org.profile') }}">{{ icon('pencil', 16) }} {{ _('edit_profile') }}</a>{% endif %}
     </div>

@@ -1,0 +1,13 @@
+{% extends "admin/_layout.html" %}
+{% from "partials/macros.html" import empty %}
+{% block title %}{{ _('adm_outbox') }}{% endblock %}
+{% block admin %}
+<div class="cab-head"><div><h1>{{ _('adm_outbox') }}</h1><p>{{ _('adm_outbox_subtitle') }}</p></div></div>
+{% for m in rows %}
+<div class="card card-pad mb-2 mail-card">
+  <div class="row between"><div><b>{{ m.subject }}</b><div class="xs muted">{{ _('mail_to') }}: {{ m.to_email }} · {{ fmt_dt(m.created_at) }}</div></div>
+    {% if m.link %}<a class="btn btn-ghost btn-xs" href="{{ m.link }}" target="_blank" rel="noopener">{{ icon('external-link', 14) }} {{ _('open_link') }}</a>{% endif %}</div>
+  <pre class="mail-body">{{ m.body }}</pre>
+</div>
+{% else %}{{ empty('inbox', _('outbox_empty')) }}{% endfor %}
+{% endblock %}

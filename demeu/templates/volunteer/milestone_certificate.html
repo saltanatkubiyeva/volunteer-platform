@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}{{ _('certificate') }} {{ cert.code }}{% endblock %}
+{% block body_class %}admin-body{% endblock %}
+{% block footer %}{% endblock %}
+{% block content %}
+<div class="wrap no-print row" style="padding-top:24px;justify-content:space-between">
+  <a class="btn btn-ghost btn-sm" href="{{ url_for('volunteer.dashboard') }}">{{ icon('arrow-left', 16) }} {{ _('back') }}</a>
+  <button class="btn btn-dark btn-sm" onclick="window.print()">{{ icon('printer', 16) }} {{ _('print_or_pdf') }}</button>
+</div>
+<div class="certificate milestone-cert">
+  <div class="seal">DEMEU<br>{{ cert.milestone_hours }} {{ _('h_short') }}<br>✓</div>
+  <a class="logo" href="#">DEMEU</a>
+  <h1>{{ _('mcert_title', n=cert.milestone_hours) }}</h1>
+  <p class="muted">{{ _('mcert_subtitle') }}</p>
+  <div class="name">{{ g.volunteer.full_name }}</div>
+  <p style="font-size:18px">{{ _('mcert_text', h=fmt_hours(hours), e=events|length, o=orgs) }}</p>
+  <table class="mcert-table">
+    <thead><tr><th>{{ _('date') }}</th><th>{{ _('event') }}</th><th>{{ _('organization') }}</th><th class="num">{{ _('hours_col') }}</th></tr></thead>
+    <tbody>{% for e in events %}<tr><td class="nowrap">{{ fmt_date(e.starts_at) }}</td><td>{{ e.title }}</td><td>{{ e.org_name }} · {{ loc(e, 'city_name') }}</td><td class="num">{{ fmt_hours(e.hours_confirmed) }}</td></tr>{% endfor %}</tbody>
+    <tfoot><tr><td colspan="3"><b>{{ _('total') }}</b></td><td class="num"><b>{{ fmt_hours(hours) }}</b></td></tr></tfoot>
+  </table>
+  <div class="sig">
+    <div>DEMEU<br>{{ _('mcert_issuer') }}</div>
+    <div>{{ _('cert_code') }}: <b class="mono" style="color:var(--ink)">{{ cert.code }}</b><br>{{ _('cert_verify_at') }} {{ request.host }}{{ url_for('public.verify') }}</div>
+  </div>
+  <p class="xs muted mt-3 mb-0">{{ _('issued_on', d=fmt_date(cert.issued_at)) }}</p>
+</div>
+{% endblock %}

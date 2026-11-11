@@ -133,6 +133,11 @@ CREATE TABLE registrations (
     hours_confirmed REAL CHECK (hours_confirmed IS NULL OR (hours_confirmed > 0 AND hours_confirmed <= 24)),
     confirmed_by    INTEGER REFERENCES coordinators(coordinator_id) ON DELETE SET NULL,
     confirmed_at    TEXT,
+    is_team_lead    INTEGER NOT NULL DEFAULT 0 CHECK (is_team_lead IN (0,1)),
+    preferred_shift_id INTEGER REFERENCES event_shifts(shift_id) ON DELETE SET NULL,
+    prefers_all_shifts INTEGER NOT NULL DEFAULT 0 CHECK (prefers_all_shifts IN (0,1)),
+    shift_id        INTEGER REFERENCES event_shifts(shift_id) ON DELETE SET NULL,
+    all_shifts      INTEGER NOT NULL DEFAULT 0 CHECK (all_shifts IN (0,1)),
     UNIQUE (volunteer_id, event_id),
     CHECK (status <> 'attended' OR hours_confirmed IS NOT NULL)
 );
@@ -148,9 +153,15 @@ CREATE TABLE feedback (
 
 CREATE TABLE certificates (
     certificate_id  INTEGER PRIMARY KEY,
-    registration_id INTEGER NOT NULL UNIQUE REFERENCES registrations(registration_id) ON DELETE RESTRICT,
+    type            TEXT NOT NULL DEFAULT 'event' CHECK (type IN ('event','milestone')),
+    registration_id INTEGER UNIQUE REFERENCES registrations(registration_id) ON DELETE RESTRICT,
+    volunteer_id    INTEGER REFERENCES volunteers(volunteer_id) ON DELETE RESTRICT,
+    milestone_hours INTEGER CHECK (milestone_hours IN (20, 50, 100)),
     code            TEXT NOT NULL UNIQUE CHECK (length(code) = 10),
-    issued_at       TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+    issued_at       TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+    UNIQUE (volunteer_id, milestone_hours),
+    CHECK ((type = 'event' AND registration_id IS NOT NULL AND milestone_hours IS NULL)
+        OR (type = 'milestone' AND registration_id IS NULL AND volunteer_id IS NOT NULL AND milestone_hours IS NOT NULL))
 );
 
 CREATE TABLE consents (
@@ -216,3 +227,87 @@ CREATE INDEX idx_reg_event_status   ON registrations(event_id, status);
 CREATE INDEX idx_reg_volunteer      ON registrations(volunteer_id);
 CREATE INDEX idx_notif_user_unread  ON notifications(user_id, is_read);
 CREATE INDEX idx_audit_entity       ON audit_log(entity, entity_id);
+
+CREATE TABLE IF NOT EXISTS event_shifts (
+    shift_id       INTEGER PRIMARY KEY,
+    event_id       INTEGER NOT NULL REFERENCES events(event_id) ON DELETE CASCADE,
+    title          TEXT NOT NULL CHECK (length(title) BETWEEN 2 AND 80),
+    starts_at      TEXT NOT NULL,
+    ends_at        TEXT NOT NULL,
+    max_volunteers INTEGER NOT NULL CHECK (max_volunteers BETWEEN 1 AND 1000),
+    position       INTEGER NOT NULL DEFAULT 0,
+    UNIQUE (event_id, title),
+    CHECK (ends_at > starts_at)
+);
+CREATE INDEX IF NOT EXISTS idx_shifts_event ON event_shifts(event_id, position);
+
+CREATE TABLE IF NOT EXISTS password_resets (
+    reset_id     INTEGER PRIMARY KEY,
+    user_id      INTEGER NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    token_hash   TEXT NOT NULL UNIQUE CHECK (length(token_hash) = 64),
+    created_at   TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+    expires_at   TEXT NOT NULL,
+    used_at      TEXT,
+    requested_by INTEGER REFERENCES users(user_id) ON DELETE SET NULL,
+    CHECK (expires_at > created_at)
+);
+CREATE INDEX IF NOT EXISTS idx_resets_user ON password_resets(user_id, created_at);
+
+CREATE TABLE IF NOT EXISTS outbox (
+    message_id INTEGER PRIMARY KEY,
+    user_id    INTEGER REFERENCES users(user_id) ON DELETE SET NULL,
+    to_email   TEXT NOT NULL,
+    subject    TEXT NOT NULL,
+    body       TEXT NOT NULL,
+    link       TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+);
+
+CREATE TABLE IF NOT EXISTS complaints (
+    complaint_id INTEGER PRIMARY KEY,
+    reporter_id  INTEGER NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    event_id     INTEGER REFERENCES events(event_id) ON DELETE CASCADE,
+    org_id       INTEGER REFERENCES organizations(org_id) ON DELETE CASCADE,
+    reason       TEXT NOT NULL CHECK (reason IN ('fake','unsafe','inappropriate','fraud','other')),
+    details      TEXT,
+    status       TEXT NOT NULL DEFAULT 'new' CHECK (status IN ('new','resolved','dismissed')),
+    action       TEXT CHECK (action IN ('none','event_cancelled','org_suspended','account_blocked')),
+    admin_note   TEXT,
+    handled_by   INTEGER REFERENCES users(user_id) ON DELETE SET NULL,
+    created_at   TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+    handled_at   TEXT,
+    CHECK ((event_id IS NULL) <> (org_id IS NULL)),
+    CHECK (status = 'new' OR handled_at IS NOT NULL)
+);
+CREATE INDEX IF NOT EXISTS idx_complaints_status ON complaints(status, created_at);
+
+CREATE TABLE IF NOT EXISTS waitlist (
+    waitlist_id  INTEGER PRIMARY KEY,
+    volunteer_id INTEGER NOT NULL REFERENCES volunteers(volunteer_id) ON DELETE CASCADE,
+    event_id     INTEGER NOT NULL REFERENCES events(event_id) ON DELETE CASCADE,
+    motivation   TEXT,
+    joined_at    TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+    UNIQUE (volunteer_id, event_id)
+);
+CREATE INDEX IF NOT EXISTS idx_waitlist_event ON waitlist(event_id, joined_at);
+
+CREATE TABLE IF NOT EXISTS subscriptions (
+    subscription_id INTEGER PRIMARY KEY,
+    volunteer_id    INTEGER NOT NULL REFERENCES volunteers(volunteer_id) ON DELETE CASCADE,
+    city_id         INTEGER REFERENCES cities(city_id) ON DELETE CASCADE,
+    direction_id    INTEGER REFERENCES directions(direction_id) ON DELETE CASCADE,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+    CHECK ((city_id IS NULL) <> (direction_id IS NULL)),
+    UNIQUE (volunteer_id, city_id, direction_id)
+);
+CREATE INDEX IF NOT EXISTS idx_subscriptions_volunteer ON subscriptions(volunteer_id);
+
+CREATE VIEW IF NOT EXISTS volunteer_reliability AS
+SELECT v.volunteer_id,
+       COALESCE(SUM(r.status = 'attended'), 0) AS attended,
+       COALESCE(SUM(r.status = 'no_show'), 0)  AS no_show,
+       CAST(ROUND(100.0 * SUM(r.status = 'attended') / NULLIF(SUM(r.status IN ('attended','no_show')), 0)) AS INTEGER)
+                                                AS attendance_rate
+FROM volunteers v
+LEFT JOIN registrations r ON r.volunteer_id = v.volunteer_id
+GROUP BY v.volunteer_id;

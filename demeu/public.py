@@ -3,8 +3,9 @@ from datetime import date, datetime, timedelta
 from flask import (Blueprint, abort, flash, g, redirect, render_template,
                    request, session, url_for)
 
+from . import complaints as C
 from . import services as S
-from .core import LANGS, Page, _, arg_int, notify, now_str, page_arg, safe_next
+from .core import LANGS, Page, _, arg_int, form_int, login_required, notify, now_str, page_arg, safe_next
 from .db import execute, query, scalar
 from .forms import Errors, clean, valid_email
 
@@ -115,12 +116,18 @@ def event_detail(event_id):
     is_admin = g.user is not None and g.user["role"] == "admin"
     if (ev["status"] == "draft" or ev["org_status"] != "verified") and not (own_org or is_admin):
         abort(404)
-    my_reg, reason, consent = None, None, None
+    my_reg, reason, consent, wait_pos = None, None, None, None
     if g.volunteer:
+        wait_pos = S.waitlist_position(g.volunteer["volunteer_id"], event_id)
         my_reg = query("SELECT * FROM registrations WHERE volunteer_id=? AND event_id=?",
                        (g.volunteer["volunteer_id"], event_id), one=True)
         reason = S.eligibility(g.volunteer, ev)
         consent = S.consent_status(g.volunteer["volunteer_id"])
+    team = []
+    if my_reg and my_reg["is_team_lead"] and my_reg["status"] in ("approved", "attended"):
+        team = query("""SELECT v.full_name, v.phone, r.is_team_lead FROM registrations r JOIN volunteers v USING (volunteer_id)
+            WHERE r.event_id=? AND r.status IN ('approved','attended') ORDER BY r.is_team_lead DESC, v.full_name""",
+                     (event_id,))
     participants = query("""SELECT v.volunteer_id, v.full_name, v.avatar_path, v.is_public FROM registrations r
         JOIN volunteers v USING (volunteer_id) WHERE r.event_id=? AND r.status IN ('approved','attended')
         ORDER BY r.applied_at LIMIT 12""", (event_id,))
@@ -135,7 +142,10 @@ def event_detail(event_id):
                     (event_id,))
     return render_template("public/event_detail.html", ev=ev, my_reg=my_reg, reason=reason, consent=consent,
                            participants=participants, coordinator=coordinator, similar=similar,
-                           reviews=reviews, own_org=own_org,
+                           reviews=reviews, own_org=own_org, wait_pos=wait_pos, team=team,
+                           shifts=S.event_shifts(event_id),
+                           can_report=C.can_report(g.user, C.target(event_id=event_id)),
+                           waitlist_size=scalar("SELECT COUNT(*) FROM waitlist WHERE event_id=?", (event_id,)),
                            hours=S.duration_hours(ev["starts_at"], ev["ends_at"]))
 
 
@@ -279,6 +289,7 @@ def organization_profile(org_id):
         WHERE e.org_id=? AND f.is_hidden=0 ORDER BY f.created_at DESC LIMIT 10""", (org_id,))
     team = query("SELECT full_name, position FROM coordinators WHERE org_id=? ORDER BY is_owner DESC, full_name", (org_id,))
     return render_template("public/organization_profile.html", o=o, upcoming=upcoming, past=past, reviews=reviews,
+                           can_report=C.can_report(g.user, C.target(org_id=org_id)),
                            team=team, stats=S.org_stats(org_id), dirs=org_directions([org_id]).get(org_id, []),
                            own=own)
 
@@ -392,10 +403,36 @@ def search():
 @bp.route("/verify", methods=["GET"])
 def verify():
     code = clean(request.args.get("code"), 20).upper()
-    cert = None
+    cert, events = None, []
     if code:
-        cert = query("""SELECT ce.*, r.hours_confirmed, v.full_name, e.title, e.starts_at, o.name AS org_name
-            FROM certificates ce JOIN registrations r USING (registration_id) JOIN volunteers v USING (volunteer_id)
-            JOIN events e USING (event_id) JOIN organizations o ON o.org_id=e.org_id
-            WHERE ce.code=? AND r.status='attended'""", (code,), one=True)
-    return render_template("public/verify.html", code=code, cert=cert)
+        base = query("SELECT * FROM certificates WHERE code=?", (code,), one=True)
+        if base and base["type"] == "milestone":
+            v = query("SELECT full_name FROM volunteers WHERE volunteer_id=?", (base["volunteer_id"],), one=True)
+            if S.total_hours(base["volunteer_id"]) >= base["milestone_hours"]:
+                events = S.milestone_events(base["volunteer_id"], base["issued_at"])
+                cert = dict(base, full_name=v["full_name"], hours=sum(e["hours_confirmed"] for e in events),
+                            n_events=len(events), n_orgs=len({e["org_name"] for e in events}))
+        elif base:
+            cert = query("""SELECT ce.type, ce.code, ce.issued_at, r.hours_confirmed, r.is_team_lead, v.full_name,
+                e.title, e.starts_at, o.name AS org_name
+                FROM certificates ce JOIN registrations r ON r.registration_id=ce.registration_id
+                JOIN volunteers v ON v.volunteer_id=r.volunteer_id JOIN events e ON e.event_id=r.event_id
+                JOIN organizations o ON o.org_id=e.org_id
+                WHERE ce.code=? AND r.status='attended'""", (code,), one=True)
+    return render_template("public/verify.html", code=code, cert=cert, events=events)
+
+
+@bp.route("/report", methods=["POST"])
+@login_required
+def report():
+    event_id = form_int("event_id")
+    org_id = form_int("org_id")
+    back = url_for("public.event_detail", event_id=event_id) if event_id else \
+        url_for("public.organization_profile", org_id=org_id or 0)
+    try:
+        C.submit(g.user, event_id, None if event_id else org_id, request.form.get("reason"),
+                 clean(request.form.get("details"), 1000))
+        flash(_("flash_report_sent"), "success")
+    except S.RuleError as e:
+        flash(_(e.key, **e.params), "error")
+    return redirect(back)

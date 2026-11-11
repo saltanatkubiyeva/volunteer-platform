@@ -12,13 +12,13 @@
         {{ csrf_field() }}
         <div class="field"><label for="email">Email</label>
           <input class="input" type="email" id="email" name="email" value="{{ email }}" autocomplete="username" required autofocus></div>
-        <div class="field"><label for="password">{{ _('password') }}</label>
+        <div class="field"><div class="row between"><label for="password">{{ _('password') }}</label>
+          <a class="small" href="{{ url_for('auth.forgot_password') }}">{{ _('forgot_link') }}</a></div>
           <div style="position:relative"><input class="input" type="password" id="password" name="password" autocomplete="current-password" required>
             <button type="button" class="icon-btn" data-show-pw="password" aria-label="{{ _('show_password') }}" style="position:absolute;right:4px;top:2px;width:42px;height:42px;border:0;background:none">{{ icon('eye') }}</button></div></div>
         <button class="btn btn-primary btn-block btn-lg mt-3" type="submit">{{ icon('log-in') }} {{ _('login') }}</button>
       </form>
       <p class="center mt-2 small">{{ _('no_account') }} <a href="{{ url_for('auth.register') }}"><b>{{ _('register') }}</b></a></p>
-      <p class="center xs muted">{{ _('forgot_password_hint') }}</p>
       {% if config.get('DEMO', True) %}
       <div class="demo-accounts">
         <b>{{ _('demo_accounts') }}</b> <span class="muted">({{ _('password') }}: <span class="mono">Demeu2026!</span>)</span>

@@ -42,7 +42,13 @@ def dashboard():
                      (oid, now))
     to_mark = query(S.EVENT_SELECT + """ WHERE e.org_id=? AND e.status='published' AND e.starts_at <= ?
         ORDER BY e.starts_at DESC""", (oid, now))
-    return render_template("org/dashboard.html", pending=pending, upcoming=upcoming, to_mark=to_mark,
+    need_shifts = query("""SELECT e.event_id, e.title,
+            (SELECT COUNT(*) FROM registrations r WHERE r.event_id=e.event_id AND r.status='approved'
+             AND r.shift_id IS NULL AND r.all_shifts=0) AS n
+        FROM events e WHERE e.org_id=? AND e.status='published' AND e.registration_deadline <= ? AND e.starts_at > ?
+        AND EXISTS (SELECT 1 FROM event_shifts s WHERE s.event_id=e.event_id)""", (oid, now_str(), now_str()))
+    return render_template("org/dashboard.html", pending=pending, upcoming=upcoming, to_mark=to_mark, need_shifts=[x for x in need_shifts if x["n"]],
+                           rel=S.reliability(r["volunteer_id"] for r in pending),
                            stats=S.org_stats(oid),
                            n_pending=scalar("""SELECT COUNT(*) FROM registrations r JOIN events e USING (event_id)
                                WHERE e.org_id=? AND r.status='pending' AND e.status='published' AND e.starts_at > ?""",
@@ -71,6 +77,22 @@ def events():
 EVENT_FIELDS = ("title", "summary", "description", "address", "requirements", "provided")
 
 
+def _sync_shifts(event_id, rows):
+    keep = [r["id"] for r in rows if r["id"]]
+    existing = {x["shift_id"] for x in S.event_shifts(event_id)}
+    for sid in existing - set(keep):
+        execute("DELETE FROM event_shifts WHERE shift_id=?", (sid,))
+    execute("UPDATE event_shifts SET title = title || '~' || shift_id WHERE event_id=?", (event_id,))
+    for pos, r in enumerate(rows):
+        if r["id"] in existing:
+            execute("""UPDATE event_shifts SET title=?, starts_at=?, ends_at=?, max_volunteers=?, position=?
+                       WHERE shift_id=? AND event_id=?""",
+                    (r["title"], r["starts_at"], r["ends_at"], r["need"], pos, r["id"], event_id))
+        else:
+            execute("""INSERT INTO event_shifts (event_id, title, starts_at, ends_at, max_volunteers, position)
+                       VALUES (?,?,?,?,?,?)""", (event_id, r["title"], r["starts_at"], r["ends_at"], r["need"], pos))
+
+
 def _event_form(ev=None):
     oid = g.coordinator["org_id"]
     errors = Errors()
@@ -82,11 +104,15 @@ def _event_form(ev=None):
         f = dict(ev)
         for k in ("starts_at", "ends_at", "registration_deadline"):
             f[k] = (f[k] or "").replace(" ", "T")
+        f["shifts"] = [dict(id=str(x["shift_id"]), title=x["title"], start=x["starts_at"][11:16],
+                            end=x["ends_at"][11:16], need=str(x["max_volunteers"])) for x in S.event_shifts(ev["event_id"])]
+        f["has_shifts"] = bool(f["shifts"])
     else:
         start = (datetime.now() + timedelta(days=10)).replace(hour=10, minute=0)
         f = dict(starts_at=start.strftime("%Y-%m-%dT%H:%M"),
                  ends_at=(start + timedelta(hours=4)).strftime("%Y-%m-%dT%H:%M"),
-                 registration_deadline=(start - timedelta(days=1)).replace(hour=20).strftime("%Y-%m-%dT%H:%M"),
+                 registration_deadline=(start - timedelta(hours=24)).strftime("%Y-%m-%dT%H:%M"),
+                 shifts=[], has_shifts=False,
                  max_volunteers=20, min_age=14, requires_approval=1, city_id=g.org["city_id"],
                  coordinator_id=g.coordinator["coordinator_id"])
     if request.method == "POST":
@@ -99,6 +125,10 @@ def _event_form(ev=None):
         f["max_volunteers"], f["min_age"] = form_int("max_volunteers"), form_int("min_age")
         f["requires_approval"] = 1 if request.form.get("requires_approval") else 0
         publish = request.form.get("action") == "publish"
+        f["has_shifts"] = bool(request.form.get("has_shifts"))
+        f["shifts"] = [dict(id=i, title=clean(t, 80), start=a, end=b, need=n) for i, t, a, b, n in zip(
+            request.form.getlist("shift_id"), request.form.getlist("shift_title"), request.form.getlist("shift_start"),
+            request.form.getlist("shift_end"), request.form.getlist("shift_need")) if (t or "").strip() or a or b or n]
 
         if len(f["title"]) < 5:
             errors.add("title", "err_title")
@@ -135,6 +165,30 @@ def _event_form(ev=None):
             errors.add("max_volunteers", "err_capacity_taken")
         if f["min_age"] is None or not 14 <= f["min_age"] <= 99:
             errors.add("min_age", "err_min_age")
+        shift_rows = []
+        if f["has_shifts"] and st and en:
+            problem = None
+            if len(f["shifts"]) < 2:
+                problem = "err_shifts_min"
+            for row in f["shifts"]:
+                try:
+                    a = datetime.combine(st.date(), datetime.strptime(row["start"], "%H:%M").time())
+                    b = datetime.combine(st.date(), datetime.strptime(row["end"], "%H:%M").time())
+                    need = int(row["need"])
+                except (ValueError, TypeError):
+                    problem = problem or "err_shift_row"
+                    continue
+                if len(row["title"]) < 2 or b <= a or not 1 <= need <= 1000:
+                    problem = problem or "err_shift_row"
+                elif a < st or b > en:
+                    problem = problem or "err_shift_outside"
+                shift_rows.append(dict(id=int(row["id"]) if (row["id"] or "").isdigit() else None, title=row["title"],
+                                       starts_at=a.strftime("%Y-%m-%d %H:%M"), ends_at=b.strftime("%Y-%m-%d %H:%M"),
+                                       need=need))
+            if len({r["title"].lower() for r in shift_rows}) != len(shift_rows):
+                problem = problem or "err_shift_names"
+            if problem:
+                errors.add("shifts", problem)
         if publish and g.org["status"] != "verified":
             errors.add("form", "err_org_not_verified")
         cover = ev["cover_path"] if ev else None
@@ -159,7 +213,10 @@ def _event_form(ev=None):
                         direction_id, city_id, coordinator_id, starts_at, ends_at, registration_deadline, max_volunteers,
                         min_age, requires_approval, cover_path, org_id, status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                                      values + (g.coordinator["org_id"], status))
+                    _sync_shifts(new_id, shift_rows if f["has_shifts"] else [])
                     audit("event_created", "events", new_id, None, status)
+                    if status == "published":
+                        S.notify_subscribers(new_id)
                 flash(_("flash_event_published" if publish else "flash_event_draft"), "success")
                 return None, new_id
             status = "published" if (publish or ev["status"] == "published") else "draft"
@@ -168,8 +225,13 @@ def _event_form(ev=None):
                     direction_id=?, city_id=?, coordinator_id=?, starts_at=?, ends_at=?, registration_deadline=?,
                     max_volunteers=?, min_age=?, requires_approval=?, cover_path=?, status=?, updated_at=?
                     WHERE event_id=?""", values + (status, now_str(), ev["event_id"]))
+                _sync_shifts(ev["event_id"], shift_rows if f["has_shifts"] else [])
                 changed = (ev["starts_at"] != values[9] or ev["ends_at"] != values[10] or ev["address"] != values[3]
                            or ev["city_id"] != values[7])
+                if status == "published":
+                    S.promote_waitlist(ev["event_id"])
+                if status == "published" and ev["status"] == "draft":
+                    S.notify_subscribers(ev["event_id"])
                 if changed and ev["status"] == "published":
                     for r in query("""SELECT v.user_id FROM registrations r JOIN volunteers v USING (volunteer_id)
                                       WHERE r.event_id=? AND r.status IN ('pending','approved')""", (ev["event_id"],)):
@@ -204,19 +266,62 @@ def event_edit(event_id):
 def event_manage(event_id):
     ev = own_event(event_id)
     regs = query("""SELECT r.*, v.full_name, v.phone, v.birth_date, v.avatar_path, v.volunteer_id, u.email,
-        (SELECT COUNT(*) FROM registrations r2 WHERE r2.volunteer_id=v.volunteer_id AND r2.status='attended') AS done,
-        (SELECT COUNT(*) FROM registrations r2 WHERE r2.volunteer_id=v.volunteer_id AND r2.status='no_show') AS missed
+        sh.title AS shift_title, sh.starts_at AS shift_start, sh.ends_at AS shift_end, sh.position AS shift_pos,
+        ps.title AS pref_title, ps.starts_at AS pref_start, ps.ends_at AS pref_end
         FROM registrations r JOIN volunteers v USING (volunteer_id) JOIN users u ON u.user_id=v.user_id
+        LEFT JOIN event_shifts sh ON sh.shift_id = r.shift_id
+        LEFT JOIN event_shifts ps ON ps.shift_id = r.preferred_shift_id
         WHERE r.event_id=? ORDER BY r.applied_at""", (event_id,))
     groups = {k: [r for r in regs if r["status"] in v] for k, v in {
         "pending": ("pending",), "participants": ("approved", "attended", "no_show"),
         "closed": ("rejected", "cancelled")}.items()}
+    waiting = query("""SELECT w.*, v.full_name, v.avatar_path, v.birth_date FROM waitlist w
+        JOIN volunteers v USING (volunteer_id) WHERE w.event_id=? ORDER BY w.joined_at, w.waitlist_id""", (event_id,))
+    shifts, load, unassigned = S.shift_load(event_id)
+    if shifts:
+        groups["participants"].sort(key=lambda r: (-1 if r["all_shifts"] else (r["shift_pos"] if r["shift_id"] else 99),
+                                                   r["shift_start"] or "", r["full_name"]))
+    proposal = S.propose_shifts(event_id) if shifts and request.args.get("propose") else {}
     started = ev["starts_at"] <= now_str()
     tab = request.args.get("tab") or ("attendance" if started and ev["status"] == "published" else "pending")
     return render_template("org/event_manage.html", ev=ev, groups=groups, tab=tab, started=started,
+                           rel=S.reliability([r["volunteer_id"] for r in groups["pending"]]
+                                             + [w["volunteer_id"] for w in waiting]),
+                           waiting=waiting, shifts=shifts, load=load, unassigned=unassigned, proposal=proposal,
+                           candidates=S.lead_candidates(r["volunteer_id"] for r in groups["participants"]),
                            finished=ev["ends_at"] <= now_str(),
                            hours=duration_hours(ev["starts_at"], ev["ends_at"]),
                            unmarked=sum(1 for r in regs if r["status"] == "approved"))
+
+
+@bp.route("/events/<int:event_id>/shifts", methods=["POST"])
+@coordinator_only
+def shifts_save(event_id):
+    own_event(event_id)
+    choices = {}
+    for key, value in request.form.items():
+        if key.startswith("shift_") and key[6:].isdigit():
+            choices[int(key[6:])] = value
+    try:
+        n = S.save_shifts(g.coordinator, event_id, choices)
+        flash(_("flash_shifts_saved", n=n), "success")
+    except S.RuleError as e:
+        flash(_(e.key, **e.params), "error")
+    return redirect(url_for("org.event_manage", event_id=event_id, tab="participants"))
+
+
+@bp.route("/registrations/<int:registration_id>/team-lead", methods=["POST"])
+@coordinator_only
+def team_lead(registration_id):
+    on = request.form.get("on") == "1"
+    try:
+        S.set_team_lead(g.coordinator, registration_id, on)
+        flash(_("flash_team_lead_on" if on else "flash_team_lead_off"), "success")
+    except S.RuleError as e:
+        flash(_(e.key, **e.params), "error")
+    event_id = scalar("SELECT event_id FROM registrations WHERE registration_id=?", (registration_id,))
+    return redirect(url_for("org.event_manage", event_id=event_id, tab="participants") if event_id
+                    else url_for("org.events"))
 
 
 @bp.route("/registrations/<int:registration_id>/decide", methods=["POST"])
@@ -289,16 +394,24 @@ def cancel(event_id):
 @coordinator_only
 def export(event_id):
     ev = own_event(event_id)
-    rows = query("""SELECT v.full_name, v.phone, u.email, v.birth_date, r.status, r.applied_at, r.hours_confirmed
+    rows = query("""SELECT v.full_name, v.phone, u.email, v.birth_date, r.status, r.applied_at, r.hours_confirmed,
+        r.is_team_lead, r.all_shifts, r.prefers_all_shifts, sh.title AS shift_title, ps.title AS pref_title
         FROM registrations r JOIN volunteers v USING (volunteer_id) JOIN users u ON u.user_id=v.user_id
+        LEFT JOIN event_shifts sh ON sh.shift_id = r.shift_id LEFT JOIN event_shifts ps ON ps.shift_id = r.preferred_shift_id
         WHERE r.event_id=? AND r.status IN ('pending','approved','attended','no_show') ORDER BY v.full_name""", (event_id,))
     buf = io.StringIO()
     buf.write("﻿")
     w = csv.writer(buf)
-    w.writerow(["Full name", "Phone", "Email", "Birth date", "Status", "Applied at", "Confirmed hours"])
+    has_shifts = bool(S.event_shifts(event_id))
+    head = ["Full name", "Phone", "Email", "Birth date", "Status", "Applied at", "Confirmed hours", "Team leader"]
+    w.writerow(head + (["Preferred shift", "Shift"] if has_shifts else []))
     for r in rows:
-        w.writerow([r["full_name"], r["phone"], r["email"], r["birth_date"], r["status"], r["applied_at"],
-                    r["hours_confirmed"] or ""])
+        line = [r["full_name"], r["phone"], r["email"], r["birth_date"], r["status"], r["applied_at"],
+                r["hours_confirmed"] or "", "yes" if r["is_team_lead"] else ""]
+        if has_shifts:
+            line += ["All shifts" if r["prefers_all_shifts"] else (r["pref_title"] or "No preference"),
+                     "All shifts" if r["all_shifts"] else (r["shift_title"] or "Not assigned")]
+        w.writerow(line)
     audit("participants_exported", "events", event_id)
     return Response(buf.getvalue(), mimetype="text/csv",
                     headers={"Content-Disposition": f"attachment; filename=event_{ev['event_id']}_participants.csv"})
