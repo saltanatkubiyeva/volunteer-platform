@@ -49,7 +49,7 @@
         <form method="post" action="{{ url_for('volunteer.certificate_issue', registration_id=r.registration_id) }}">{{ csrf_field() }}
           <button class="btn btn-ghost btn-xs">{{ icon('award', 14) }} {{ _('get_certificate') }}</button></form>
       {% endif %}
-      {% if r.my_rating %}{{ rating(r.my_rating) }}{% endif %}
+      {% if r.my_rating %}{{ rating(r.my_rating) }}{% if r.my_review_status == 'pending' %} <span class="tag tone-butter">{{ _('review_on_check') }}</span>{% elif r.my_review_status == 'hidden' %} <span class="tag">{{ _('review_hidden_tag') }}</span>{% endif %}{% endif %}
     {% elif r.status in ('pending', 'approved') and tab == 'active' %}
       <form method="post" action="{{ url_for('volunteer.cancel', registration_id=r.registration_id) }}" data-confirm="{{ _('confirm_cancel_application') }}">
         {{ csrf_field() }}<button class="btn btn-danger btn-xs">{{ icon('x', 14) }} {{ _('cancel_application') }}</button></form>

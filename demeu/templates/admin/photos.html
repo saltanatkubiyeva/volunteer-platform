@@ -1,0 +1,48 @@
+{% extends "admin/_layout.html" %}
+{% from "partials/macros.html" import empty %}
+{% block title %}{{ _('adm_photos') }}{% endblock %}
+{% block admin %}
+<div class="cab-head"><div><h1>{{ _('adm_photos') }}</h1><p>{{ _('adm_photos_subtitle') }}</p></div></div>
+<nav class="tabs">
+  <a class="{{ 'on' if tab == 'queue' }}" href="?tab=queue">{{ _('photos_tab_queue') }} <span class="n">{{ counts.queue }}</span></a>
+  <a class="{{ 'on' if tab == 'hidden' }}" href="?tab=hidden">{{ _('photos_tab_hidden') }} <span class="n">{{ counts.hidden }}</span></a>
+  <a class="{{ 'on' if tab == 'all' }}" href="?tab=all">{{ _('photos_tab_all') }} <span class="n">{{ counts.all }}</span></a>
+</nav>
+<div class="alert alert-info mb-2">{{ icon('info') }}<div class="small">{{ _('photos_check_hint') }}</div></div>
+<div class="adm-photos">
+{% for p in rows %}
+  {% set name = p.file_path.split('/')[1] %}
+  <div class="card adm-photo {{ 'is-hidden' if p.status == 'hidden' }} {{ 'is-reported' if reports.get(p.photo_id) }}">
+    <a class="adm-photo-img" href="{{ url_for('media.event_photo', name=name) }}" target="_blank"><img src="{{ url_for('media.event_photo', name=name) }}" alt="" loading="lazy">
+      {% if p.status == 'hidden' %}<span class="tag tag-dark">{{ icon('eye', 12) }} {{ _('photo_hidden') }}</span>
+      {% elif reports.get(p.photo_id) %}<span class="tag urgent-tag">{{ icon('flag', 12) }} {{ _('photo_n_reports', n=reports[p.photo_id]|length) }}</span>
+      {% elif not p.reviewed_at %}<span class="tag tone-butter">{{ _('photo_new') }}</span>{% endif %}</a>
+    <div class="adm-photo-body">
+      <a class="adm-photo-title" href="{{ url_for('public.event_detail', event_id=p.ev_id) }}#photos">{{ p.title }}</a>
+      <div class="xs muted">{{ fmt_date(p.event_date) }} · {{ _('photo_by', name=p.author or '—', d=fmt_dt(p.created_at)) }}</div>
+      {% for r in reports.get(p.photo_id, []) %}
+        <div class="adm-photo-report"><b>{{ _('photo_reason_' ~ r.reason) }}</b> · <span class="muted">{{ r.email }}</span>{% if r.details %}<br><i>{{ r.details }}</i>{% endif %}</div>
+      {% endfor %}
+      {% if p.status == 'hidden' %}
+        <p class="xs muted mb-1 mt-1">{{ _('hide_reason_' ~ p.hide_reason) }} · {{ p.reviewer or '' }}{% if p.reviewed_at %}, {{ fmt_dt(p.reviewed_at) }}{% endif %}</p>
+        <form method="post">{{ csrf_field() }}<input type="hidden" name="photo_id" value="{{ p.photo_id }}">
+          <button class="btn btn-ghost btn-xs" name="action" value="show">{{ icon('eye', 14) }} {{ _('photo_show') }}</button></form>
+      {% else %}
+        <form method="post" class="adm-photo-actions">{{ csrf_field() }}<input type="hidden" name="photo_id" value="{{ p.photo_id }}">
+          <select class="select" name="reason" aria-label="{{ _('hide_reason') }}">
+            {% for r in reasons %}<option value="{{ r }}">{{ _('hide_reason_' ~ r) }}</option>{% endfor %}
+          </select>
+          <div class="row tight">
+            <button class="btn btn-danger btn-xs grow" name="action" value="hide">{{ icon('x', 14) }} {{ _('photo_hide') }}</button>
+            {% if not p.reviewed_at or reports.get(p.photo_id) %}<button class="btn btn-primary btn-xs grow" name="action" value="keep">{{ icon('check', 14) }} {{ _('photo_keep') }}</button>{% endif %}
+          </div>
+        </form>
+        {% if p.reviewed_at and not reports.get(p.photo_id) %}<p class="xs muted mb-0 mt-1">{{ _('photo_checked') }} · {{ p.reviewer or '' }}</p>{% endif %}
+      {% endif %}
+    </div>
+  </div>
+{% else %}
+  <div style="grid-column:1/-1">{{ empty('image', _('queue_empty')) }}</div>
+{% endfor %}
+</div>
+{% endblock %}

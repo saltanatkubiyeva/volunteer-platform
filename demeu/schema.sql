@@ -155,7 +155,13 @@ CREATE TABLE feedback (
     rating          INTEGER NOT NULL CHECK (rating BETWEEN 1 AND 5),
     comment         TEXT,
     is_hidden       INTEGER NOT NULL DEFAULT 0 CHECK (is_hidden IN (0,1)),
-    created_at      TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+    status          TEXT NOT NULL DEFAULT 'published' CHECK (status IN ('published','pending','hidden')),
+    flagged_words   TEXT,
+    hide_reason     TEXT,
+    reviewed_by     INTEGER REFERENCES users(user_id) ON DELETE SET NULL,
+    reviewed_at     TEXT,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+    CHECK ((status = 'published') = (is_hidden = 0))
 );
 
 CREATE TABLE certificates (
@@ -351,6 +357,60 @@ FROM volunteers v
 LEFT JOIN registrations r ON r.volunteer_id = v.volunteer_id
 GROUP BY v.volunteer_id;
 
+CREATE TABLE IF NOT EXISTS announcements (
+    announcement_id INTEGER PRIMARY KEY,
+    text_en         TEXT NOT NULL CHECK (length(trim(text_en)) >= 5),
+    text_ru         TEXT NOT NULL CHECK (length(trim(text_ru)) >= 5),
+    text_kk         TEXT NOT NULL CHECK (length(trim(text_kk)) >= 5),
+    tone            TEXT NOT NULL DEFAULT 'info' CHECK (tone IN ('info','warning')),
+    audience        TEXT NOT NULL DEFAULT 'all' CHECK (audience IN ('all','volunteers','coordinators','city')),
+    city_id         INTEGER REFERENCES cities(city_id) ON DELETE CASCADE,
+    link            TEXT,
+    starts_at       TEXT NOT NULL,
+    ends_at         TEXT NOT NULL,
+    notified        INTEGER NOT NULL DEFAULT 0 CHECK (notified IN (0,1)),
+    created_by      INTEGER REFERENCES users(user_id) ON DELETE SET NULL,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+    CHECK (ends_at > starts_at),
+    CHECK ((audience = 'city') = (city_id IS NOT NULL))
+);
+CREATE INDEX IF NOT EXISTS idx_announcements_dates ON announcements(starts_at, ends_at);
+
+CREATE TABLE IF NOT EXISTS announcement_hidden (
+    user_id         INTEGER NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    announcement_id INTEGER NOT NULL REFERENCES announcements(announcement_id) ON DELETE CASCADE,
+    hidden_at       TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+    PRIMARY KEY (user_id, announcement_id)
+);
+
+CREATE TABLE IF NOT EXISTS event_photos (
+    photo_id     INTEGER PRIMARY KEY,
+    event_id     INTEGER NOT NULL REFERENCES events(event_id) ON DELETE CASCADE,
+    user_id      INTEGER REFERENCES users(user_id) ON DELETE SET NULL,
+    file_path    TEXT NOT NULL UNIQUE,
+    status       TEXT NOT NULL DEFAULT 'visible' CHECK (status IN ('visible','hidden')),
+    hide_reason  TEXT CHECK (hide_reason IN ('children','ads','unrelated','quality','other')),
+    reviewed_by  INTEGER REFERENCES users(user_id) ON DELETE SET NULL,
+    reviewed_at  TEXT,
+    created_at   TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+    CHECK (status = 'visible' OR (hide_reason IS NOT NULL AND reviewed_at IS NOT NULL))
+);
+CREATE INDEX IF NOT EXISTS idx_photos_event ON event_photos(event_id, status);
+CREATE INDEX IF NOT EXISTS idx_photos_review ON event_photos(reviewed_at);
+
+CREATE TABLE IF NOT EXISTS photo_reports (
+    report_id   INTEGER PRIMARY KEY,
+    photo_id    INTEGER NOT NULL REFERENCES event_photos(photo_id) ON DELETE CASCADE,
+    reporter_id INTEGER NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    reason      TEXT NOT NULL CHECK (reason IN ('fake','unsafe','inappropriate','fraud','other')),
+    details     TEXT,
+    status      TEXT NOT NULL DEFAULT 'new' CHECK (status IN ('new','resolved','dismissed')),
+    created_at  TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+    handled_at  TEXT,
+    UNIQUE (photo_id, reporter_id),
+    CHECK (status = 'new' OR handled_at IS NOT NULL)
+);
+
 CREATE INDEX IF NOT EXISTS idx_events_deleted ON events(deleted_at);
 CREATE INDEX IF NOT EXISTS idx_orgs_deleted ON organizations(deleted_at);
 
@@ -363,6 +423,45 @@ UNION ALL
 SELECT 'organization', o.org_id, o.name, o.name, o.org_id, o.status, o.deleted_at, o.deleted_by
 FROM organizations o
 WHERE o.deleted_at IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS banned_words (
+    word_id    INTEGER PRIMARY KEY,
+    word       TEXT NOT NULL UNIQUE COLLATE NOCASE CHECK (length(trim(word)) >= 3),
+    created_by INTEGER REFERENCES users(user_id) ON DELETE SET NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+);
+
+CREATE TABLE IF NOT EXISTS review_reports (
+    report_id   INTEGER PRIMARY KEY,
+    feedback_id INTEGER NOT NULL REFERENCES feedback(feedback_id) ON DELETE CASCADE,
+    reporter_id INTEGER NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    reason      TEXT NOT NULL CHECK (reason IN ('offensive','spam','personal','fake','other')),
+    details     TEXT,
+    status      TEXT NOT NULL DEFAULT 'new' CHECK (status IN ('new','resolved','dismissed')),
+    created_at  TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+    handled_at  TEXT,
+    UNIQUE (feedback_id, reporter_id),
+    CHECK (status = 'new' OR handled_at IS NOT NULL)
+);
+CREATE INDEX IF NOT EXISTS idx_review_reports ON review_reports(feedback_id, status);
+CREATE INDEX IF NOT EXISTS idx_feedback_status ON feedback(status);
+
+CREATE TABLE IF NOT EXISTS blocks (
+    block_id   INTEGER PRIMARY KEY,
+    user_id    INTEGER REFERENCES users(user_id) ON DELETE CASCADE,
+    org_id     INTEGER REFERENCES organizations(org_id) ON DELETE CASCADE,
+    reason     TEXT NOT NULL CHECK (length(trim(reason)) >= 5),
+    starts_at  TEXT NOT NULL,
+    ends_at    TEXT,
+    blocked_by INTEGER REFERENCES users(user_id) ON DELETE SET NULL,
+    lifted_at  TEXT,
+    lifted_by  INTEGER REFERENCES users(user_id) ON DELETE SET NULL,
+    CHECK ((user_id IS NULL) <> (org_id IS NULL)),
+    CHECK (ends_at IS NULL OR ends_at > starts_at),
+    CHECK (lifted_by IS NULL OR lifted_at IS NOT NULL)
+);
+CREATE INDEX IF NOT EXISTS idx_blocks_user ON blocks(user_id, lifted_at, ends_at);
+CREATE INDEX IF NOT EXISTS idx_blocks_org ON blocks(org_id, lifted_at);
 
 CREATE TABLE IF NOT EXISTS friendships (
     friendship_id INTEGER PRIMARY KEY,

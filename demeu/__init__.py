@@ -7,7 +7,7 @@ from flask import Flask, g, render_template, request, session
 from . import core
 from .db import close_db, upgrade_db
 from .icons import icon, logo_mark
-from . import photos
+from . import announcements, photos
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
@@ -105,7 +105,8 @@ def create_app(test_config=None):
 
     @app.context_processor
     def inject():
-        return dict(lang=g.get("lang", "en"), unread=core.unread_count())
+        return dict(lang=g.get("lang", "en"), unread=core.unread_count(),
+                    announcements=announcements.visible_for_current_user() if request.endpoint != "static" else [])
 
     app.jinja_env.filters["nl2br"] = core.nl2br
     app.jinja_env.filters["phone"] = core.fmt_phone

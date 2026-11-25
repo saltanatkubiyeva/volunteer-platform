@@ -17,6 +17,24 @@
 <body class="{% block body_class %}{% endblock %}">
 <a class="skip" href="#main">{{ _('skip_to_content') }}</a>
 {% set ep = request.endpoint or '' %}
+{% if announcements %}
+<div class="ann-stack" role="region" aria-label="{{ _('announcements') }}">
+  {% for a in announcements %}
+  <div class="ann ann-{{ a.tone }}" data-ann>
+    <div class="wrap ann-inner">
+      <span class="ann-ic">{{ icon('alert' if a.tone == 'warning' else 'megaphone', 17) }}</span>
+      <p class="ann-text">{{ loc(a, 'text') }}{% if a.link %} <a href="{{ a.link }}" {% if a.link.startswith('http') %}target="_blank" rel="noopener"{% endif %}>{{ _('ann_more') }} →</a>{% endif %}</p>
+      {% if a.tone != 'warning' %}
+      <form method="post" action="{{ url_for('public.announcement_hide', announcement_id=a.announcement_id) }}" data-ann-hide>
+        {{ csrf_field() }}<input type="hidden" name="next" value="{{ request.full_path }}">
+        <button class="ann-x" type="submit" aria-label="{{ _('close') }}" title="{{ _('close') }}">{{ icon('x', 16) }}</button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
 <header class="site-header">
   <div class="wrap header-inner">
     <a class="logo" href="{{ url_for('public.home') }}" aria-label="DEMEU">
@@ -133,7 +151,7 @@
       </div>
     </div>
     <div class="footer-bottom">
-      <span>© {{ 2026 }} DEMEU · {{ _('footer_rights') }} · <span class="photo-credit">{{ _('photo_credit') }}</span></span>
+      <span>© {{ 2026 }} DEMEU · <span class="photo-credit">{{ _('photo_credit') }}</span></span>
       <span>support@demeu.kz · +7 7172 000 111</span>
     </div>
   </div>

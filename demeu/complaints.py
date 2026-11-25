@@ -1,5 +1,6 @@
 from flask import url_for
 
+from . import blocks as BL
 from . import services as S
 from .core import audit, notify, now_str
 from .db import execute, query, scalar, transaction
@@ -76,12 +77,14 @@ def decide(admin, complaint_id, decision, action, note):
         if action == "org_suspended":
             execute("UPDATE organizations SET status='suspended', status_comment=? WHERE org_id=?", (note, t["org_id"]))
             audit("org_suspended", "organizations", t["org_id"], t.get("status"), "suspended")
+            BL.suspend_org(admin["user_id"], t["org_id"], note)
             for (uid,) in query("SELECT user_id FROM coordinators WHERE org_id=?", (t["org_id"],)):
                 notify(uid, "n_org_suspended", url_for("org.dashboard"), reason=note)
         elif action == "account_blocked":
             for u in blockable_users(t)[:1]:
-                execute("UPDATE users SET is_active=0 WHERE user_id=?", (u["user_id"],))
-                audit("account_blocked", "users", u["user_id"], 1, 0)
+                if not BL.active_block(u["user_id"]):
+                    user = query("SELECT * FROM users WHERE user_id=?", (u["user_id"],), one=True)
+                    BL.add_user_block(admin["user_id"], user, None, note)
         col, val = ("event_id", c["event_id"]) if c["event_id"] else ("org_id", c["org_id"])
         same = query(f"SELECT complaint_id, reporter_id FROM complaints WHERE {col}=? AND status='new'", (val,))
         for s in same:

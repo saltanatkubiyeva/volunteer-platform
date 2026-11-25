@@ -405,7 +405,9 @@ class FlowTest(unittest.TestCase):
         self.assertEqual(self.sql("SELECT status FROM complaints WHERE complaint_id=?", (cid,))[0][0], "new")
         self.post(admin, f"/admin/complaints/{cid}", {"decision": "resolved", "action": "account_blocked",
                                                       "note": "Advertising after a warning."})
-        self.assertEqual(self.sql("SELECT is_active FROM users WHERE user_id=?", (owner,))[0][0], 0)
+        self.assertTrue(self.sql("""SELECT 1 FROM blocks WHERE user_id=? AND ends_at IS NULL AND lifted_at IS NULL""",
+                                 (owner,)))
+
     def test_required_documents_flow(self):
         eid = self.sql("SELECT event_id FROM events WHERE title='Food Parcel Delivery to Families'")[0][0]
         vol = self.client("volunteer@demeu.kz")
@@ -456,6 +458,67 @@ class FlowTest(unittest.TestCase):
 
     def _jpeg(self):
         return io.BytesIO(b"\xff\xd8\xff\xe0" + b"\x00" * 200 + b"\xff\xd9")
+
+    def test_photo_report_upload_rules_and_moderation(self):
+        ev = self.sql("""SELECT e.event_id FROM events e JOIN registrations r USING (event_id)
+                         WHERE r.volunteer_id=1024 AND r.status='attended' AND e.status='completed'
+                         ORDER BY e.starts_at DESC LIMIT 1""")[0][0]
+        vol = self.client("volunteer@demeu.kz")
+        before = self.sql("SELECT COUNT(*) FROM event_photos WHERE event_id=?", (ev,))[0][0]
+        self.post(vol, f"/events/{ev}/photos", {"photos": [(self._jpeg(), "a.jpg"), (self._jpeg(), "b.jpg")]},
+                  content_type="multipart/form-data")
+        self.assertEqual(self.sql("SELECT COUNT(*) FROM event_photos WHERE event_id=?", (ev,))[0][0], before + 2)
+        self.post(vol, f"/events/{ev}/photos", {"photos": [(io.BytesIO(b"not an image"), "x.jpg")]},
+                  content_type="multipart/form-data")
+        self.assertEqual(self.sql("SELECT COUNT(*) FROM event_photos WHERE event_id=?", (ev,))[0][0], before + 2)
+        uid = self.sql("SELECT user_id FROM volunteers WHERE volunteer_id=1024")[0][0]
+        have = self.sql("SELECT COUNT(*) FROM event_photos WHERE event_id=? AND user_id=?", (ev, uid))[0][0]
+        self.post(vol, f"/events/{ev}/photos", {"photos": [(self._jpeg(), f"{i}.jpg") for i in range(11 - have)]},
+                  content_type="multipart/form-data")
+        self.assertEqual(self.sql("SELECT COUNT(*) FROM event_photos WHERE event_id=? AND user_id=?", (ev, uid))[0][0], have)
+        future = self.sql("""SELECT event_id FROM events WHERE status='published' AND starts_at > datetime('now','localtime')
+                             LIMIT 1""")[0][0]
+        self.post(vol, f"/events/{future}/photos", {"photos": [(self._jpeg(), "c.jpg")]}, content_type="multipart/form-data")
+        self.assertFalse(self.sql("SELECT 1 FROM event_photos WHERE event_id=?", (future,)))
+        photo = self.sql("SELECT photo_id, file_path FROM event_photos WHERE event_id=? AND user_id=? ORDER BY photo_id DESC",
+                         (ev, uid))[0]
+        name = photo["file_path"].split("/")[1]
+        anon = self.app.test_client()
+        self.assertEqual(anon.get(f"/media/photos/{name}").status_code, 200)
+        other = self.sql("""SELECT u.email FROM registrations r JOIN volunteers v USING (volunteer_id) JOIN users u USING (user_id)
+                            WHERE r.event_id=? AND v.volunteer_id<>1024 AND u.is_active=1 LIMIT 1""", (ev,))[0][0]
+        self.post(self.client(other), f"/photos/{photo['photo_id']}/report", {"reason": "unsafe"})
+        self.assertTrue(self.sql("SELECT 1 FROM photo_reports WHERE photo_id=? AND status='new'", (photo["photo_id"],)))
+        admin = self.client("admin@demeu.kz")
+        self.post(admin, "/admin/photos", {"photo_id": photo["photo_id"], "action": "hide", "reason": "children"})
+        self.assertEqual(self.sql("SELECT status FROM event_photos WHERE photo_id=?", (photo["photo_id"],))[0][0], "hidden")
+        self.assertFalse(self.sql("SELECT 1 FROM photo_reports WHERE photo_id=? AND status='new'", (photo["photo_id"],)))
+        self.assertEqual(anon.get(f"/media/photos/{name}").status_code, 404)
+        self.assertNotIn(name, anon.get(f"/events/{ev}").get_data(as_text=True))
+        for (pid,) in self.sql("SELECT photo_id FROM event_photos WHERE event_id=? AND user_id=?", (ev, uid)):
+            self.post(vol, f"/photos/{pid}/delete")
+        self.assertFalse(self.sql("SELECT 1 FROM event_photos WHERE event_id=? AND user_id=?", (ev, uid)))
+
+    def test_announcement_audience_dismiss_and_notify(self):
+        admin = self.client("admin@demeu.kz")
+        now = datetime.now()
+        before = self.sql("SELECT COUNT(*) FROM notifications WHERE kind='n_announcement'")[0][0]
+        self.post(admin, "/admin/announcements", {
+            "text_en": "Coordinators test banner", "text_ru": "Тестовый баннер координаторам",
+            "text_kk": "Үйлестірушілерге тест баннер", "tone": "info", "audience": "coordinators",
+            "starts_at": (now - timedelta(minutes=5)).strftime("%Y-%m-%dT%H:%M"),
+            "ends_at": (now + timedelta(days=1)).strftime("%Y-%m-%dT%H:%M"), "notify": "1"})
+        coords = self.sql("SELECT COUNT(*) FROM users WHERE role='coordinator' AND is_active=1")[0][0]
+        self.assertEqual(self.sql("SELECT COUNT(*) FROM notifications WHERE kind='n_announcement'")[0][0], before + coords)
+        self.assertNotIn("Coordinators test banner", self.client("volunteer@demeu.kz").get("/").get_data(as_text=True))
+        org = self.client("org@demeu.kz")
+        self.assertIn("Coordinators test banner", org.get("/").get_data(as_text=True))
+        aid = self.sql("SELECT announcement_id FROM announcements WHERE text_en='Coordinators test banner'")[0][0]
+        self.post(org, f"/announcements/{aid}/hide")
+        self.assertNotIn("Coordinators test banner", org.get("/").get_data(as_text=True))
+        self.assertNotIn("Coordinators test banner", self.client("org@demeu.kz").get("/").get_data(as_text=True))
+        self.post(admin, "/admin/announcements", {"end_id": aid})
+        self.assertNotIn("Coordinators test banner", self.client("org@demeu.kz").get("/").get_data(as_text=True))
 
     def test_download_my_data(self):
         r = self.client("volunteer@demeu.kz").get("/settings/my-data.json")
@@ -538,6 +601,72 @@ class FlowTest(unittest.TestCase):
         self.post(admin, "/admin/trash", {"kind": "organization", "item_id": org_id, "action": "forever"})
         self.assertFalse(self.sql("SELECT 1 FROM organizations WHERE org_id=?", (org_id,)))
         self.assertFalse(self.sql("SELECT 1 FROM users WHERE email=?", (email,)))
+
+    def test_review_moderation_banned_words_and_report(self):
+        reg = self.sql("""SELECT r.registration_id, e.event_id FROM registrations r JOIN events e USING (event_id)
+                          LEFT JOIN feedback f USING (registration_id)
+                          WHERE r.volunteer_id=1024 AND r.status='attended' AND f.feedback_id IS NULL LIMIT 2""")
+        vol = self.client("volunteer@demeu.kz")
+        self.post(vol, f"/me/applications/{reg[0]['registration_id']}/feedback",
+                  {"rating": 2, "comment": "The coordinator was a real IDIOT, nobody helped us."})
+        f = self.sql("SELECT * FROM feedback WHERE registration_id=?", (reg[0]["registration_id"],))[0]
+        self.assertEqual((f["status"], f["is_hidden"], f["flagged_words"]), ("pending", 1, "idiot"))
+        page = self.app.test_client().get(f"/events/{reg[0]['event_id']}").get_data(as_text=True)
+        self.assertNotIn("real IDIOT", page)
+        self.post(vol, f"/me/applications/{reg[1]['registration_id']}/feedback", {"rating": 5, "comment": "Lovely team and good tea."})
+        ok = self.sql("SELECT * FROM feedback WHERE registration_id=?", (reg[1]["registration_id"],))[0]
+        self.assertEqual(ok["status"], "published")
+        admin = self.client("admin@demeu.kz")
+        self.post(admin, "/admin/reviews", {"feedback_id": f["feedback_id"], "action": "publish"})
+        self.assertEqual(self.sql("SELECT status, is_hidden FROM feedback WHERE feedback_id=?", (f["feedback_id"],))[0][:],
+                         ("published", 0))
+        other = self.sql("""SELECT u.email FROM registrations r JOIN volunteers v USING (volunteer_id) JOIN users u USING (user_id)
+                            WHERE r.event_id=? AND r.volunteer_id<>1024 AND u.is_active=1 LIMIT 1""", (reg[1]["event_id"],))[0][0]
+        self.post(self.client(other), f"/reviews/{ok['feedback_id']}/report", {"reason": "spam"})
+        self.assertTrue(self.sql("SELECT 1 FROM review_reports WHERE feedback_id=? AND status='new'", (ok["feedback_id"],)))
+        self.post(vol, f"/reviews/{ok['feedback_id']}/report", {"reason": "spam"})
+        self.assertEqual(self.sql("SELECT COUNT(*) FROM review_reports WHERE feedback_id=?", (ok["feedback_id"],))[0][0], 1)
+        self.post(admin, "/admin/reviews", {"feedback_id": ok["feedback_id"], "action": "hide", "reason": "spam"})
+        self.assertEqual(self.sql("SELECT status FROM feedback WHERE feedback_id=?", (ok["feedback_id"],))[0][0], "hidden")
+        self.assertFalse(self.sql("SELECT 1 FROM review_reports WHERE feedback_id=? AND status='new'", (ok["feedback_id"],)))
+        self.post(admin, "/admin/reviews?tab=words", {"word_add": "Spamword"})
+        self.assertTrue(self.sql("SELECT 1 FROM banned_words WHERE word='spamword'"))
+
+    def test_block_user_login_and_unblock(self):
+        admin = self.client("admin@demeu.kz")
+        self.post(admin, "/admin/blocks", {"email": "minor@demeu.kz", "duration": "7", "reason": "short"})
+        self.assertFalse(self.sql("SELECT 1 FROM blocks b JOIN users u USING (user_id) WHERE u.email='minor@demeu.kz'"))
+        minor = self.client("minor@demeu.kz")
+        self.post(admin, "/admin/blocks", {"email": "minor@demeu.kz", "duration": "7",
+                                           "reason": "Did not come to three events in a row."})
+        b = self.sql("SELECT b.* FROM blocks b JOIN users u USING (user_id) WHERE u.email='minor@demeu.kz'")[0]
+        self.assertTrue(b["ends_at"])
+        self.assertEqual(minor.get("/me/").status_code, 302)
+        r = self.post(self.app.test_client(), "/login", {"email": "minor@demeu.kz", "password": PW}, follow_redirects=True)
+        self.assertIn("Did not come to three events in a row.", r.get_data(as_text=True))
+        self.assertTrue(self.sql("SELECT 1 FROM outbox WHERE to_email='minor@demeu.kz' AND subject LIKE '%blocked%'"))
+        self.post(admin, "/admin/blocks", {"email": "admin@demeu.kz", "duration": "forever", "reason": "Testing a self block."})
+        self.assertFalse(self.sql("SELECT 1 FROM blocks b JOIN users u USING (user_id) WHERE u.email='admin@demeu.kz'"))
+        self.post(admin, "/admin/blocks", {"unblock": b["block_id"]})
+        r = self.post(self.app.test_client(), "/login", {"email": "minor@demeu.kz", "password": PW})
+        self.assertEqual(r.status_code, 302)
+        con = sqlite3.connect(self.db)
+        uid = self.sql("SELECT user_id FROM users WHERE email='minor@demeu.kz'")[0][0]
+        con.execute("""INSERT INTO blocks (user_id, reason, starts_at, ends_at) VALUES
+                       (?, 'Old block that ended.', datetime('now','localtime','-10 days'), datetime('now','localtime','-1 days'))""", (uid,))
+        con.commit(); con.close()
+        r = self.post(self.app.test_client(), "/login", {"email": "minor@demeu.kz", "password": PW})
+        self.assertEqual(r.status_code, 302)
+
+    def test_suspend_org_hides_events_and_keeps_history(self):
+        admin = self.client("admin@demeu.kz")
+        ev = self.sql("SELECT event_id FROM events WHERE org_id=2 AND status='published' LIMIT 1")[0][0]
+        self.post(admin, "/admin/organizations/2/review", {"action": "suspend", "comment": "Complaints about fake events."})
+        self.assertEqual(self.app.test_client().get(f"/events/{ev}").status_code, 404)
+        self.assertTrue(self.sql("SELECT 1 FROM blocks WHERE org_id=2 AND lifted_at IS NULL"))
+        self.post(admin, "/admin/organizations/2/review", {"action": "restore"})
+        self.assertFalse(self.sql("SELECT 1 FROM blocks WHERE org_id=2 AND lifted_at IS NULL"))
+        self.assertEqual(self.app.test_client().get(f"/events/{ev}").status_code, 200)
 
     def test_org_report_summary(self):
         org = self.client("org@demeu.kz")

@@ -166,6 +166,10 @@ def load_user():
     if not user or not user["is_active"]:
         session.clear()
         return
+    if query("""SELECT 1 FROM blocks WHERE user_id=? AND lifted_at IS NULL AND (ends_at IS NULL OR ends_at > ?)""",
+             (uid, now_str()), one=True):
+        session.clear()
+        return
     g.user = user
     if user["role"] == "volunteer":
         g.volunteer = query("SELECT * FROM volunteers WHERE user_id = ?", (uid,), one=True)
@@ -266,7 +270,70 @@ def notification_text(n):
         params = json.loads(n["params"] or "{}")
     except ValueError:
         params = {}
+    if n["kind"] == "n_announcement":
+        return params.get(g.get("lang", "en")) or params.get("en", "")
+    if params.get("skill"):
+        params["skill"] = _("skill_" + params["skill"])
+    if params.get("reason") and n["kind"] == "n_photo_hidden":
+        params["reason"] = _("hide_reason_" + params["reason"])
+    if params.get("reason") and n["kind"] == "n_review_hidden":
+        params["reason"] = _("rreason_" + params["reason"])
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(params.get("date") or "")):
+        params["date"] = fmt_date(params["date"], True, False)
     return _(n["kind"], **params)
+
+
+NOTIF_STYLES = [
+    ("n_urgent_call", "alert", "urgent"),
+    ("n_announcement", "megaphone", "new"),
+    ("n_friend_milestone", "award", "good"),
+    ("n_kudos", "heart", "good"),
+    ("n_friend", "users", "new"),
+    ("n_deed_done", "heart", "good"),
+    ("n_deed_rejected", "heart", "bad"),
+    ("n_deed", "heart", "new"),
+    ("n_admin_deed", "heart", "new"),
+    ("n_review_hidden", "star", "bad"),
+    ("n_review_published", "star", "good"),
+    ("n_admin_review", "star", "new"),
+    ("n_unblocked", "check", "good"),
+    ("n_org_paused", "ban", "bad"),
+    ("n_feedback", "heart", "good"),
+    ("n_photo_hidden", "image", "bad"),
+    ("n_admin_photo_report", "image", "new"),
+    ("n_new_for_you", "sparkles", "new"),
+    ("n_milestone", "award", "good"),
+    ("n_hours_confirmed", "clock", "good"),
+    ("n_attended", "clipboard-check", "good"),
+    ("n_document_approved", "file-text", "good"),
+    ("n_document_rejected", "file-text", "bad"),
+    ("n_consent_approved", "file-text", "good"),
+    ("n_consent_rejected", "file-text", "bad"),
+    ("n_team_lead", "star", "new"),
+    ("n_team_added", "users", "new"),
+    ("n_shift", "calendar", "new"),
+    ("n_waitlist_promoted", "check-circle", "good"),
+    ("n_waitlist_dropped", "hourglass", "bad"),
+    ("n_in_waitlist", "hourglass", "new"),
+    ("n_approved", "check-circle", "good"),
+    ("n_org_verified", "shield-check", "good"),
+    ("n_org_", "building", "bad"),
+    ("n_rejected", "x-circle", "bad"),
+    ("n_missed", "x-circle", "bad"),
+    ("n_event_cancelled", "ban", "bad"),
+    ("n_coord_cancelled", "ban", "bad"),
+    ("n_event_changed", "pencil", "new"),
+    ("n_welcome", "smile", "new"),
+    ("n_password", "lock", "new"),
+    ("n_report", "flag", "new"),
+    ("n_admin_new_complaint", "flag", "new"),
+    ("n_admin_new_message", "mail", "new"),
+    ("n_admin_new_document", "file-text", "new"),
+    ("n_admin_new_consent", "file-text", "new"),
+    ("n_admin_new_org", "building", "new"),
+    ("n_coord_", "user-plus", "new"),
+    ("n_applied", "send", "new"),
+]
 
 
 def notification_style(kind):

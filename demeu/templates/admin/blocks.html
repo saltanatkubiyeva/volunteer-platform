@@ -1,0 +1,47 @@
+{% extends "admin/_layout.html" %}
+{% from "partials/macros.html" import empty, field_error %}
+{% block title %}{{ _('adm_blocks') }}{% endblock %}
+{% block admin %}
+<div class="cab-head"><div><h1>{{ _('adm_blocks') }}</h1><p>{{ _('adm_blocks_subtitle') }}</p></div></div>
+<form class="card card-pad mb-3 block-form" method="post" novalidate>
+  {{ csrf_field() }}
+  <h3>{{ _('block_new') }}</h3>
+  <div class="form-grid">
+    <div class="field"><label class="req" for="b-email">{{ _('col_email') }}</label>
+      <input class="input" id="b-email" name="email" type="email" value="{{ form.email }}" placeholder="name@example.kz" required></div>
+    <div class="field"><label>{{ _('block_duration') }}</label>
+      <div class="row tight">{% for d in ['7', '30', 'forever'] %}<label class="check-chip"><input type="radio" name="duration" value="{{ d }}" {{ 'checked' if form.duration == d }}><span>{{ _('block_d_' ~ d) }}</span></label>{% endfor %}</div></div>
+    <div class="field span-2"><label class="req" for="b-reason">{{ _('block_reason') }}</label>
+      <textarea class="textarea" id="b-reason" name="reason" rows="2" maxlength="500" style="min-height:64px" placeholder="{{ _('block_reason_placeholder') }}">{{ form.reason }}</textarea>
+      <div class="xs muted mt-1">{{ _('block_reason_hint') }}</div></div>
+  </div>
+  <button class="btn btn-danger mt-1">{{ icon('ban', 16) }} {{ _('block_btn') }}</button>
+</form>
+<nav class="tabs">
+  <a class="{{ 'on' if tab == 'active' }}" href="?tab=active">{{ _('blocks_tab_active') }} <span class="n">{{ counts.active }}</span></a>
+  <a class="{{ 'on' if tab == 'orgs' }}" href="?tab=orgs">{{ _('blocks_tab_orgs') }} <span class="n">{{ counts.orgs }}</span></a>
+  <a class="{{ 'on' if tab == 'history' }}" href="?tab=history">{{ _('blocks_tab_history') }} <span class="n">{{ counts.history }}</span></a>
+</nav>
+{% if rows %}
+<div class="table-wrap"><table class="table">
+  <thead><tr><th>{{ _('block_col_who') }}</th><th>{{ _('block_reason') }}</th><th>{{ _('block_col_period') }}</th>{% if tab == 'history' %}<th>{{ _('block_col_state') }}</th>{% endif %}<th></th></tr></thead>
+  <tbody>
+  {% for b in rows %}{% set st = state(b) %}
+  <tr>
+    <td>{% if b.org_id %}<b>{{ b.org_name }}</b><div class="xs muted">{{ _('trash_kind_organization') }}</div>
+        {% else %}<b>{{ b.person or b.email }}</b><div class="xs muted">{{ b.email }} · {{ _('role_' ~ b.role) }}</div>{% endif %}</td>
+    <td class="small" style="max-width:300px">{{ b.reason }}<div class="xs muted">{{ b.blocked_by_email or '' }}</div></td>
+    <td class="small nowrap">{{ fmt_dt(b.starts_at) }}<div class="xs muted">{% if b.ends_at %}{{ _('block_until', d=fmt_dt(b.ends_at)) }}{% elif b.org_id %}{{ _('block_until_restored') }}{% else %}{{ _('block_d_forever') }}{% endif %}</div></td>
+    {% if tab == 'history' %}<td><span class="status st-{{ 'rejected' if st == 'active' else 'verified' }}">{{ _('block_state_' ~ st) }}</span>
+      {% if st == 'lifted' %}<div class="xs muted">{{ fmt_dt(b.lifted_at) }}{% if b.lifted_by_email %} · {{ b.lifted_by_email }}{% endif %}</div>{% endif %}</td>{% endif %}
+    <td class="nowrap">{% if st == 'active' %}
+      {% if b.org_id %}<a class="btn btn-ghost btn-xs" href="{{ url_for('admin.org_review', org_id=b.org_id) }}">{{ icon('shield-check', 14) }} {{ _('review') }}</a>
+      {% else %}<form method="post" onsubmit="return confirm(this.dataset.msg)" data-msg="{{ _('unblock_confirm') }}">{{ csrf_field() }}
+        <button class="btn btn-ghost btn-xs" name="unblock" value="{{ b.block_id }}">{{ icon('rotate-ccw', 14) }} {{ _('unblock') }}</button></form>{% endif %}
+    {% endif %}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+{% else %}{{ empty('ban', _('blocks_empty')) }}{% endif %}
+{% endblock %}

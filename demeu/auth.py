@@ -61,6 +61,13 @@ def login():
             flash(_("err_wrong_credentials"), "error")
         elif not user["is_active"]:
             flash(_("err_account_blocked"), "error")
+        elif BL.active_block(user["user_id"]):
+            b = BL.active_block(user["user_id"])
+            flash(_("err_blocked_until", d=fmt_dt(b["ends_at"]), reason=b["reason"]) if b["ends_at"]
+                  else _("err_blocked_forever", reason=b["reason"]), "error")
+        elif user["role"] == "coordinator" and not scalar("""SELECT 1 FROM coordinators c JOIN organizations o USING (org_id)
+                WHERE c.user_id=? AND o.deleted_at IS NULL""", (user["user_id"],)):
+            flash(_("err_org_deleted"), "error")
         else:
             _FAILED.pop(key, None)
             _start_session(user)

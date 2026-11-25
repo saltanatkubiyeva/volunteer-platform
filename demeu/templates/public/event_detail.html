@@ -49,6 +49,73 @@
         {% if ev.provided %}<div class="info-box"><h4>{{ icon('package', 18) }} {{ _('provided') }}</h4><p class="small mb-0">{{ ev.provided }}</p></div>{% endif %}
       </div>
 
+      {% if photos or can_upload %}
+      <section class="photo-report" id="photos">
+        <div class="row between mt-4 mb-1"><h3 class="mb-0">{{ icon('image', 20) }} {{ _('how_it_was') }} {% if photos %}<span class="small muted">({{ photos|length }})</span>{% endif %}</h3></div>
+        {% if photos %}
+        {% set pc = photos|length %}
+        <div class="photo-grid {{ 'few' if pc < 3 else 'n3' if pc == 3 else 'n4' if pc == 4 else 'many' }}">
+          {% for p in photos %}
+          <a class="photo-tile {{ 'big' if loop.first and (pc == 3 or pc >= 5) }}" href="{{ url_for('media.event_photo', name=p.file_path.split('/')[1]) }}" data-photo="{{ p.photo_id }}"
+             data-full="{{ url_for('media.event_photo', name=p.file_path.split('/')[1]) }}" data-caption="{{ _('photo_by', name=p.author or '—', d=fmt_date(p.created_at)) }}">
+            <img src="{{ url_for('media.event_photo', name=p.file_path.split('/')[1]) }}" alt="{{ _('photo_alt', event=ev.title) }}" loading="lazy">
+          </a>
+          <template id="photo-tools-{{ p.photo_id }}">
+            {% if g.user and (g.user.user_id == p.user_id or g.user.role == 'admin') %}
+              <form method="post" action="{{ url_for('public.event_photo_delete', photo_id=p.photo_id) }}" onsubmit="return confirm(this.dataset.msg)" data-msg="{{ _('photo_delete_confirm') }}">{{ csrf_field() }}
+                <button class="btn btn-ghost btn-xs">{{ icon('trash', 14) }} {{ _('delete') }}</button></form>
+            {% elif not g.user %}
+              <a class="report-link" href="{{ url_for('auth.login', next=request.path) }}">{{ icon('flag', 14) }} {{ _('report') }}</a>
+            {% elif p.photo_id in my_photo_reports %}
+              <span class="xs muted">{{ icon('check', 13) }} {{ _('photo_reported') }}</span>
+            {% else %}
+              <details class="photo-report-form"><summary class="report-link">{{ icon('flag', 14) }} {{ _('report') }}</summary>
+                <form method="post" action="{{ url_for('public.event_photo_report', photo_id=p.photo_id) }}">{{ csrf_field() }}
+                  <h3>{{ _('photo_report_title') }}</h3>
+                  <div class="report-reasons">
+                  {% for r in ['unsafe', 'fraud', 'fake', 'inappropriate', 'other'] %}
+                    <label><input type="radio" name="reason" value="{{ r }}" required {{ 'checked' if loop.first }}><span><b>{{ _('photo_reason_' ~ r) }}</b></span></label>
+                  {% endfor %}
+                  </div>
+                  <textarea class="textarea mt-1" name="details" maxlength="1000" rows="2" style="min-height:64px" placeholder="{{ _('report_details_placeholder') }}"></textarea>
+                  <div class="row mt-2"><button class="btn btn-danger btn-sm">{{ icon('flag', 14) }} {{ _('report_send') }}</button>
+                    <button class="btn btn-ghost btn-sm" type="button" onclick="this.closest('details').open = false">{{ _('close') }}</button></div>
+                </form></details>
+            {% endif %}
+          </template>
+          {% endfor %}
+        </div>
+        {% else %}
+        <p class="small muted">{{ _('photos_empty') }}</p>
+        {% endif %}
+        {% if can_upload %}
+        <form class="photo-upload card" method="post" action="{{ url_for('public.event_photos_upload', event_id=ev.event_id) }}" enctype="multipart/form-data">
+          {{ csrf_field() }}
+          {% if photos_left > 0 %}
+          <label class="photo-drop">
+            <input type="file" name="photos" accept=".jpg,.jpeg,.png,.webp" multiple data-photo-input>
+            <span class="ic-wrap">{{ icon('upload', 20) }}</span>
+            <span><b>{{ _('photos_add') }}</b><br><span class="small muted" data-photo-picked data-empty="{{ _('photos_add_hint', n=photos_left) }}" data-template="{{ _('photos_picked') }}">{{ _('photos_add_hint', n=photos_left) }}</span></span>
+          </label>
+          <div class="row between mt-1">
+            <span class="xs muted">{{ icon('info', 12) }} {{ _('photos_rules') }}</span>
+            <button class="btn btn-primary btn-sm">{{ icon('upload', 15) }} {{ _('photos_upload') }}</button>
+          </div>
+          {% else %}
+          <p class="small muted mb-0">{{ _('photos_limit_reached', n=10) }}</p>
+          {% endif %}
+        </form>
+        {% endif %}
+      </section>
+      <dialog id="photo-dlg" class="photo-dlg" aria-label="{{ _('how_it_was') }}">
+        <button class="photo-nav prev" type="button" data-photo-prev aria-label="{{ _('back') }}">{{ icon('chevron-left', 22) }}</button>
+        <figure><img data-photo-img alt=""><figcaption><span data-photo-cap></span><span class="muted" data-photo-count></span></figcaption>
+          <div class="photo-tools" data-photo-tools></div></figure>
+        <button class="photo-nav next" type="button" data-photo-next aria-label="{{ _('next') }}">{{ icon('chevron-right', 22) }}</button>
+        <button class="photo-close" type="button" data-close aria-label="{{ _('close') }}">{{ icon('x', 20) }}</button>
+      </dialog>
+      {% endif %}
+
       <h3 class="mt-4">{{ _('organizer') }}</h3>
       <a class="card card-hover card-pad row" href="{{ url_for('public.organization_profile', org_id=ev.org_id) }}" style="color:inherit;text-decoration:none;flex-wrap:nowrap">
         {{ org_logo(ev, 'lg') }}

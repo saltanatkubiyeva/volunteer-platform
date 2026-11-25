@@ -18,7 +18,7 @@ REG_SELECT = """SELECT r.*, e.title, e.starts_at, e.ends_at, e.address, e.status
     e.event_id, e.cover_path, o.name AS org_name, o.org_id,
     d.slug AS dir_slug, d.name_en AS dir_name_en, d.name_ru AS dir_name_ru, d.name_kk AS dir_name_kk, d.icon AS dir_icon, d.tone AS dir_tone,
     c.name_en AS city_name_en, c.name_ru AS city_name_ru, c.name_kk AS city_name_kk,
-    ce.code AS cert_code, f.rating AS my_rating,
+    ce.code AS cert_code, f.rating AS my_rating, f.status AS my_review_status,
     sh.title AS shift_title, sh.starts_at AS shift_start, sh.ends_at AS shift_end
     FROM registrations r JOIN events e USING (event_id) JOIN organizations o ON o.org_id = e.org_id
     LEFT JOIN event_shifts sh ON sh.shift_id = r.shift_id
@@ -133,10 +133,6 @@ def dashboard():
     notifications = query("SELECT * FROM notifications WHERE user_id=? ORDER BY created_at DESC, notification_id DESC LIMIT 5",
                           (g.user["user_id"],))
     profile_missing = [k for k in ("about", "skills", "avatar_path") if not g.volunteer[k]]
-<<<<<<< Updated upstream
-    return render_template("volunteer/dashboard.html", upcoming=upcoming, to_review=to_review, recent=recent,
-                           recommended=recommended, stats=S.volunteer_stats(vid), age=age,
-=======
     has_subs = bool(scalar("SELECT 1 FROM subscriptions WHERE volunteer_id=?", (vid,)))
     return render_template("volunteer/dashboard.html", milestones=S.milestone_certificates(vid),
                            friend_plans=FR.upcoming_with_friends(vid, 4), friend_wins=FR.recent_achievements(g.volunteer),
@@ -276,9 +272,9 @@ def feedback(registration_id):
     elif scalar("SELECT 1 FROM feedback WHERE registration_id=?", (registration_id,)):
         flash(_("rule_feedback_once"), "error")
     else:
-        execute("INSERT INTO feedback (registration_id, rating, comment) VALUES (?,?,?)",
-                (registration_id, rating, clean(request.form.get("comment"), 600) or None))
-        flash(_("flash_feedback_thanks"), "success")
+        status = RV.submit(registration_id, rating, clean(request.form.get("comment"), 600) or None)
+        flash(_("flash_feedback_thanks") if status == "published" else _("flash_review_pending"),
+              "success" if status == "published" else "info")
     return redirect(request.referrer or url_for("volunteer.applications", tab="history"))
 
 

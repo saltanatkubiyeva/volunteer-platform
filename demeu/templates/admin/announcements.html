@@ -1,0 +1,83 @@
+{% extends "admin/_layout.html" %}
+{% from "partials/macros.html" import empty, field_error %}
+{% block title %}{{ _('adm_announcements') }}{% endblock %}
+{% block admin %}
+<div class="cab-head"><div><h1>{{ _('adm_announcements') }}</h1><p>{{ _('adm_announcements_subtitle') }}</p></div></div>
+<div class="ann-admin">
+  <form class="card card-pad" method="post" novalidate>
+    {{ csrf_field() }}
+    <h3>{{ _('ann_new') }}</h3>
+    {% for k, lbl in [('text_en', 'English'), ('text_ru', 'Русский'), ('text_kk', 'Қазақша')] %}
+    <div class="field {{ 'has-error' if errors.get(k) }}"><label class="req" for="{{ k }}">{{ _('ann_text') }} · {{ lbl }}</label>
+      <textarea class="textarea" id="{{ k }}" name="{{ k }}" maxlength="300" rows="2" style="min-height:64px">{{ f[k] }}</textarea>{{ field_error(errors, k) }}</div>
+    {% endfor %}
+    <div class="form-grid">
+      <div class="field"><label>{{ _('ann_tone') }}</label>
+        <div class="row tight">{% for t in ['info', 'warning'] %}<label class="check-chip"><input type="radio" name="tone" value="{{ t }}" {{ 'checked' if f.tone == t }}><span>{{ icon('megaphone' if t == 'info' else 'alert', 15) }}{{ _('ann_tone_' ~ t) }}</span></label>{% endfor %}</div></div>
+      <div class="field"><label for="audience">{{ _('ann_audience') }}</label>
+        <select class="select" id="audience" name="audience" data-ann-audience>
+          {% for a in ['all', 'volunteers', 'coordinators', 'city'] %}<option value="{{ a }}" {{ 'selected' if f.audience == a }}>{{ _('ann_aud_' ~ a) }}</option>{% endfor %}
+        </select></div>
+      <div class="field span-2 {{ 'has-error' if errors.city_id }}" data-ann-city {{ 'hidden' if f.audience != 'city' }}><label for="city_id">{{ _('city') }}</label>
+        <select class="select" id="city_id" name="city_id"><option value="">{{ _('choose') }}</option>
+          {% for c in cities %}<option value="{{ c.city_id }}" {{ 'selected' if f.city_id == c.city_id }}>{{ loc(c, 'name') }}</option>{% endfor %}</select>{{ field_error(errors, 'city_id') }}</div>
+      <div class="field {{ 'has-error' if errors.starts_at }}"><label for="starts_at">{{ _('ann_from') }}</label>
+        <input class="input" type="datetime-local" id="starts_at" name="starts_at" value="{{ f.starts_at }}">{{ field_error(errors, 'starts_at') }}</div>
+      <div class="field {{ 'has-error' if errors.ends_at }}"><label for="ends_at">{{ _('ann_until') }}</label>
+        <input class="input" type="datetime-local" id="ends_at" name="ends_at" value="{{ f.ends_at }}">{{ field_error(errors, 'ends_at') }}</div>
+      <div class="field span-2 {{ 'has-error' if errors.link }}"><label for="link">{{ _('ann_link') }} <span class="label-note">({{ _('optional') }})</span></label>
+        <input class="input" id="link" name="link" value="{{ f.link }}" maxlength="200" placeholder="/events?city=7">{{ field_error(errors, 'link') }}</div>
+    </div>
+    <label class="check mt-1"><input type="checkbox" name="notify" value="1" {{ 'checked' if f.notify }}>
+      <span><b>{{ _('ann_notify') }}</b><br><span class="small muted">{{ _('ann_notify_hint') }}</span></span></label>
+    <button class="btn btn-primary mt-2">{{ icon('megaphone', 16) }} {{ _('ann_publish') }}</button>
+    {% if config.get('DEMO', True) %}
+    <div class="demo-accounts mt-2"><b>{{ _('demo_fill') }}</b>
+      <div class="mt-1"><button type="button" data-ann-demo>{{ _('demo_fill_ann') }}</button></div></div>
+    {% endif %}
+  </form>
+
+  <div>
+    {% for a in rows %}{% set ph = phase(a, now) %}
+    <div class="card card-pad mb-2 ann-row ann-row-{{ ph }}">
+      <div class="row between">
+        <div class="row tight">
+          <span class="tag {{ 'tone-mint' if ph == 'active' else 'tone-sky' if ph == 'scheduled' else '' }}">{{ _('ann_phase_' ~ ph) }}</span>
+          <span class="tag {{ 'tone-butter' if a.tone == 'warning' else 'tone-lilac' }}">{{ icon('alert' if a.tone == 'warning' else 'megaphone', 12) }}{{ _('ann_tone_' ~ a.tone) }}</span>
+          <span class="tag">{{ icon('users', 12) }}{% if a.audience == 'city' %}{{ loc(a, 'city_name') }}{% else %}{{ _('ann_aud_' ~ a.audience) }}{% endif %}</span>
+          {% if a.notified %}<span class="tag">{{ icon('bell', 12) }}{{ _('ann_sent_notif') }}</span>{% endif %}
+        </div>
+        {% if ph != 'ended' %}<form method="post">{{ csrf_field() }}<input type="hidden" name="end_id" value="{{ a.announcement_id }}">
+          <button class="btn btn-ghost btn-xs">{{ icon('x', 14) }} {{ _('ann_end_now') if ph == 'active' else _('delete') }}</button></form>{% endif %}
+      </div>
+      <p class="mt-1 mb-1">{{ loc(a, 'text') }}</p>
+      <p class="xs muted mb-0">{{ fmt_dt(a.starts_at) }} — {{ fmt_dt(a.ends_at) }}{% if a.link %} · {{ a.link }}{% endif %}</p>
+    </div>
+    {% else %}{{ empty('megaphone', _('ann_empty')) }}{% endfor %}
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  var sel = document.querySelector('[data-ann-audience]'), box = document.querySelector('[data-ann-city]');
+  if (sel && box) sel.addEventListener('change', function () { box.hidden = sel.value !== 'city'; });
+  var demo = document.querySelector('[data-ann-demo]');
+  if (demo) demo.addEventListener('click', function () {
+    var pad = function (n) { return String(n).padStart(2, '0'); };
+    var fmt = function (d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + 'T' + pad(d.getHours()) + ':' + pad(d.getMinutes()); };
+    var now = new Date(), end = new Date(now.getTime() + 7 * 864e5);
+    document.getElementById('text_en').value = 'Thank you, volunteers! This year you have already given more than 1,000 hours of help. New winter events are waiting for you.';
+    document.getElementById('text_ru').value = 'Спасибо, волонтёры! В этом году вы уже подарили больше 1 000 часов помощи. Вас ждут новые зимние ивенты.';
+    document.getElementById('text_kk').value = 'Рақмет, волонтерлер! Биыл сіз 1 000 сағаттан астам көмек көрсеттіңіз. Сізді жаңа қысқы іс-шаралар күтуде.';
+    document.querySelector('input[name=tone][value=info]').checked = true;
+    sel.value = 'volunteers'; box.hidden = true;
+    document.getElementById('starts_at').value = fmt(now);
+    document.getElementById('ends_at').value = fmt(end);
+    document.getElementById('link').value = '/events';
+    document.querySelector('input[name=notify]').checked = true;
+    ['text_en', 'text_ru', 'text_kk'].forEach(function (id) { document.getElementById(id).dispatchEvent(new Event('input')); });
+  });
+})();
+</script>
+{% endblock %}

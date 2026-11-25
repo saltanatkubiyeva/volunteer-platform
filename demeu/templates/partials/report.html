@@ -20,3 +20,23 @@
 {% endif %}
 {%- endmacro %}
 
+{% macro review_report(r, reported) -%}
+{% if not g.user %}
+<a class="report-link review-flag" href="{{ url_for('auth.login', next=request.path) }}" title="{{ _('report') }}">{{ icon('flag', 13) }}</a>
+{% elif r.feedback_id in reported %}
+<span class="xs muted review-flag" title="{{ _('review_reported') }}">{{ icon('check', 13) }}</span>
+{% elif g.user.role != 'admin' and g.user.user_id != r.author_id %}
+<button class="report-link review-flag" type="button" data-dialog="rr-{{ r.feedback_id }}" title="{{ _('report') }}">{{ icon('flag', 13) }}</button>
+<dialog id="rr-{{ r.feedback_id }}"><form class="dlg" method="post" action="{{ url_for('public.review_report', feedback_id=r.feedback_id) }}">
+  {{ csrf_field() }}<h3>{{ _('review_report_title') }}</h3>
+  <p class="small muted">“{{ (r.comment or '')|truncate(90) }}”</p>
+  <div class="report-reasons">
+    {% for k in ['offensive', 'spam', 'personal', 'fake', 'other'] %}
+    <label><input type="radio" name="reason" value="{{ k }}" required {{ 'checked' if loop.first }}><span><b>{{ _('rreason_' ~ k) }}</b></span></label>
+    {% endfor %}
+  </div>
+  <textarea class="textarea mt-1" name="details" maxlength="1000" rows="2" style="min-height:64px" placeholder="{{ _('report_details_placeholder') }}"></textarea>
+  <div class="row mt-2"><button class="btn btn-danger">{{ icon('flag', 15) }} {{ _('report_send') }}</button><button class="btn btn-ghost" type="button" data-close>{{ _('close') }}</button></div>
+</form></dialog>
+{% endif %}
+{%- endmacro %}

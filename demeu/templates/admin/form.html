@@ -10,8 +10,9 @@
     {% if entity == 'events' %}<a class="btn btn-ghost btn-sm" href="{{ url_for('public.event_detail', event_id=pk) }}">{{ icon('eye', 16) }} {{ _('public_page') }}</a>{% endif %}
     {% if entity == 'volunteers' %}<a class="btn btn-ghost btn-sm" href="{{ url_for('public.volunteer_profile', volunteer_id=pk) }}">{{ icon('eye', 16) }} {{ _('public_page') }}</a>{% endif %}
     {% if entity == 'organizations' %}<a class="btn btn-soft btn-sm" href="{{ url_for('admin.org_review', org_id=pk) }}">{{ icon('shield-check', 16) }} {{ _('review') }}</a>{% endif %}
-    <form method="post" action="{{ url_for('admin.entity_delete', entity=entity, pk=pk) }}" data-confirm="{{ _('confirm_delete') }}">{{ csrf_field() }}
-      <button class="btn btn-danger btn-sm">{{ icon('trash', 16) }} {{ _('delete') }}</button></form>
+    {% if entity in ('users', 'volunteers', 'coordinators') and block_email %}<a class="btn btn-danger btn-sm" href="{{ url_for('admin.blocks', email=block_email) }}">{{ icon('ban', 16) }} {{ _('block_btn') }}</a>{% endif %}
+    <form method="post" action="{{ url_for('admin.entity_delete', entity=entity, pk=pk) }}" data-confirm="{{ _('trash_confirm', n=30) if entity in ('events', 'organizations') else _('confirm_delete') }}">{{ csrf_field() }}
+      <button class="btn btn-danger btn-sm">{{ icon('trash', 16) }} {{ _('trash_move') if entity in ('events', 'organizations') else _('delete') }}</button></form>
   </div>
   {% endif %}
 </div>

@@ -1,0 +1,60 @@
+{% extends "admin/_layout.html" %}
+{% from "partials/macros.html" import empty, rating, status %}
+{% block title %}{{ _('adm_reviews_queue') }}{% endblock %}
+{% block admin %}
+<div class="cab-head"><div><h1>{{ _('adm_reviews_queue') }}</h1><p>{{ _('adm_reviews_subtitle') }}</p></div></div>
+<nav class="tabs">
+  <a class="{{ 'on' if tab == 'queue' }}" href="?tab=queue">{{ _('photos_tab_queue') }} <span class="n">{{ counts.queue }}</span></a>
+  <a class="{{ 'on' if tab == 'hidden' }}" href="?tab=hidden">{{ _('photos_tab_hidden') }} <span class="n">{{ counts.hidden }}</span></a>
+  <a class="{{ 'on' if tab == 'words' }}" href="?tab=words">{{ _('banned_words') }} <span class="n">{{ counts.words }}</span></a>
+</nav>
+{% if tab == 'words' %}
+  <form method="post" class="row tight mb-2 words-form">{{ csrf_field() }}
+    <input class="input" name="word_add" maxlength="40" placeholder="{{ _('banned_word_placeholder') }}" required>
+    <button class="btn btn-primary btn-sm">{{ icon('plus', 15) }} {{ _('banned_word_add') }}</button>
+  </form>
+  <div class="words">
+  {% for w in words %}
+    <form method="post" class="word-chip">{{ csrf_field() }}<span>{{ w.word }}</span>
+      <button name="word_remove" value="{{ w.word_id }}" aria-label="{{ _('delete') }}" title="{{ _('delete') }}">{{ icon('x', 13) }}</button></form>
+  {% else %}{{ empty('flag', _('banned_words_empty')) }}{% endfor %}
+  </div>
+{% else %}
+{% for f in rows %}
+  {% set found = find_banned(f.comment, banned) %}
+  <div class="card card-pad mb-2 rv-card {{ 'is-reported' if reports.get(f.feedback_id) }}">
+    <div class="row between">
+      <div class="row tight">
+        {% if f.status == 'pending' %}<span class="tag tone-butter">{{ icon('clock', 12) }}{{ _('review_on_check') }}</span>
+        {% elif f.status == 'hidden' %}<span class="tag tag-dark">{{ _('photo_hidden') }}</span>{% endif %}
+        {% if reports.get(f.feedback_id) %}<span class="tag urgent-tag">{{ icon('flag', 12) }}{{ _('photo_n_reports', n=reports[f.feedback_id]|length) }}</span>{% endif %}
+        {{ rating(f.rating) }}
+      </div>
+      <span class="xs muted">{{ fmt_dt(f.created_at) }}</span>
+    </div>
+    <p class="rv-text">{{ f.comment|mark_words(found) }}</p>
+    <div class="xs muted">{{ f.full_name }} · {{ f.email }} · <a class="muted" href="{{ url_for('public.event_detail', event_id=f.event_id) }}">{{ f.title }}</a> · {{ f.org_name }}</div>
+    {% if f.flagged_words %}<div class="xs mt-1">{{ icon('alert', 12) }} {{ _('review_flagged', w=f.flagged_words) }}</div>{% endif %}
+    {% for r in reports.get(f.feedback_id, []) %}
+      <div class="adm-photo-report"><b>{{ _('rreason_' ~ r.reason) }}</b> · <span class="muted">{{ r.email }}</span>{% if r.details %}<br><i>{{ r.details }}</i>{% endif %}</div>
+    {% endfor %}
+    {% if f.status == 'hidden' %}
+      <p class="xs muted mt-1 mb-1">{{ _('rreason_' ~ f.hide_reason) if f.hide_reason else '' }}</p>
+      <form method="post">{{ csrf_field() }}<input type="hidden" name="feedback_id" value="{{ f.feedback_id }}">
+        <button class="btn btn-ghost btn-xs" name="action" value="publish">{{ icon('eye', 14) }} {{ _('photo_show') }}</button></form>
+    {% else %}
+      <form method="post" class="row tight mt-2">{{ csrf_field() }}<input type="hidden" name="feedback_id" value="{{ f.feedback_id }}">
+        <button class="btn btn-primary btn-xs" name="action" value="publish">{{ icon('check', 14) }} {{ _('review_publish') if f.status == 'pending' else _('photo_keep') }}</button>
+        <select class="select rv-select" name="reason" aria-label="{{ _('hide_reason') }}">
+          {% set first = (reports.get(f.feedback_id) or [{'reason': 'offensive'}])[0].reason %}
+          {% for r in reasons %}<option value="{{ r }}" {{ 'selected' if r == first }}>{{ _('rreason_' ~ r) }}</option>{% endfor %}
+        </select>
+        <button class="btn btn-danger btn-xs" name="action" value="hide">{{ icon('x', 14) }} {{ _('photo_hide') }}</button>
+      </form>
+    {% endif %}
+  </div>
+{% else %}
+  {{ empty('star', _('queue_empty')) }}
+{% endfor %}
+{% endif %}
+{% endblock %}

@@ -141,3 +141,51 @@
   });
 })();
 
+(function () {
+  document.querySelectorAll("form[data-ann-hide]").forEach(function (form) {
+    form.addEventListener("submit", function (e) {
+      if (!window.fetch) return;
+      e.preventDefault();
+      var box = form.closest("[data-ann]");
+      fetch(form.action, {method: "POST", body: new FormData(form), headers: {"X-Requested-With": "fetch"},
+                          credentials: "same-origin"}).catch(function () {});
+      if (box) {
+        box.classList.add("ann-gone");
+        setTimeout(function () { var stack = box.parentNode; box.remove(); if (stack && !stack.children.length) stack.remove(); }, 220);
+      }
+    });
+  });
+})();
+
+(function () {
+  var dlg = document.getElementById("photo-dlg");
+  if (!dlg) return;
+  var items = Array.prototype.slice.call(document.querySelectorAll("[data-photo]"));
+  var img = dlg.querySelector("[data-photo-img]"), cap = dlg.querySelector("[data-photo-cap]");
+  var count = dlg.querySelector("[data-photo-count]"), tools = dlg.querySelector("[data-photo-tools]");
+  var idx = 0;
+  function show(i) {
+    idx = (i + items.length) % items.length;
+    var it = items[idx];
+    img.src = it.dataset.full; img.alt = it.dataset.caption || "";
+    cap.textContent = it.dataset.caption || "";
+    count.textContent = (idx + 1) + " / " + items.length;
+    tools.innerHTML = "";
+    var t = document.getElementById("photo-tools-" + it.dataset.photo);
+    if (t) tools.appendChild(t.content.cloneNode(true));
+  }
+  items.forEach(function (it, i) {
+    it.addEventListener("click", function (e) { e.preventDefault(); show(i); if (dlg.showModal) dlg.showModal(); });
+  });
+  dlg.querySelector("[data-photo-prev]").addEventListener("click", function () { show(idx - 1); });
+  dlg.querySelector("[data-photo-next]").addEventListener("click", function () { show(idx + 1); });
+  dlg.addEventListener("keydown", function (e) {
+    if (e.key === "ArrowLeft") show(idx - 1);
+    if (e.key === "ArrowRight") show(idx + 1);
+  });
+  dlg.addEventListener("click", function (e) { if (e.target === dlg) dlg.close(); });
+  var input = document.querySelector("[data-photo-input]"), label = document.querySelector("[data-photo-picked]");
+  if (input && label) input.addEventListener("change", function () {
+    label.textContent = input.files.length ? label.dataset.template.replace("{n}", input.files.length) : label.dataset.empty;
+  });
+})();

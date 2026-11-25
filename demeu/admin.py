@@ -6,8 +6,14 @@ from flask import (Blueprint, abort, current_app, flash, g, redirect, render_tem
                    request, send_file, url_for)
 from werkzeug.security import generate_password_hash
 
+from . import announcements as A
 from . import backups as B
 from . import complaints as C
+from . import photoreports as P
+from . import trash as T
+from . import deeds as DD
+from . import reviews as RV
+from . import blocks as BL
 from . import resets as R
 from . import services as S
 from .core import (Page, _, audit, form_int, notify, now_str, page_arg, role_required, safe_next)
@@ -95,8 +101,8 @@ ENTITIES = {
                     JOIN registrations r USING (registration_id) JOIN volunteers v USING (volunteer_id)
                     JOIN events e USING (event_id)""",
         search=("f.comment", "v.full_name", "e.title"),
-        columns=("feedback_id", "volunteer", "event", "rating", "comment", "is_hidden"),
-        fields=[F("rating", "int", True), F("comment", "textarea"), F("is_hidden", "bool")]),
+        columns=("feedback_id", "volunteer", "event", "rating", "comment", "status"),
+        fields=[F("rating", "int", True), F("comment", "textarea")]),
     "certificates": dict(
         table="certificates", pk="certificate_id", icon="award", create=False, edit=False,
         list_sql="""SELECT ce.certificate_id, ce.type, ce.code, ce.issued_at, v.full_name AS volunteer,
@@ -160,6 +166,12 @@ def admin_ctx():
         consents=scalar("SELECT COUNT(*) FROM consents WHERE status='pending'"),
         messages=scalar("SELECT COUNT(*) FROM contact_messages WHERE status='new'"),
         complaints=scalar("SELECT COUNT(*) FROM complaints WHERE status='new'"),
+        documents=scalar("SELECT COUNT(*) FROM volunteer_skills WHERE status='pending'"),
+        photos=P.queue_count(),
+        trash=scalar("SELECT COUNT(*) FROM trash_items"),
+        reviews=RV.queue_count(),
+        deeds=DD.queue_count(),
+        blocks=BL.counts()["active"],
     )
     return dict(ENTITIES=ENTITIES, NAV_GROUPS=NAV_GROUPS, queue_counts=counts)
 
@@ -210,6 +222,10 @@ def org_review(org_id):
                        THEN ? ELSE verified_at END, verified_by=CASE WHEN ?='verified' THEN ? ELSE verified_by END
                        WHERE org_id=?""", (new, comment or None, new, now_str(), new, g.user["user_id"], org_id))
             audit("org_" + new, "organizations", org_id, o["status"], new)
+            if new == "suspended":
+                BL.suspend_org(g.user["user_id"], org_id, comment)
+            elif o["status"] == "suspended":
+                BL.lift_org(g.user["user_id"], org_id)
             for c in query("SELECT user_id FROM coordinators WHERE org_id=?", (org_id,)):
                 notify(c["user_id"], "n_org_" + new, url_for("org.dashboard"), reason=comment)
         flash(_("flash_saved"), "success")
@@ -265,6 +281,85 @@ def documents():
     return render_template("admin/documents.html", rows=rows, today=now_str()[:10])
 
 
+@bp.route("/photos", methods=["GET", "POST"])
+@admin_only
+def photos():
+    tab = request.args.get("tab", "queue")
+    if request.method == "POST":
+        try:
+            P.review(g.user, form_int("photo_id"), request.form.get("action"), request.form.get("reason"))
+            flash(_("flash_saved"), "success")
+        except S.RuleError as e:
+            flash(_(e.key, **e.params), "error")
+        return redirect(url_for("admin.photos", tab=tab))
+    cond = {"queue": """(p.reviewed_at IS NULL OR EXISTS (SELECT 1 FROM photo_reports r
+                         WHERE r.photo_id=p.photo_id AND r.status='new'))""",
+            "hidden": "p.status='hidden'", "all": "1=1"}.get(tab)
+    if cond is None:
+        tab, cond = "queue", "p.reviewed_at IS NULL"
+    rows = query(P.GALLERY_SELECT.replace("FROM event_photos p", """, e.title, e.starts_at AS event_date, e.event_id AS ev_id,
+        ru.email AS reviewer FROM event_photos p JOIN events e USING (event_id)
+        LEFT JOIN users ru ON ru.user_id = p.reviewed_by""") +
+                 f" WHERE {cond} ORDER BY reports DESC, p.created_at DESC LIMIT 120")
+    reports = {}
+    for r in query("""SELECT pr.*, u.email FROM photo_reports pr JOIN users u ON u.user_id = pr.reporter_id
+                      WHERE pr.status='new' ORDER BY pr.created_at"""):
+        reports.setdefault(r["photo_id"], []).append(r)
+    counts = dict(queue=P.queue_count(), hidden=scalar("SELECT COUNT(*) FROM event_photos WHERE status='hidden'"),
+                  all=scalar("SELECT COUNT(*) FROM event_photos"))
+    return render_template("admin/photos.html", rows=rows, tab=tab, counts=counts, reports=reports,
+                           reasons=P.HIDE_REASONS)
+
+
+@bp.route("/announcements", methods=["GET", "POST"])
+@admin_only
+def announcements():
+    errors = Errors()
+    now = datetime.now()
+    f = dict(text_en="", text_ru="", text_kk="", tone="info", audience="all", city_id=None, link="",
+             starts_at=now.strftime("%Y-%m-%dT%H:%M"), ends_at=(now + timedelta(days=7)).strftime("%Y-%m-%dT%H:%M"),
+             notify=False)
+    if request.method == "POST" and request.form.get("end_id"):
+        try:
+            A.end_now(g.user, form_int("end_id"))
+            flash(_("flash_saved"), "success")
+        except S.RuleError as e:
+            flash(_(e.key, **e.params), "error")
+        return redirect(url_for("admin.announcements"))
+    if request.method == "POST":
+        for k in ("text_en", "text_ru", "text_kk"):
+            f[k] = clean(request.form.get(k), 300)
+            if len(f[k]) < 5:
+                errors.add(k, "err_ann_text")
+        f["tone"] = request.form.get("tone") if request.form.get("tone") in A.TONES else "info"
+        f["audience"] = request.form.get("audience") if request.form.get("audience") in A.AUDIENCES else "all"
+        f["city_id"] = form_int("city_id")
+        f["link"] = clean(request.form.get("link"), 200)
+        f["notify"] = bool(request.form.get("notify"))
+        if f["audience"] == "city" and not scalar("SELECT 1 FROM cities WHERE city_id=?", (f["city_id"] or 0,)):
+            errors.add("city_id", "err_city")
+        if f["link"] and not safe_next(f["link"]) and not f["link"].startswith("https://"):
+            errors.add("link", "err_ann_link")
+        st, en = (parse_local_dt(clean(request.form.get(k), 20)) for k in ("starts_at", "ends_at"))
+        f["starts_at"], f["ends_at"] = clean(request.form.get("starts_at"), 20), clean(request.form.get("ends_at"), 20)
+        if not st:
+            errors.add("starts_at", "err_date")
+        if not en:
+            errors.add("ends_at", "err_date")
+        elif st and en <= st:
+            errors.add("ends_at", "err_end_after_start")
+        elif en <= now:
+            errors.add("ends_at", "err_ann_past")
+        if not errors:
+            data = dict(f, starts_at=st.strftime("%Y-%m-%d %H:%M"), ends_at=en.strftime("%Y-%m-%d %H:%M"))
+            sent = A.create(g.user, data, f["notify"])
+            flash(_("flash_ann_created_sent", n=sent) if f["notify"] else _("flash_ann_created"), "success")
+            return redirect(url_for("admin.announcements"))
+    rows = query("""SELECT a.*, c.name_en AS city_name_en, c.name_ru AS city_name_ru, c.name_kk AS city_name_kk
+                    FROM announcements a LEFT JOIN cities c USING (city_id)
+                    ORDER BY a.ends_at > ? DESC, a.starts_at DESC LIMIT 60""", (now_str(),))
+    return render_template("admin/announcements.html", rows=rows, f=f, errors=errors, now=now_str(),
+                           phase=A.phase, cities=query("SELECT * FROM cities ORDER BY name_en"))
 
 
 @bp.route("/messages")
@@ -590,8 +685,13 @@ def entity_edit(entity, pk):
             else:
                 flash(_("flash_no_changes"), "info")
     related = _related(entity, pk)
+    block_email = None
+    if entity in ("users", "volunteers", "coordinators"):
+        uid = pk if entity == "users" else row["user_id"]
+        u = query("SELECT email, role FROM users WHERE user_id=?", (uid,), one=True)
+        block_email = u["email"] if u and u["role"] != "admin" else None
     return render_template("admin/form.html", entity=entity, cfg=cfg, row=values, errors=errors,
-                           fk_options=fk_options, is_new=False, pk=pk, related=related)
+                           fk_options=fk_options, is_new=False, pk=pk, related=related, block_email=block_email)
 
 
 def _related(entity, pk):
@@ -608,6 +708,56 @@ def _related(entity, pk):
             """SELECT a.*, u.email FROM audit_log a LEFT JOIN users u USING (user_id)
                WHERE a.entity='registrations' AND a.entity_id=? ORDER BY a.log_id DESC""", (pk,)))
     return None
+
+
+@bp.route("/reviews", methods=["GET", "POST"])
+@admin_only
+def reviews():
+    tab = request.args.get("tab", "queue")
+    if request.method == "POST":
+        try:
+            if request.form.get("word_add") is not None:
+                RV.add_word(g.user, request.form.get("word_add"))
+            elif request.form.get("word_remove"):
+                RV.remove_word(g.user, form_int("word_remove"))
+            else:
+                RV.review(g.user, form_int("feedback_id"), request.form.get("action"), request.form.get("reason"))
+            flash(_("flash_saved"), "success")
+        except S.RuleError as e:
+            flash(_(e.key, **e.params), "error")
+        return redirect(url_for("admin.reviews", tab=tab))
+    rows, reports = RV.admin_rows(tab) if tab != "words" else ([], {})
+    words = query("""SELECT w.*, u.email FROM banned_words w LEFT JOIN users u ON u.user_id = w.created_by
+                     ORDER BY w.word""") if tab == "words" else []
+    counts = dict(queue=RV.queue_count(), hidden=scalar("SELECT COUNT(*) FROM feedback WHERE status='hidden'"),
+                  words=scalar("SELECT COUNT(*) FROM banned_words"))
+    return render_template("admin/reviews.html", tab=tab, rows=rows, reports=reports, words=words, counts=counts,
+                           reasons=RV.HIDE_REASONS, find_banned=RV.find_banned, banned=RV.banned_words())
+
+
+@bp.route("/blocks", methods=["GET", "POST"])
+@admin_only
+def blocks():
+    tab = request.args.get("tab", "active")
+    form = dict(email=clean(request.args.get("email"), 120), duration="7", reason="")
+    if request.method == "POST":
+        try:
+            if request.form.get("unblock"):
+                BL.unblock(g.user, form_int("unblock"))
+                flash(_("flash_unblocked"), "success")
+                return redirect(url_for("admin.blocks", tab=tab))
+            form = dict(email=clean(request.form.get("email"), 120).lower(), duration=request.form.get("duration"),
+                        reason=clean(request.form.get("reason"), 500))
+            user = query("SELECT * FROM users WHERE email=?", (form["email"],), one=True)
+            if not user:
+                raise S.RuleError("err_block_user")
+            BL.block_user(g.user, user["user_id"], form["duration"], form["reason"])
+            flash(_("flash_blocked"), "success")
+            return redirect(url_for("admin.blocks", tab="active"))
+        except S.RuleError as e:
+            flash(_(e.key, **e.params), "error")
+    return render_template("admin/blocks.html", tab=tab, rows=BL.rows(tab), counts=BL.counts(), form=form,
+                           state=BL.state)
 
 
 @bp.route("/trash", methods=["GET", "POST"])

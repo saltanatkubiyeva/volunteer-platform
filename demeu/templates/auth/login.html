@@ -23,7 +23,7 @@
       <div class="demo-accounts">
         <b>{{ _('demo_accounts') }}</b> <span class="muted">({{ _('password') }}: <span class="mono">Demeu2026!</span>)</span>
         <div class="grid mt-1" style="grid-template-columns:1fr 1fr;gap:2px 12px">
-          {% for email_, label in [('volunteer@demeu.kz','demo_volunteer'),('minor@demeu.kz','demo_minor'),('org@demeu.kz','demo_org'),('neworg@demeu.kz','demo_pending_org'),('admin@demeu.kz','demo_admin')] %}
+          {% for email_, label in [('volunteer@demeu.kz','demo_volunteer'),('minor@demeu.kz','demo_minor'),('org@demeu.kz','demo_org'),('neworg@demeu.kz','demo_pending_org'),('admin@demeu.kz','demo_admin'),('ramazan.kenzhebayev@inbox.kz','demo_blocked')] %}
           <button type="button" data-demo="{{ email_ }}" data-pw="Demeu2026!" style="text-align:left">{{ _(label) }}</button>
           {% endfor %}
         </div>

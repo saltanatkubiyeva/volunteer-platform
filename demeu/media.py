@@ -18,6 +18,23 @@ def public_file(folder, name):
                                max_age=86400)
 
 
+@bp.route("/media/photos/<name>")
+def event_photo(name):
+    p = query("SELECT * FROM event_photos WHERE file_path=?", ("photos/" + name,), one=True)
+    if not p:
+        abort(404)
+    if p["status"] != "visible":
+        if not g.user or (g.user["role"] != "admin" and g.user["user_id"] != p["user_id"]):
+            abort(404)
+    folder = os.path.join(current_app.config["UPLOAD_DIR"], "photos")
+    if not os.path.exists(os.path.join(folder, name)):
+        m = re.fullmatch(r"(\d{10,13}-[0-9a-f]{12})\.jpg", name)
+        if m:
+            return redirect(f"https://images.unsplash.com/photo-{m.group(1)}?auto=format&fit=crop&w=1400&q=72")
+        abort(404)
+    return send_from_directory(folder, name, max_age=86400)
+
+
 @bp.route("/consents/<int:consent_id>/file")
 @login_required
 def consent_file(consent_id):

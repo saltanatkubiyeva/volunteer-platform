@@ -813,6 +813,10 @@ def main():
         x("INSERT INTO contact_messages (name,email,topic,message,status,created_at) VALUES (?,?,?,?,?,?)",
           (name, email, topic, text, "new" if ago < 10 else "in_progress", dt(NOW - timedelta(hours=ago))))
 
+    photo_src = os.path.join(BASE, "demeu", "static", "img", "photos")
+    photo_dst = os.path.join(BASE, "instance", "uploads", "photos")
+    os.makedirs(photo_dst, exist_ok=True)
+
     def last_completed(title, org_id):
         return con.execute("""SELECT event_id, ends_at FROM events WHERE title=? AND org_id=? AND status='completed'
                               ORDER BY starts_at DESC LIMIT 1""", (title, org_id)).fetchone()
@@ -823,6 +827,67 @@ def main():
 
     def coord_user(org_id):
         return con.execute("SELECT user_id FROM coordinators WHERE org_id=? ORDER BY is_owner DESC LIMIT 1", (org_id,)).fetchone()[0]
+
+    def add_photo(event, photo_id, user_id, hours_after, reviewed=True, hidden=None):
+        name = f"{photo_id}.jpg"
+        src = os.path.join(photo_src, name)
+        if os.path.exists(src):
+            with open(src, "rb") as a, open(os.path.join(photo_dst, name), "wb") as b:
+                b.write(a.read())
+        created = datetime.strptime(event[1], "%Y-%m-%d %H:%M") + timedelta(hours=hours_after)
+        checked = dt(created + timedelta(hours=5)) if reviewed or hidden else None
+        return x("""INSERT INTO event_photos (event_id, user_id, file_path, status, hide_reason, reviewed_by, reviewed_at, created_at)
+                    VALUES (?,?,?,?,?,?,?,?)""",
+                 (event[0], user_id, f"photos/{name}", "hidden" if hidden else "visible", hidden,
+                  admin_uid if checked else None, checked, dt(created))).lastrowid
+
+    park = last_completed("City Park Clean-up", 1)
+    if park:
+        people = attended_users(park[0])
+        dana = coord_user(1)
+        add_photo(park, "1758599668429-121d54188b9c", dana, 3)
+        add_photo(park, "1758599668186-c47df67d025d", dana, 3)
+        add_photo(park, "1758599668508-d8ec9eca1be3", people[0], 6)
+        add_photo(park, "1758599668426-1cf242bb7667", people[1] if len(people) > 1 else dana, 20, reviewed=False)
+        add_photo(park, "1544928147-79a2dbc1f389", people[2] if len(people) > 2 else dana, 26, hidden="unrelated")
+    planting = last_completed("Autumn Tree Planting", 1)
+    if planting:
+        add_photo(planting, "1710361006404-a13d01802ce9", (attended_users(planting[0]) or [coord_user(1)])[0], 5)
+    marathon = last_completed("Half-Marathon Water Station", 8)
+    if marathon:
+        add_photo(marathon, "1613936360976-8f35cf0e5461", coord_user(8), 4)
+    festival = last_completed("City Day Festival Volunteers", 6)
+    if festival:
+        people = attended_users(festival[0])
+        pid = add_photo(festival, "1782567531523-0144dc7352fc", people[1] if len(people) > 1 else coord_user(6), 8,
+                        reviewed=False)
+        if len(people) > 2:
+            x("INSERT INTO photo_reports (photo_id, reporter_id, reason, details, created_at) VALUES (?,?,?,?,?)",
+              (pid, people[2], "unsafe", "There are many children in the front rows, I am not sure their parents agreed.",
+               dt(NOW - timedelta(hours=6))))
+            note("admin@demeu.kz", "n_admin_photo_report", "/admin/photos", 6, 0)
+
+    sunday = (NOW + timedelta(days=(6 - NOW.weekday()) % 7 or 7)).replace(hour=0, minute=0, second=0, microsecond=0)
+    anns = [
+        ("DEMEU now works in Kostanay! Kind Hands Kostanay is the first verified organization.",
+         "DEMEU теперь работает в Костанае! Kind Hands Kostanay — первая проверенная организация.",
+         "DEMEU енді Қостанайда! Kind Hands Kostanay — алғашқы тексерілген ұйым.",
+         "info", "all", None, None, NOW - timedelta(days=40), NOW - timedelta(days=26), 1),
+    ]
+    sunday_txt = {"en": f"Sunday, {sunday.day} {sunday.strftime('%B')}",
+                  "ru": f"в воскресенье, {sunday.day} {['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'][sunday.month - 1]},",
+                  "kk": f"{sunday.day}.{sunday.month:02d}, жексенбі,"}
+    for en, ru, kk, tone, aud, city_id, link, start, end, notified in anns:
+        en, ru, kk = en.format(d=sunday_txt["en"]), ru.format(d=sunday_txt["ru"]), kk.format(d=sunday_txt["kk"])
+        x("""INSERT INTO announcements (text_en, text_ru, text_kk, tone, audience, city_id, link, starts_at, ends_at,
+             notified, created_by, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+          (en, ru, kk, tone, aud, city_id, link, dt(start), dt(end), notified, admin_uid, dt(start)))
+        if notified and end > NOW:
+            for (uid,) in con.execute("""SELECT u.user_id FROM users u JOIN volunteers v USING (user_id) WHERE v.city_id=?
+                    UNION SELECT u.user_id FROM users u JOIN coordinators c USING (user_id) JOIN organizations o USING (org_id)
+                    WHERE o.city_id=?""", (city_id, city_id)).fetchall():
+                x("""INSERT INTO notifications (user_id, kind, params, link, is_read, created_at) VALUES (?,?,?,?,0,?)""",
+                  (uid, "n_announcement", json.dumps(dict(en=en, ru=ru, kk=kk), ensure_ascii=False), link, dt(start)))
 
     ev_cols = [r[1] for r in con.execute("PRAGMA table_info(events)")
                if r[1] not in ("event_id", "starts_at", "ends_at", "registration_deadline", "created_at", "series_id",
@@ -884,8 +949,56 @@ def main():
     x("UPDATE organizations SET deleted_at=?, deleted_by=? WHERE name='Quick Help KZ'",
       (dt(NOW - timedelta(days=12)), admin_uid))
 
+    for word in ("scam", "stupid", "idiot", "урод", "ватсап", "телеграм"):
+        x("INSERT INTO banned_words (word, created_by, created_at) VALUES (?,?,?)", (word, admin_uid, dt(NOW - timedelta(days=20))))
+    aru_uid = con.execute("SELECT user_id FROM volunteers WHERE volunteer_id=1024").fetchone()[0]
+    park_regs = con.execute("""SELECT r.registration_id FROM registrations r LEFT JOIN feedback f USING (registration_id)
+        WHERE r.event_id=310 AND r.status='attended' AND f.feedback_id IS NULL AND r.volunteer_id<>1024
+        ORDER BY r.registration_id""").fetchall()
+    if len(park_regs) >= 2:
+        x("""INSERT INTO feedback (registration_id, rating, comment, status, is_hidden, flagged_words, created_at)
+             VALUES (?,2,?, 'pending', 1, 'idiot', ?)""",
+          (park_regs[0][0], "The organisers were idiots, nobody knew where to meet and we waited for 40 minutes.",
+           dt(NOW - timedelta(hours=7))))
+        spam = x("""INSERT INTO feedback (registration_id, rating, comment, created_at) VALUES (?,5,?,?)""",
+                 (park_regs[1][0], "Great day! By the way, I sell cheap concert tickets, call me +7 701 555 22 11.",
+                  dt(NOW - timedelta(days=3)))).lastrowid
+        x("""INSERT INTO review_reports (feedback_id, reporter_id, reason, details, created_at) VALUES (?,?,'spam',?,?)""",
+          (spam, aru_uid, "This is an advert, not a review.", dt(NOW - timedelta(hours=20))))
+        note("admin@demeu.kz", "n_admin_review_pending", "/admin/reviews", 7, 0)
+        note("admin@demeu.kz", "n_admin_review_report", "/admin/reviews", 20, 0)
+
     def vol_user(vid):
         return con.execute("SELECT user_id FROM volunteers WHERE volunteer_id=?", (vid,)).fetchone()[0]
+
+    x("""INSERT INTO blocks (user_id, reason, starts_at, ends_at, blocked_by) VALUES (?,?,?,?,?)""",
+      (vol_user(1037), "Did not come to four events in a row without warning the organisers.",
+       dt(NOW - timedelta(days=2)), dt(NOW + timedelta(days=5)), admin_uid))
+    x("""INSERT INTO blocks (user_id, reason, starts_at, ends_at, blocked_by) VALUES (?,?,?,?,?)""",
+      (vol_user(1031), "Rude messages to a coordinator after the application was declined.",
+       dt(NOW - timedelta(days=45)), dt(NOW - timedelta(days=15)), admin_uid))
+    lifted_vid = con.execute("""SELECT volunteer_id FROM volunteers WHERE volunteer_id NOT IN (1024,1017,1037,1031,1001,1003,1011,1022,1100)
+                                ORDER BY volunteer_id DESC LIMIT 1""").fetchone()[0]
+    x("""INSERT INTO blocks (user_id, reason, starts_at, ends_at, blocked_by, lifted_at, lifted_by) VALUES (?,?,?,NULL,?,?,?)""",
+      (vol_user(lifted_vid), "Uploaded someone else's driving licence as their own document.",
+       dt(NOW - timedelta(days=50)), admin_uid, dt(NOW - timedelta(days=47)), admin_uid))
+    x("""INSERT INTO blocks (org_id, reason, starts_at, blocked_by, lifted_at, lifted_by) VALUES (5,?,?,?,?,?)""",
+      ("Two complaints about events with no coordinator on site. Restored after a call with the owner.",
+       dt(NOW - timedelta(days=70)), admin_uid, dt(NOW - timedelta(days=66)), admin_uid))
+
+    def deed(title, desc, slug, city, area, kind, days, people, name, email, phone, status, ago_days, **extra):
+        when = (NOW + timedelta(days=days)).strftime("%Y-%m-%d") if kind != "any" else None
+        created = NOW - timedelta(days=ago_days)
+        tok = hashlib.sha256(f"seed-deed-{title}".encode()).hexdigest()
+        cols = dict(title=title, description=desc, direction_id=D[slug], city_id=C[city], area=area, when_kind=kind,
+                    when_date=when, people_needed=people, contact_name=name, contact_email=email, contact_phone=phone,
+                    token_hash=tok, status=status, created_at=dt(created), confirmed_at=dt(created + timedelta(minutes=20)))
+        if status not in ("pending", "unconfirmed"):
+            cols.update(reviewed_by=admin_uid, reviewed_at=dt(created + timedelta(hours=5)))
+        cols.update(extra)
+        keys = list(cols)
+        return x(f"INSERT INTO deed_requests ({', '.join(keys)}) VALUES ({', '.join('?' * len(keys))})",
+                 [cols[k] for k in keys]).lastrowid
 
     for other, days in ((1011, 60), (1022, 45), (1023, 30), (1057, 20), (1019, 12)):
         x("""INSERT INTO friendships (requester_id, addressee_id, status, created_at, accepted_at)

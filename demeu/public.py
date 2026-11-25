@@ -4,6 +4,13 @@ from flask import (Blueprint, abort, flash, g, redirect, render_template,
                    request, session, url_for)
 
 from . import complaints as C
+from . import announcements as A
+from . import eventcal as EC
+from . import photoreports as P
+from . import deeds as DD
+from . import friends as FR
+from . import reviews as RV
+from . import vfeedback as VF
 from . import services as S
 from .core import LANGS, Page, _, arg_int, fmt_date, fmt_time, loc, form_int, login_required, notify, now_str, page_arg, safe_next
 from .db import execute, query, scalar
@@ -108,6 +115,66 @@ def events():
     return render_template("public/events.html", events=rows, page=page, total=total, **common)
 
 
+@bp.route("/events/<int:event_id>/photos", methods=["POST"])
+@login_required
+def event_photos_upload(event_id):
+    ev = S.get_event(event_id) or abort(404)
+    try:
+        n = P.upload(g.user, ev, request.files.getlist("photos"))
+        flash(_("flash_photos_uploaded", n=n), "success")
+    except S.RuleError as e:
+        flash(_(e.key, **e.params), "error")
+    return redirect(url_for("public.event_detail", event_id=event_id, _anchor="photos"))
+
+
+@bp.route("/photos/<int:photo_id>/delete", methods=["POST"])
+@login_required
+def event_photo_delete(photo_id):
+    try:
+        event_id = P.delete(g.user, photo_id)
+        flash(_("flash_photo_deleted"), "success")
+        return redirect(url_for("public.event_detail", event_id=event_id, _anchor="photos"))
+    except S.RuleError as e:
+        flash(_(e.key, **e.params), "error")
+        return redirect(url_for("public.events"))
+
+
+@bp.route("/photos/<int:photo_id>/report", methods=["POST"])
+@login_required
+def event_photo_report(photo_id):
+    p = P.get_photo(photo_id) or abort(404)
+    try:
+        P.report(g.user, photo_id, request.form.get("reason"), clean(request.form.get("details"), 1000))
+        flash(_("flash_report_sent"), "success")
+    except S.RuleError as e:
+        flash(_(e.key, **e.params), "error")
+    return redirect(url_for("public.event_detail", event_id=p["event_id"], _anchor="photos"))
+
+
+def _my_review_reports():
+    if not g.user:
+        return set()
+    return {r["feedback_id"] for r in query("SELECT feedback_id FROM review_reports WHERE reporter_id=?", (g.user["user_id"],))}
+
+
+@bp.route("/reviews/<int:feedback_id>/report", methods=["POST"])
+@login_required
+def review_report(feedback_id):
+    f = RV.get(feedback_id) or abort(404)
+    try:
+        RV.report(g.user, feedback_id, request.form.get("reason"), clean(request.form.get("details"), 1000))
+        flash(_("flash_report_sent"), "success")
+    except S.RuleError as e:
+        flash(_(e.key, **e.params), "error")
+    return redirect(request.referrer or url_for("public.event_detail", event_id=f["event_id"]))
+
+
+@bp.route("/announcements/<int:announcement_id>/hide", methods=["POST"])
+def announcement_hide(announcement_id):
+    A.dismiss(announcement_id)
+    if request.headers.get("X-Requested-With") == "fetch":
+        return "", 204
+    return redirect(safe_next(request.form.get("next")) or url_for("public.home"))
 
 
 @bp.route("/events/<int:event_id>")
@@ -149,7 +216,8 @@ def event_detail(event_id):
         AND e.event_id<>? AND (e.direction_id=? OR e.city_id=?) AND e.registration_deadline >= ?
         ORDER BY (e.direction_id=?) DESC, e.starts_at LIMIT 3""",
                     (event_id, ev["direction_id"], ev["city_id"], now_str(), ev["direction_id"]))
-    reviews = query("""SELECT f.*, v.full_name, v.avatar_path FROM feedback f JOIN registrations r USING (registration_id)
+    reviews = query("""SELECT f.*, v.full_name, v.avatar_path, v.user_id AS author_id FROM feedback f
+        JOIN registrations r USING (registration_id)
         JOIN volunteers v USING (volunteer_id) WHERE r.event_id=? AND f.is_hidden=0 ORDER BY f.created_at DESC""",
                     (event_id,))
     return render_template("public/event_detail.html", ev=ev, my_reg=my_reg, reason=reason, consent=consent,
@@ -160,7 +228,12 @@ def event_detail(event_id):
                            shifts=S.event_shifts(event_id), requirements=requirements, doc_rows=doc_rows,
                            can_report=C.can_report(g.user, C.target(event_id=event_id)),
                            waitlist_size=scalar("SELECT COUNT(*) FROM waitlist WHERE event_id=?", (event_id,)),
-                           hours=S.duration_hours(ev["starts_at"], ev["ends_at"]))
+                           hours=S.duration_hours(ev["starts_at"], ev["ends_at"]),
+                           photos=P.gallery(event_id), can_upload=P.can_upload(g.user, ev),
+                           photos_left=P.MAX_PER_PERSON - P.uploaded_count(g.user["user_id"], event_id) if g.user else 0,
+                           my_photo_reports={r["photo_id"] for r in query(
+                               "SELECT photo_id FROM photo_reports WHERE reporter_id=?", (g.user["user_id"],))}
+                           if g.user else set())
 
 
 VOL_SELECT = """SELECT v.*, c.name_en AS city_name_en, c.name_ru AS city_name_ru, c.name_kk AS city_name_kk,
@@ -302,11 +375,12 @@ def organization_profile(org_id):
                      (org_id, now_str()))
     past = query(S.EVENT_SELECT + " WHERE e.org_id=? AND e.status IN ('published','completed') AND e.ends_at < ?"
                  " ORDER BY e.starts_at DESC LIMIT 6", (org_id, now_str()))
-    reviews = query("""SELECT f.*, v.full_name, v.avatar_path, e.title, e.event_id FROM feedback f
+    reviews = query("""SELECT f.*, v.full_name, v.avatar_path, v.user_id AS author_id, e.title, e.event_id FROM feedback f
         JOIN registrations r USING (registration_id) JOIN volunteers v USING (volunteer_id) JOIN events e USING (event_id)
         WHERE e.org_id=? AND f.is_hidden=0 ORDER BY f.created_at DESC LIMIT 10""", (org_id,))
     team = query("SELECT full_name, position FROM coordinators WHERE org_id=? ORDER BY is_owner DESC, full_name", (org_id,))
     return render_template("public/organization_profile.html", o=o, upcoming=upcoming, past=past, reviews=reviews,
+                           my_review_reports=_my_review_reports(),
                            can_report=C.can_report(g.user, C.target(org_id=org_id)),
                            team=team, stats=S.org_stats(org_id), dirs=org_directions([org_id]).get(org_id, []),
                            own=own)

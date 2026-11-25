@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% from "partials/macros.html" import org_logo, dir_tag, event_card, avatar, rating, status, empty %}
 {% block title %}{{ o.name }}{% endblock %}
-{% from "partials/report.html" import report_button with context %}
+{% from "partials/report.html" import report_button, review_report with context %}
 {% block content %}
 <div class="profile-cover"></div>
 <div class="wrap">
@@ -50,7 +50,7 @@
       {% if reviews %}
       <div class="card card-pad">
         {% for r in reviews %}
-        <div class="review"><div class="head">{{ avatar(r.avatar_path, r.full_name, 'sm') }}<b class="small">{{ r.full_name }}</b>{{ rating(r.rating) }}</div>
+        <div class="review"><div class="head">{{ avatar(r.avatar_path, r.full_name, 'sm') }}<b class="small">{{ r.full_name }}</b>{{ rating(r.rating) }}{{ review_report(r, my_review_reports) }}</div>
           {% if r.comment %}<p class="small mb-1">{{ r.comment }}</p>{% endif %}
           <a class="xs muted" href="{{ url_for('public.event_detail', event_id=r.event_id) }}">{{ r.title }} · {{ fmt_date(r.created_at) }}</a></div>
         {% endfor %}
