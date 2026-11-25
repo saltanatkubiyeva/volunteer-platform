@@ -520,6 +520,62 @@ class FlowTest(unittest.TestCase):
         self.post(admin, "/admin/announcements", {"end_id": aid})
         self.assertNotIn("Coordinators test banner", self.client("org@demeu.kz").get("/").get_data(as_text=True))
 
+    def test_duplicate_and_weekly_series(self):
+        org = self.client("org@demeu.kz")
+        src = self.sql("""SELECT e.* FROM events e WHERE e.org_id=1 AND e.status='completed'
+                          AND EXISTS (SELECT 1 FROM registrations r WHERE r.event_id=e.event_id) ORDER BY e.starts_at DESC LIMIT 1""")[0]
+        start = (datetime.now() + timedelta(days=9)).replace(hour=10, minute=0)
+        before = self.sql("SELECT MAX(event_id) FROM events")[0][0]
+        self.post(org, f"/org/events/{src['event_id']}/repeat", {"starts_at": start.strftime("%Y-%m-%dT%H:%M"), "mode": "once"})
+        copy = self.sql("SELECT * FROM events WHERE event_id > ? ORDER BY event_id", (before,))
+        self.assertEqual(len(copy), 1)
+        self.assertEqual(copy[0]["status"], "draft")
+        self.assertEqual(copy[0]["title"], src["title"])
+        self.assertEqual(copy[0]["starts_at"], start.strftime("%Y-%m-%d %H:%M"))
+        self.assertFalse(self.sql("SELECT 1 FROM registrations WHERE event_id=?", (copy[0]["event_id"],)))
+        self.post(org, f"/org/events/{src['event_id']}/repeat",
+                  {"starts_at": (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%dT%H:%M"), "mode": "once"})
+        self.assertEqual(self.sql("SELECT COUNT(*) FROM events WHERE event_id > ?", (before,))[0][0], 1)
+        before = self.sql("SELECT MAX(event_id) FROM events")[0][0]
+        self.post(org, f"/org/events/{src['event_id']}/repeat",
+                  {"starts_at": start.strftime("%Y-%m-%dT%H:%M"), "mode": "weekly", "count": "3"})
+        series = self.sql("SELECT * FROM events WHERE event_id > ? ORDER BY starts_at", (before,))
+        self.assertEqual(len(series), 3)
+        sid = series[0]["series_id"]
+        self.assertTrue(sid)
+        self.assertTrue(all(e["series_id"] == sid and e["status"] == "published" for e in series))
+        gap = datetime.strptime(series[1]["starts_at"], "%Y-%m-%d %H:%M") - datetime.strptime(series[0]["starts_at"], "%Y-%m-%d %H:%M")
+        self.assertEqual(gap, timedelta(days=7))
+        self.post(org, f"/org/events/{series[1]['event_id']}/cancel-series", {"reason": "The embankment is closed for repairs"})
+        self.assertEqual({r[0] for r in self.sql("SELECT status FROM events WHERE event_id > ?", (before,))}, {"cancelled"})
+        self.assertEqual(self.sql("SELECT status FROM events WHERE event_id=?", (src["event_id"],))[0][0], "completed")
+
+    def test_feedback_on_volunteer(self):
+        reg = self.sql("""SELECT r.registration_id, r.volunteer_id FROM registrations r JOIN events e USING (event_id)
+                          WHERE e.org_id=1 AND r.status='attended'
+                          AND NOT EXISTS (SELECT 1 FROM volunteer_feedback f WHERE f.registration_id=r.registration_id)
+                          LIMIT 1""")[0]
+        org = self.client("org@demeu.kz")
+        self.post(org, f"/org/registrations/{reg['registration_id']}/feedback", {})
+        self.assertFalse(self.sql("SELECT 1 FROM volunteer_feedback WHERE registration_id=?", (reg["registration_id"],)))
+        self.post(org, f"/org/registrations/{reg['registration_id']}/feedback",
+                  {"tags": ["is_thanks", "is_reliable"], "comment": "Helped with the registration desk."})
+        f = self.sql("SELECT * FROM volunteer_feedback WHERE registration_id=?", (reg["registration_id"],))[0]
+        self.assertEqual((f["is_thanks"], f["is_reliable"], f["good_with_children"]), (1, 1, 0))
+        uid = self.sql("SELECT user_id FROM volunteers WHERE volunteer_id=?", (reg["volunteer_id"],))[0][0]
+        self.assertTrue(self.sql("SELECT 1 FROM notifications WHERE user_id=? AND kind='n_feedback_thanks'", (uid,)))
+        other = self.sql("""SELECT r.registration_id FROM registrations r JOIN events e USING (event_id)
+                            WHERE e.org_id<>1 AND r.status='attended' LIMIT 1""")[0][0]
+        self.post(org, f"/org/registrations/{other}/feedback", {"tags": ["is_thanks"]})
+        self.assertFalse(self.sql("SELECT 1 FROM volunteer_feedback WHERE registration_id=? AND updated_at IS NOT NULL", (other,)))
+        pending = self.sql("""SELECT r.registration_id FROM registrations r JOIN events e USING (event_id)
+                              WHERE e.org_id=1 AND r.status='pending' LIMIT 1""")[0][0]
+        self.post(org, f"/org/registrations/{pending}/feedback", {"tags": ["is_thanks"]})
+        self.assertFalse(self.sql("SELECT 1 FROM volunteer_feedback WHERE registration_id=?", (pending,)))
+        page = self.app.test_client().get(f"/volunteers/{reg['volunteer_id']}").get_data(as_text=True)
+        if self.sql("SELECT is_public FROM volunteers WHERE volunteer_id=?", (reg["volunteer_id"],))[0][0]:
+            self.assertIn("Helped with the registration desk.", page)
+
     def test_download_my_data(self):
         r = self.client("volunteer@demeu.kz").get("/settings/my-data.json")
         self.assertEqual(r.status_code, 200)

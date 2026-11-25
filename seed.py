@@ -893,6 +893,79 @@ def main():
                if r[1] not in ("event_id", "starts_at", "ends_at", "registration_deadline", "created_at", "series_id",
                                "is_urgent", "urgent_at", "updated_at", "cancel_reason")]
 
+    def copy_week(src_id, weeks, series_id):
+        row = dict(zip(ev_cols, con.execute(f"SELECT {', '.join(ev_cols)} FROM events WHERE event_id=?", (src_id,)).fetchone()))
+        times = con.execute("SELECT starts_at, ends_at, registration_deadline FROM events WHERE event_id=?", (src_id,)).fetchone()
+        shifted = [dt(datetime.strptime(t, "%Y-%m-%d %H:%M") + timedelta(weeks=weeks)) for t in times]
+        row.update(status="published", starts_at=shifted[0], ends_at=shifted[1], registration_deadline=shifted[2],
+                   series_id=series_id, created_at=dt(NOW - timedelta(days=3)))
+        cols = list(row)
+        return x(f"INSERT INTO events ({', '.join(cols)}) VALUES ({', '.join('?' * len(cols))})", [row[c] for c in cols]).lastrowid
+
+    sat = (NOW + timedelta(days=(5 - NOW.weekday()) % 7 or 7)).replace(hour=15, minute=0, second=0, microsecond=0)
+    esil = x("""INSERT INTO events (org_id,coordinator_id,direction_id,city_id,title,summary,description,address,
+         starts_at,ends_at,registration_deadline,max_volunteers,min_age,requires_approval,requirements,provided,
+         status,lat,lng,created_at) VALUES (1,1,?,?,?,?,?,?,?,?,?,15,14,0,?,?,'published',51.145410,71.421730,?)""",
+             (D["ecology"], C["Astana"], "Saturday Clean-up at the Esil Embankment",
+              "Every Saturday we keep the Esil embankment clean: litter, plastic and sorting for recycling.",
+              "A short weekly clean-up of the embankment between the Atyrau and Arkhar bridges. We meet at the pedestrian bridge, "
+              "split into pairs and walk our part of the embankment with bags and pickers. Plastic and glass go to our recycling partner.",
+              "Astana, Esil embankment, near the Atyrau pedestrian bridge", dt(sat), dt(sat + timedelta(hours=2)),
+              dt(sat - timedelta(hours=24)), "Warm clothes and gloves", "Bags, pickers and hot tea",
+              dt(NOW - timedelta(days=3)))).lastrowid
+    x("UPDATE events SET series_id=? WHERE event_id=?", (esil, esil))
+    for k in (1, 2, 3):
+        copy_week(esil, k, esil)
+    for vid in (1011, 1017, 1003, 1022):
+        if not con.execute("""SELECT 1 FROM registrations r JOIN events e USING (event_id) WHERE r.volunteer_id=?
+                AND r.status IN ('pending','approved') AND e.starts_at < ? AND e.ends_at > ?""",
+                           (vid, dt(sat + timedelta(hours=2)), dt(sat))).fetchone():
+            x("""INSERT INTO registrations (volunteer_id, event_id, status, applied_at, decided_at) VALUES (?,?, 'approved', ?, ?)""",
+              (vid, esil, dt(NOW - timedelta(days=2)), dt(NOW - timedelta(days=2))))
+    dogs = [r[0] for r in con.execute("""SELECT event_id FROM events WHERE title='Weekend Dog Walking' AND org_id=2
+                                         AND status='published' ORDER BY starts_at""")]
+    if dogs:
+        for d_id in dogs:
+            x("UPDATE events SET series_id=? WHERE event_id=?", (dogs[0], d_id))
+        last = dogs[-1]
+        for k in (1, 2):
+            copy_week(last, k, dogs[0])
+
+    fb_comments = [
+        ("Came early and helped us set everything up.", 0),
+        ("Calm and careful, followed the safety briefing.", 0),
+        ("Took care of the new volunteers in the group.", 0),
+        ("Worked until the very end, thank you!", 0),
+        ("Very polite with people and always smiling.", 0),
+        ("The children loved the games, they did not want to let them go.", 1),
+        ("Explained the tasks to the kids patiently and clearly.", 1),
+    ]
+    frnd = random.Random(77)
+    attended = con.execute("""SELECT r.registration_id, r.volunteer_id, e.coordinator_id, e.ends_at, d.slug, e.title, e.org_id
+        FROM registrations r JOIN events e USING (event_id) JOIN directions d USING (direction_id)
+        WHERE r.status='attended' ORDER BY r.registration_id""").fetchall()
+    special = {("City Park Clean-up", 1024): (1, 1, 0, "Aruzhan led a group of five and sorted all the recycling. Always on time."),
+               ("Eco-lesson for Schoolchildren", 1024): (1, 0, 1, "Ran the quiz for the 3rd grade, the kids were happy."),
+               ("City Day Festival Volunteers", 1024): (1, 0, 0, None)}
+    used = set()
+    for rid, vid, coord, ends, slug, title, org_id in attended:
+        key = (title, vid)
+        if key in special and key not in used:
+            used.add(key)
+            thanks, reliable, kids, text = special[key]
+        elif frnd.random() < (0.55 if vid in (1022, 1011, 1017, 1067) else 0.25):
+            kids_ok = slug in ("children", "education")
+            text, needs_kids = frnd.choice([c for c in fb_comments if kids_ok or not c[1]])
+            thanks, reliable, kids = 1, int(frnd.random() < 0.6), int(kids_ok and (needs_kids or frnd.random() < 0.5))
+            text = text if frnd.random() < 0.75 else None
+        else:
+            continue
+        x("""INSERT INTO volunteer_feedback (registration_id, coordinator_id, is_thanks, is_reliable, good_with_children,
+             comment, created_at) VALUES (?,?,?,?,?,?,?)""",
+          (rid, coord, thanks, reliable, kids, text, dt(datetime.strptime(ends, "%Y-%m-%d %H:%M") + timedelta(hours=20))))
+    note("volunteer@demeu.kz", "n_feedback_thanks", "/volunteers/1024", 24 * 44 - 2, 1,
+         org="Green Steppe", event="City Park Clean-up")
+
     tim_created = NOW - timedelta(days=200)
     tim_uid = x("""INSERT INTO users (email,password_hash,role,preferred_lang,created_at,last_login_at)
                    VALUES ('timur@demeu.kz',?, 'volunteer','en',?,?)""", (pw, dt(tim_created), dt(NOW - timedelta(days=2)))).lastrowid
@@ -948,6 +1021,46 @@ def main():
     trashed_event(run_src, "Night Run Water Point", "cancelled", 6, 28, run_owner, "The city moved the night run to spring.")
     x("UPDATE organizations SET deleted_at=?, deleted_by=? WHERE name='Quick Help KZ'",
       (dt(NOW - timedelta(days=12)), admin_uid))
+
+    hist_cols = [r[1] for r in con.execute("PRAGMA table_info(events)")
+                 if r[1] not in ("event_id", "title", "summary", "status", "starts_at", "ends_at", "registration_deadline",
+                                 "created_at", "deleted_at", "deleted_by", "series_id", "cancel_reason", "is_urgent",
+                                 "urgent_at", "updated_at", "direction_id", "max_volunteers")]
+    astana_vols = [r[0] for r in con.execute("""SELECT v.volunteer_id FROM volunteers v JOIN cities c USING (city_id)
+        WHERE c.name_en='Astana' AND v.volunteer_id NOT IN (1024, 1100, 1037) ORDER BY v.volunteer_id""")]
+    hrnd = random.Random(2025)
+    gs_coord = con.execute("SELECT coordinator_id FROM coordinators WHERE org_id=1 ORDER BY is_owner DESC LIMIT 1").fetchone()[0]
+    history = [
+        ("2025-04-19", "Spring Clean-up at the Esil Embankment", "ecology", 3), ("2025-05-24", "Tree Planting in Zhetisu District", "ecology", 4),
+        ("2025-06-14", "Eco-quiz for Summer Camp Kids", "education", 2), ("2025-07-12", "Plastic-free Picnic in Central Park", "ecology", 3),
+        ("2025-08-23", "Watering Young Trees on Turan Avenue", "ecology", 2), ("2025-09-20", "World Cleanup Day in Astana", "ecology", 4),
+        ("2025-10-11", "Autumn Leaves Collection", "ecology", 3), ("2025-11-15", "Battery Collection Point at the Mall", "ecology", 3),
+        ("2026-01-24", "Bird Feeders for the Botanical Garden", "ecology", 2), ("2026-02-21", "Eco-lesson at School No. 54", "education", 2),
+        ("2026-04-18", "Clean-up Saturday at Lake Maly Taldykol", "ecology", 3), ("2026-07-11", "Eco-quiz for Summer Camp Kids", "education", 2),
+        ("2026-08-22", "Watering Young Trees on Turan Avenue", "ecology", 2),
+    ]
+    hcols = ", ".join(hist_cols)
+    for day, title, slug, hours in history:
+        start = datetime.strptime(day + " 10:00", "%Y-%m-%d %H:%M")
+        if start >= NOW:
+            continue
+        size = hrnd.randint(7, 14)
+        eid = x(f"""INSERT INTO events ({hcols}, title, summary, status, starts_at, ends_at, registration_deadline, created_at,
+                    direction_id, max_volunteers)
+                    SELECT {hcols}, ?, ?, 'completed', ?, ?, ?, ?, ?, ? FROM events WHERE event_id=310""",
+                (title, "A Green Steppe event for volunteers in Astana.", dt(start), dt(start + timedelta(hours=hours)),
+                 dt(start - timedelta(days=1)), dt(start - timedelta(days=14)), D[slug], size + 4)).lastrowid
+        x("UPDATE events SET coordinator_id=? WHERE event_id=?", (gs_coord, eid))
+        for i, vid in enumerate(hrnd.sample(astana_vols, min(size, len(astana_vols)))):
+            came = hrnd.random() > 0.12
+            rid = x("""INSERT INTO registrations (volunteer_id, event_id, status, applied_at, decided_at, decided_by,
+                       hours_confirmed, confirmed_by, confirmed_at) VALUES (?,?,?,?,?,?,?,?,?)""",
+                    (vid, eid, "attended" if came else "no_show", dt(start - timedelta(days=6)), dt(start - timedelta(days=5)),
+                     gs_coord, hours if came else None, gs_coord if came else None,
+                     dt(start + timedelta(hours=hours + 2)))).lastrowid
+            if came and hrnd.random() < 0.3:
+                x("INSERT INTO feedback (registration_id, rating, comment, created_at) VALUES (?,?,?,?)",
+                  (rid, hrnd.choice([4, 5, 5, 5, 4, 3]), None, dt(start + timedelta(days=1))))
 
     for word in ("scam", "stupid", "idiot", "урод", "ватсап", "телеграм"):
         x("INSERT INTO banned_words (word, created_by, created_at) VALUES (?,?,?)", (word, admin_uid, dt(NOW - timedelta(days=20))))

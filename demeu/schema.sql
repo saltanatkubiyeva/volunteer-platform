@@ -411,6 +411,21 @@ CREATE TABLE IF NOT EXISTS photo_reports (
     CHECK (status = 'new' OR handled_at IS NOT NULL)
 );
 
+CREATE INDEX idx_events_series ON events(series_id);
+
+CREATE TABLE IF NOT EXISTS volunteer_feedback (
+    feedback_id        INTEGER PRIMARY KEY,
+    registration_id    INTEGER NOT NULL UNIQUE REFERENCES registrations(registration_id) ON DELETE CASCADE,
+    coordinator_id     INTEGER REFERENCES coordinators(coordinator_id) ON DELETE SET NULL,
+    is_thanks          INTEGER NOT NULL DEFAULT 0 CHECK (is_thanks IN (0,1)),
+    is_reliable        INTEGER NOT NULL DEFAULT 0 CHECK (is_reliable IN (0,1)),
+    good_with_children INTEGER NOT NULL DEFAULT 0 CHECK (good_with_children IN (0,1)),
+    comment            TEXT CHECK (comment IS NULL OR length(comment) <= 300),
+    created_at         TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+    updated_at         TEXT,
+    CHECK (is_thanks + is_reliable + good_with_children > 0 OR comment IS NOT NULL)
+);
+
 CREATE INDEX IF NOT EXISTS idx_events_deleted ON events(deleted_at);
 CREATE INDEX IF NOT EXISTS idx_orgs_deleted ON organizations(deleted_at);
 

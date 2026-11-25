@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% from "partials/macros.html" import org_logo %}
+{% block title %}{{ _('rep_title') }} · {{ org.name }}{% endblock %}
+{% macro delta(v, suffix='%') -%}
+{% if v == 'new' %}<span class="rep-delta up">{{ _('rep_new') }}</span>
+{% elif v is not none and v > 0 %}<span class="rep-delta up">▲ {{ v }}{{ suffix }}</span>
+{% elif v is not none and v < 0 %}<span class="rep-delta down">▼ {{ -v }}{{ suffix }}</span>
+{% elif v is not none %}<span class="rep-delta">= 0{{ suffix }}</span>{% endif %}
+{%- endmacro %}
+{% block content %}
+{% set p = r.period %}
+{% set label = p.value if p.kind == 'year' else month_name(p.start.month) ~ ' ' ~ p.start.year %}
+{% set prev_label = p.prev_start.year if p.kind == 'year' else month_name(p.prev_start.month) ~ ' ' ~ p.prev_start.year %}
+<div class="wrap rep-wrap">
+  <div class="rep-bar no-print">
+    <a class="btn btn-ghost btn-sm" href="{{ url_for('org.reports') }}">{{ icon('arrow-left', 15) }} {{ _('rep_back') }}</a>
+    <form method="get" class="row tight" data-rep-auto>
+      <select class="select" name="period" aria-label="{{ _('rep_title') }}">
+        <option value="year" {{ 'selected' if p.kind == 'year' }}>{{ _('rep_year') }}</option>
+        <option value="month" {{ 'selected' if p.kind == 'month' }}>{{ _('rep_month') }}</option></select>
+      {% if p.kind == 'year' %}
+      <select class="select" name="value" aria-label="{{ _('rep_year') }}">{% for y in r.years %}<option value="{{ y }}" {{ 'selected' if y|string == p.value }}>{{ y }}</option>{% endfor %}</select>
+      {% else %}
+      <select class="select" name="value" aria-label="{{ _('rep_month') }}">{% for m in r.months %}<option value="{{ m.strftime('%Y-%m') }}" {{ 'selected' if m.strftime('%Y-%m') == p.value }}>{{ month_name(m.month) }} {{ m.year }}</option>{% endfor %}</select>
+      {% endif %}
+    </form>
+    <button class="btn btn-primary btn-sm" type="button" onclick="window.print()">{{ icon('download', 15) }} {{ _('rep_save_pdf') }}</button>
+  </div>
+  <p class="xs muted no-print rep-tip">{{ icon('info', 12) }} {{ _('rep_print_hint') }}</p>
+
+  <article class="rep-sheet">
+    <header class="rep-head">
+      <div>
+        <div class="rep-brand">DEMEU</div>
+        <h1>{{ org.name }}</h1>
+        <p class="rep-sub">{{ _('rep_subtitle') }} · <b>{{ label }}</b></p>
+      </div>
+      <div class="rep-head-side">
+        {{ org_logo(org, 'lg') }}
+        <div class="xs muted">{{ _('rep_generated', d=fmt_dt(r.generated)) }}</div>
+      </div>
+    </header>
+
+    {% if not r.cur.events %}
+      <p class="rep-empty">{{ _('rep_empty') }}</p>
+    {% else %}
+    <section class="rep-kpis">
+      <div class="rep-kpi main"><div class="n">{{ fmt_hours(r.cur.hours) }}</div><div class="l">{{ _('rep_hours') }}</div>{{ delta(r.deltas.hours) }}</div>
+      <div class="rep-kpi"><div class="n">{{ r.cur.volunteers }}</div><div class="l">{{ _('rep_volunteers') }}</div>{{ delta(r.deltas.volunteers) }}</div>
+      <div class="rep-kpi"><div class="n">{{ r.cur.events }}</div><div class="l">{{ _('rep_events') }}</div>{{ delta(r.deltas.events) }}</div>
+      <div class="rep-kpi"><div class="n">{{ r.cur.new_volunteers }}</div><div class="l">{{ _('rep_new_volunteers') }}</div>{{ delta(r.deltas.new_volunteers) }}</div>
+      <div class="rep-kpi"><div class="n">{{ (r.cur.attendance ~ '%') if r.cur.attendance is not none else '—' }}</div><div class="l">{{ _('rep_attendance') }}</div>{{ delta(r.deltas.attendance, ' ' ~ _('rep_pp')) }}</div>
+      <div class="rep-kpi"><div class="n">{{ r.cur.rating or '—' }}<small>/5</small></div><div class="l">{{ _('rep_rating') }} · {{ _('rep_rating_n', n=r.cur.rating_n) }}</div>{{ delta(r.deltas.rating, '') }}</div>
+    </section>
+    <p class="rep-compare xs muted">{{ _('rep_vs', p=prev_label) }}: {{ _('rep_prev_line', h=fmt_hours(r.prev.hours), v=r.prev.volunteers, e=r.prev.events) }}</p>
+
+    <section class="rep-block">
+      <h2>{{ _('rep_hours_by_month') }}</h2>
+      {% set n = r.monthly|length %}{% set w = 640 / n %}
+      <svg class="rep-chart" viewBox="0 0 660 190" role="img" aria-label="{{ _('rep_hours_by_month') }}">
+        <line x1="10" y1="160" x2="650" y2="160" stroke="#d6d3cc" stroke-width="1"/>
+        {% for m in r.monthly %}
+          {% set h = (m.hours / r.monthly_max * 130) if m.hours else 0 %}
+          {% set x = 10 + loop.index0 * w + w * 0.18 %}
+          <rect x="{{ x }}" y="{{ 160 - h }}" width="{{ w * 0.64 }}" height="{{ h if h > 0 else 0 }}" rx="4"
+                fill="{{ '#c8f04a' if m.current else '#1f0d49' }}" {% if m.current %}stroke="#1f0d49" stroke-width="1.5"{% endif %}/>
+          {% if m.hours %}<text x="{{ x + w * 0.32 }}" y="{{ 152 - h }}" text-anchor="middle" font-size="12" font-weight="700" fill="#111214">{{ fmt_hours(m.hours) }}</text>{% endif %}
+          <text x="{{ x + w * 0.32 }}" y="178" text-anchor="middle" font-size="12" fill="#6b6e73">{{ month_name(m.month, True) }}{% if p.kind == 'month' and m.month == 1 %} {{ m.year }}{% endif %}</text>
+        {% endfor %}
+      </svg>
+    </section>
+
+    <div class="rep-two">
+      <section class="rep-block">
+        <h2>{{ _('rep_by_direction') }}</h2>
+        {% for d in r.dirs %}
+        <div class="rep-hbar"><div class="t"><span>{{ loc(d, 'name') }}</span><b>{{ fmt_hours(d.hours) }} {{ _('rep_h') }}</b></div>
+          <div class="track"><i style="width:{{ (d.hours / r.dirs_max * 100)|round(1) }}%"></i></div></div>
+        {% endfor %}
+      </section>
+      <section class="rep-block">
+        <h2>{{ _('rep_attendance_title') }}</h2>
+        {% set marked = r.cur.attended + r.cur.no_show %}
+        <div class="rep-att"><div class="big">{{ (r.cur.attendance ~ '%') if r.cur.attendance is not none else '—' }}</div>
+          <div class="track two"><i style="width:{{ (r.cur.attended * 100 / marked)|round(1) if marked else 0 }}%"></i></div>
+          <div class="rep-att-legend"><span><i class="dot a"></i>{{ _('rep_attended') }}: <b>{{ r.cur.attended }}</b></span>
+            <span><i class="dot b"></i>{{ _('rep_no_show') }}: <b>{{ r.cur.no_show }}</b></span></div>
+          <p class="xs muted mb-0">{{ _('rep_applications', n=r.cur.applications) }}</p></div>
+      </section>
+    </div>
+
+    <section class="rep-block">
+      <h2>{{ _('rep_best_events') }}</h2>
+      <table class="rep-table">
+        <thead><tr><th>{{ _('rep_col_event') }}</th><th>{{ _('rep_col_date') }}</th><th class="num">{{ _('rep_col_people') }}</th><th class="num">{{ _('rep_col_hours') }}</th><th class="num">{{ _('rep_col_rating') }}</th></tr></thead>
+        <tbody>{% for e in r.best %}<tr><td>{{ e.title }}</td><td class="nowrap">{{ fmt_date(e.starts_at) }}</td><td class="num">{{ e.attended or 0 }}</td><td class="num"><b>{{ fmt_hours(e.hours) }}</b></td><td class="num">{{ e.rating or '—' }}</td></tr>{% endfor %}</tbody>
+      </table>
+    </section>
+
+    <section class="rep-block">
+      <h2>{{ _('rep_top_volunteers') }}</h2>
+      <table class="rep-table">
+        <thead><tr><th>#</th><th>{{ _('rep_col_volunteer') }}</th><th class="num">{{ _('rep_col_events') }}</th><th class="num">{{ _('rep_col_hours') }}</th></tr></thead>
+        <tbody>{% for v in r.top %}<tr><td class="muted">{{ loop.index }}</td><td>{{ v.display }}</td><td class="num">{{ v.events }}</td><td class="num"><b>{{ fmt_hours(v.hours) }}</b></td></tr>{% endfor %}</tbody>
+      </table>
+      <p class="xs muted mt-1 mb-0">{{ _('rep_privacy_note') }}</p>
+    </section>
+    {% endif %}
+
+    <footer class="rep-foot">{{ _('rep_footer') }}</footer>
+  </article>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  var f = document.querySelector('[data-rep-auto]');
+  if (!f) return;
+  f.querySelectorAll('select').forEach(function (s) {
+    s.addEventListener('change', function () {
+      if (s.name === 'period') f.querySelector('[name=value]').disabled = true;
+      f.submit();
+    });
+  });
+})();
+</script>
+{% endblock %}

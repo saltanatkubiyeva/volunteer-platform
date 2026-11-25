@@ -102,6 +102,21 @@ src="{{ cover_url(ev, w) }}" onerror="this.onerror=null;this.src='{{ fallback_ur
 {% for r in rows %}<option value="{{ r[value_key] }}" {{ 'selected' if selected|string == r[value_key]|string }}>{{ loc(r, label_field) }}</option>{% endfor %}
 {%- endmacro %}
 
+{% macro feedback_tags(f, size=12) -%}
+{% if f.is_thanks %}<span class="tag fb-tag fb-thanks">{{ icon('heart', size) }}{{ _('fb_thanks') }}</span>{% endif %}
+{% if f.is_reliable %}<span class="tag fb-tag">{{ icon('check-circle', size) }}{{ _('fb_reliable') }}</span>{% endif %}
+{% if f.good_with_children %}<span class="tag fb-tag">{{ icon('smile', size) }}{{ _('fb_children') }}</span>{% endif %}
+{%- endmacro %}
+
+{% macro feedback_summary(fs) -%}
+{% if fs %}<div class="fb-sum" title="{{ _('fb_sum_title', n=fs.total) }}">
+  {% if fs.thanks %}<span class="fb-chip fb-thanks">{{ icon('heart', 11) }}{{ fs.thanks }}</span>{% endif %}
+  {% if fs.reliable %}<span class="fb-chip">{{ icon('check-circle', 11) }}{{ _('fb_reliable_short') }} ×{{ fs.reliable }}</span>{% endif %}
+  {% if fs.children %}<span class="fb-chip">{{ icon('smile', 11) }}{{ _('fb_children_short') }} ×{{ fs.children }}</span>{% endif %}
+  {% if fs.last %}<div class="fb-quote">“{{ fs.last.comment|truncate(70) }}” <span class="muted">— {{ fs.last.org_name }}</span></div>{% endif %}
+</div>{% endif %}
+{%- endmacro %}
+
 {% macro reliability_badge(rel) -%}
 {% if not rel or rel.level == 'new' %}<span class="tag tone-sky">{{ _('rel_new') }}</span>
 {% else %}<span class="tag {{ {'good': 'tone-mint', 'mid': 'tone-butter', 'low': 'tone-rose'}[rel.level] }}">{{ _('rel_rate', n=rel.rate) }}</span>

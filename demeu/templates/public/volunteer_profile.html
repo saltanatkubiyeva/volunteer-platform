@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "partials/macros.html" import avatar, dir_tag, empty %}
+{% from "partials/macros.html" import avatar, dir_tag, empty, feedback_tags %}
 {% block title %}{{ v.full_name }}{% endblock %}
 {% block content %}
 <div class="profile-cover"></div>
@@ -40,6 +40,18 @@
         <div class="row tight">{% for s in v.skills.split(',') if s.strip() %}<span class="tag tone-sage">{{ s.strip() }}</span>{% endfor %}</div>
       {% endif %}
 
+      {% if feedback %}
+      <h3 class="mt-4">{{ _('fb_profile_title') }} <span class="small muted">({{ feedback|length }})</span></h3>
+      <div class="fb-list">
+        {% for f in feedback %}
+        <div class="card fb-card">
+          <div class="row between"><a class="fb-org" href="{{ url_for('public.organization_profile', org_id=f.org_id) }}">{{ f.org_name }}</a><span class="xs muted">{{ fmt_date(f.starts_at) }}</span></div>
+          <div class="xs muted"><a class="muted" href="{{ url_for('public.event_detail', event_id=f.event_id) }}">{{ f.title }}</a></div>
+          <div class="row tight mt-1">{{ feedback_tags(f) }}</div>
+          {% if f.comment %}<p class="fb-text">“{{ f.comment }}”</p>{% endif %}
+        </div>
+        {% endfor %}
+      </div>
       {% endif %}
 
       <h3 class="mt-4">{{ _('activity') }}</h3>

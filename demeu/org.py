@@ -6,6 +6,9 @@ from flask import (Blueprint, Response, abort, flash, g, redirect,
                    render_template, request, url_for)
 from werkzeug.security import generate_password_hash
 
+from . import deeds as DD
+from . import orgreport as OR
+from . import series as SR
 from . import services as S
 from . import trash as T
 from . import vfeedback as VF
@@ -351,11 +354,69 @@ def event_manage(event_id):
     return render_template("org/event_manage.html", ev=ev, groups=groups, tab=tab, started=started,
                            rel=S.reliability([r["volunteer_id"] for r in groups["pending"]]
                                              + [w["volunteer_id"] for w in waiting]),
-                           waiting=waiting, shifts=shifts, load=load, unassigned=unassigned, proposal=proposal,
+                           fb_sum=VF.summary([r["volunteer_id"] for r in groups["pending"]]
+                                             + [w["volunteer_id"] for w in waiting]),
+                           fb=VF.for_event(event_id), series=SR.series_events(ev["series_id"]),
+                           dup_start=_next_week(ev["starts_at"]), now_value=now_str(),
+                           urgent_next=S.urgent_next_time(ev), deadline_passed=ev["registration_deadline"] < now_str(), waiting=waiting, reqs=reqs, vol_docs=vol_docs, shifts=shifts, load=load, unassigned=unassigned, proposal=proposal,
                            candidates=S.lead_candidates(r["volunteer_id"] for r in groups["participants"]),
                            finished=ev["ends_at"] <= now_str(),
                            hours=duration_hours(ev["starts_at"], ev["ends_at"]),
                            unmarked=sum(1 for r in regs if r["status"] == "approved"))
+
+
+def _next_week(starts_at):
+    start = datetime.strptime(starts_at, "%Y-%m-%d %H:%M") + timedelta(weeks=1)
+    while start <= datetime.now():
+        start += timedelta(weeks=1)
+    return start.strftime("%Y-%m-%dT%H:%M")
+
+
+@bp.route("/events/<int:event_id>/repeat", methods=["POST"])
+@coordinator_only
+def repeat(event_id):
+    ev = own_event(event_id)
+    start = parse_local_dt(clean(request.form.get("starts_at"), 20))
+    try:
+        if request.form.get("mode") == "weekly":
+            ids = SR.repeat_weekly(g.coordinator, g.org, ev, start, form_int("count") or 0)
+            flash(_("flash_series_created", n=len(ids)), "success")
+            return redirect(url_for("org.event_manage", event_id=ids[0]))
+        new_id = SR.duplicate(g.coordinator, ev, start)
+        flash(_("flash_event_duplicated"), "success")
+        return redirect(url_for("org.event_edit", event_id=new_id))
+    except S.RuleError as e:
+        flash(_(e.key, **e.params), "error")
+    return redirect(url_for("org.event_manage", event_id=event_id))
+
+
+@bp.route("/events/<int:event_id>/cancel-series", methods=["POST"])
+@coordinator_only
+def cancel_series(event_id):
+    ev = own_event(event_id)
+    reason = clean(request.form.get("reason"), 300)
+    if len(reason) < 5:
+        flash(_("err_cancel_reason"), "error")
+        return redirect(url_for("org.event_manage", event_id=event_id))
+    try:
+        n = SR.cancel_series(g.user["user_id"], ev["org_id"], ev["series_id"], reason)
+        flash(_("flash_series_cancelled", n=n), "info")
+    except S.RuleError as e:
+        flash(_(e.key, **e.params), "error")
+    return redirect(url_for("org.event_manage", event_id=event_id))
+
+
+@bp.route("/registrations/<int:registration_id>/feedback", methods=["POST"])
+@coordinator_only
+def volunteer_feedback(registration_id):
+    try:
+        VF.save(g.coordinator, registration_id, request.form.getlist("tags"), clean(request.form.get("comment"), 300))
+        flash(_("flash_feedback_saved"), "success")
+    except S.RuleError as e:
+        flash(_(e.key, **e.params), "error")
+    event_id = scalar("SELECT event_id FROM registrations WHERE registration_id=?", (registration_id,))
+    return redirect(url_for("org.event_manage", event_id=event_id, tab="participants") if event_id
+                    else url_for("org.events"))
 
 
 @bp.route("/events/<int:event_id>/urgent", methods=["POST"])
@@ -641,4 +702,13 @@ def reports():
                         r["attended"] or 0, r["no_show"] or 0, r["hours"], r["rating"] or ""])
         return Response(buf.getvalue(), mimetype="text/csv",
                         headers={"Content-Disposition": "attachment; filename=demeu_org_report.csv"})
-    return render_template("org/reports.html", rows=rows, stats=S.org_stats(oid))
+    return render_template("org/reports.html", rows=rows, stats=S.org_stats(oid), years=OR.years(oid),
+                           months=OR.months(oid))
+
+
+@bp.route("/reports/summary")
+@coordinator_only
+def report_summary():
+    kind = "month" if request.args.get("period") == "month" else "year"
+    data = OR.build(g.coordinator["org_id"], kind, request.args.get("value"))
+    return render_template("org/report_summary.html", r=data, org=g.org)

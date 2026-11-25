@@ -1,5 +1,5 @@
 {% extends "org/_layout.html" %}
-{% from "partials/macros.html" import avatar, status, empty, dir_tag, reliability_badge %}
+{% from "partials/macros.html" import avatar, status, empty, dir_tag, reliability_badge, feedback_summary, feedback_tags %}
 {% block title %}{{ ev.title }}{% endblock %}
 {% macro doc_links(vid) -%}
 {% if reqs %}<div class="xs mt-1 doc-links">{% for rq in reqs %}{% set d = vol_docs.get(vid, {}).get(rq.skill_id) %}
@@ -30,6 +30,19 @@
 {% if ev.status == 'cancelled' %}<div class="alert alert-danger mb-3">{{ icon('x-circle') }}<div><b>{{ _('event_cancelled_banner') }}</b><p class="small mb-0">{{ ev.cancel_reason }}</p></div></div>{% endif %}
 {% if ev.is_urgent and ev.status == 'published' and not started %}<div class="alert alert-danger mb-3">{{ icon('alert') }}<div class="small"><b>{{ _('urgent_active') }}</b> {{ _('urgent_active_text', time=fmt_dt(ev.urgent_at)) }}</div></div>{% endif %}
 {% if ev.status == 'draft' %}<div class="alert alert-warn mb-3">{{ icon('pencil') }}<div class="small">{{ _('draft_banner') }}</div></div>{% endif %}
+{% if series|length > 1 %}
+{% set cancellable = series|selectattr('status', 'in', ['published', 'draft'])|selectattr('starts_at', 'gt', now_value)|list %}
+<div class="card card-pad mb-3 series-box">
+  <div class="row between">
+    <div><b>{{ icon('repeat', 16) }} {{ _('series_title', n=series|length) }}</b><div class="xs muted">{{ _('series_hint') }}</div></div>
+    {% if cancellable %}<button class="btn btn-ghost btn-xs" data-dialog="series-cancel-dlg">{{ icon('x', 14) }} {{ _('series_cancel', n=cancellable|length) }}</button>{% endif %}
+  </div>
+  <div class="series-list mt-1">
+    {% for s in series %}<a class="series-item {{ 'on' if s.event_id == ev.event_id }} st-{{ s.status }}" href="{{ url_for('org.event_manage', event_id=s.event_id) }}">
+      <b>{{ fmt_date(s.starts_at, True, False) }}</b><span>{{ fmt_time(s.starts_at) }} · {{ s.taken }}/{{ s.max_volunteers }}{% if s.status == 'cancelled' %} · {{ _('st_cancelled') }}{% elif s.status == 'completed' %} · {{ _('st_completed') }}{% endif %}</span></a>{% endfor %}
+  </div>
+</div>
+{% endif %}
 
 <div class="grid grid-4 mb-3">
   <div class="stat"><div class="num">{{ ev.taken }}/{{ ev.max_volunteers }}</div><div class="lbl">{{ _('approved_places') }}</div></div>
@@ -56,7 +69,7 @@
       <tr class="{{ 'row-alert' if rl and rl.alert }}"><td><a class="person" href="{{ url_for('public.volunteer_profile', volunteer_id=r.volunteer_id) }}">{{ avatar(r.avatar_path, r.full_name, 'sm') }}{{ r.full_name }}</a>
           {% if shifts %}<div class="xs muted mt-1">{{ _('preferred_shift') }}: {{ _('all_shifts') if r.prefers_all_shifts else (r.pref_title or _('no_preference')) }}</div>{% endif %}{{ doc_links(r.volunteer_id) }}</td>
         <td>{{ age_on(r.birth_date) }}</td>
-        <td class="nowrap">{{ reliability_badge(rl) }}</td>
+        <td class="rel-cell">{{ reliability_badge(rl) }}{{ feedback_summary(fb_sum.get(r.volunteer_id)) }}</td>
         <td class="small cell-clip" style="max-width:190px" title="{{ r.motivation or '' }}">{{ r.motivation or '—' }}</td>
         <td class="small nowrap">{{ fmt_dt(r.applied_at) }}</td>
         <td class="nowrap">
@@ -89,7 +102,7 @@
   {% endif %}
   {% endif %}
   <div class="table-wrap"><table class="table">
-    <thead><tr><th>{{ _('volunteer') }}</th><th>{{ _('contacts') }}</th>{% if shifts %}<th>{{ _('shift') }}</th>{% endif %}<th>{{ _('status') }}</th>{% if started %}<th class="num">{{ _('hours_col') }}</th>{% endif %}<th>{{ _('team_leader') }}</th></tr></thead>
+    <thead><tr><th>{{ _('volunteer') }}</th><th>{{ _('contacts') }}</th>{% if shifts %}<th>{{ _('shift') }}</th>{% endif %}<th>{{ _('status') }}</th>{% if started %}<th class="num">{{ _('hours_col') }}</th>{% endif %}<th>{{ _('team_leader') }}</th>{% if finished %}<th>{{ _('fb_col') }}</th>{% endif %}</tr></thead>
     <tbody>{% for r in groups.participants %}
       <tr class="{{ 'row-lead' if r.is_team_lead }}"><td><a class="person" href="{{ url_for('public.volunteer_profile', volunteer_id=r.volunteer_id) }}">{{ avatar(r.avatar_path, r.full_name, 'sm') }}{{ r.full_name }}</a>{{ doc_links(r.volunteer_id) }}
           {% if r.volunteer_id in candidates and not r.is_team_lead %}<br><span class="tag tag-rec" style="margin-top:4px" title="{{ _('lead_recommended_hint') }}">{{ icon('star', 12) }}{{ _('lead_recommended') }}</span>{% endif %}</td>
@@ -114,7 +127,24 @@
             {% if r.is_team_lead %}<span class="tag tone-lilac">{{ icon('flag', 12) }}{{ _('team_leader') }}</span> <button class="btn btn-text btn-xs">{{ _('remove') }}</button>
             {% else %}<button class="btn btn-ghost btn-xs btn-lead">{{ icon('flag', 14) }} {{ _('make_team_lead') }}</button>{% endif %}
           </form>
-          {% elif r.is_team_lead %}<span class="tag tone-lilac">{{ icon('flag', 12) }}{{ _('team_leader') }}</span>{% else %}—{% endif %}</td></tr>
+          {% elif r.is_team_lead %}<span class="tag tone-lilac">{{ icon('flag', 12) }}{{ _('team_leader') }}</span>{% else %}—{% endif %}</td>
+        {% if finished %}<td class="fb-cell">{% if r.status == 'attended' %}{% set f = fb.get(r.registration_id) %}
+          {% if f %}<div class="row tight">{{ feedback_tags(f) }}</div>{% if f.comment %}<div class="xs muted mt-1 cell-clip" style="max-width:200px" title="{{ f.comment }}">“{{ f.comment }}”</div>{% endif %}
+            <button class="btn btn-text btn-xs" data-dialog="fb-{{ r.registration_id }}">{{ icon('pencil', 13) }} {{ _('edit') }}</button>
+          {% else %}<button class="btn btn-ghost btn-xs btn-fb" data-dialog="fb-{{ r.registration_id }}">{{ icon('heart', 14) }} {{ _('fb_leave') }}</button>{% endif %}
+          <dialog id="fb-{{ r.registration_id }}"><form class="dlg" method="post" action="{{ url_for('org.volunteer_feedback', registration_id=r.registration_id) }}">
+            {{ csrf_field() }}<h3>{{ _('fb_dlg_title') }}</h3><p class="small muted">{{ r.full_name }} · {{ ev.title }}</p>
+            <div class="row tight mt-1">
+              {% for t, ic, k in [('is_thanks', 'heart', 'fb_thanks'), ('is_reliable', 'check-circle', 'fb_reliable'), ('good_with_children', 'smile', 'fb_children')] %}
+              <label class="check-chip"><input type="checkbox" name="tags" value="{{ t }}" {{ 'checked' if (f and f[t]) or (not f and t == 'is_thanks') }}><span>{{ icon(ic, 15) }}{{ _(k) }}</span></label>
+              {% endfor %}
+            </div>
+            <label class="mt-2" for="c{{ r.registration_id }}">{{ _('fb_comment') }} <span class="label-note">({{ _('optional') }})</span></label>
+            <textarea class="textarea" id="c{{ r.registration_id }}" name="comment" maxlength="300" rows="3" style="min-height:80px" placeholder="{{ _('fb_comment_placeholder') }}">{{ f.comment if f and f.comment else '' }}</textarea>
+            <p class="xs muted mt-1">{{ icon('eye', 12) }} {{ _('fb_public_note') }}</p>
+            <div class="row mt-2"><button class="btn btn-primary">{{ icon('check', 15) }} {{ _('save') }}</button><button class="btn btn-ghost" type="button" data-close>{{ _('close') }}</button></div>
+          </form></dialog>
+        {% else %}—{% endif %}</td>{% endif %}</tr>
     {% endfor %}</tbody></table></div>
   <p class="xs muted mt-1">{{ icon('flag', 12) }} {{ _('team_lead_hint') }}</p>
   <p class="xs muted mt-1">{{ icon('lock', 12) }} {{ _('contacts_privacy_coord') }}</p>
@@ -154,7 +184,7 @@
     <tbody>{% for w in waiting %}{% set rl = rel.get(w.volunteer_id) %}
       <tr class="{{ 'row-alert' if rl and rl.alert }}"><td class="num"><b>{{ loop.index }}</b></td>
         <td><a class="person" href="{{ url_for('public.volunteer_profile', volunteer_id=w.volunteer_id) }}">{{ avatar(w.avatar_path, w.full_name, 'sm') }}{{ w.full_name }}</a></td>
-        <td>{{ age_on(w.birth_date) }}</td><td class="nowrap">{{ reliability_badge(rl) }}</td>
+        <td>{{ age_on(w.birth_date) }}</td><td class="rel-cell">{{ reliability_badge(rl) }}{{ feedback_summary(fb_sum.get(w.volunteer_id)) }}</td>
         <td class="small cell-clip" style="max-width:190px" title="{{ w.motivation or '' }}">{{ w.motivation or '—' }}</td>
         <td class="small nowrap">{{ fmt_dt(w.joined_at) }}</td></tr>
     {% endfor %}</tbody></table></div>
@@ -169,6 +199,33 @@
   {% else %}{{ empty('inbox', _('nothing_here')) }}{% endif %}
 {% endif %}
 
+<dialog id="repeat-dlg"><form class="dlg" method="post" action="{{ url_for('org.repeat', event_id=ev.event_id) }}">
+  {{ csrf_field() }}<h3>{{ icon('copy', 20) }} {{ _('duplicate_title') }}</h3>
+  <p class="small muted">{{ _('duplicate_text') }}</p>
+  <label for="dup-start">{{ _('duplicate_start') }}</label>
+  <input class="input" type="datetime-local" id="dup-start" name="starts_at" value="{{ dup_start }}" required>
+  <div class="repeat-modes mt-2">
+    <label class="repeat-mode"><input type="radio" name="mode" value="once" checked><span><b>{{ _('duplicate_once') }}</b><br><span class="xs muted">{{ _('duplicate_once_hint') }}</span></span></label>
+    <label class="repeat-mode"><input type="radio" name="mode" value="weekly"><span><b>{{ _('repeat_weekly') }}</b>
+      <select class="select" name="count" aria-label="{{ _('repeat_count') }}">{% for n in range(2, 13) %}<option value="{{ n }}" {{ 'selected' if n == 4 }}>× {{ n }}</option>{% endfor %}</select>
+      <br><span class="xs muted">{{ _('repeat_weekly_hint') }}</span></span></label>
+  </div>
+  <div class="row mt-2"><button class="btn btn-primary">{{ icon('copy', 16) }} {{ _('duplicate_create') }}</button><button class="btn btn-ghost" type="button" data-close>{{ _('close') }}</button></div>
+</form></dialog>
+{% if series|length > 1 %}
+<dialog id="series-cancel-dlg"><form class="dlg" method="post" action="{{ url_for('org.cancel_series', event_id=ev.event_id) }}">
+  {{ csrf_field() }}<h3>{{ _('series_cancel_title') }}</h3><p class="small muted">{{ _('series_cancel_hint') }}</p>
+  <label for="sreason">{{ _('cancel_reason') }}</label><textarea class="textarea" id="sreason" name="reason" required minlength="5" maxlength="300" rows="3" style="min-height:90px"></textarea>
+  <div class="row mt-2"><button class="btn btn-danger">{{ _('series_cancel_btn') }}</button><button class="btn btn-ghost" type="button" data-close>{{ _('close') }}</button></div>
+</form></dialog>
+{% endif %}
+<dialog id="urgent-dlg"><form class="dlg" method="post" action="{{ url_for('org.urgent', event_id=ev.event_id) }}">
+  {{ csrf_field() }}<h3>{{ icon('alert', 20) }} {{ _('urgent_call') }}</h3>
+  <p class="small">{{ _('urgent_dlg_text', city=loc(ev, 'city_name'), n=ev.max_volunteers - ev.taken) }}</p>
+  <ul class="small muted urgent-rules"><li>{{ _('urgent_rule_fit') }}</li><li>{{ _('urgent_rule_free') }}</li><li>{{ _('urgent_rule_once') }}</li>
+    {% if deadline_passed %}<li><b>{{ _('urgent_rule_deadline') }}</b></li>{% endif %}</ul>
+  <div class="row mt-2"><button class="btn btn-urgent">{{ icon('alert', 16) }} {{ _('urgent_send') }}</button><button class="btn btn-ghost" type="button" data-close>{{ _('close') }}</button></div>
+</form></dialog>
 <dialog id="cancel-dlg"><form class="dlg" method="post" action="{{ url_for('org.cancel', event_id=ev.event_id) }}">
   {{ csrf_field() }}<h3>{{ _('cancel_event') }}</h3><p class="small muted">{{ _('cancel_event_hint') }}</p>
   <label for="reason">{{ _('cancel_reason') }}</label><textarea class="textarea" id="reason" name="reason" required minlength="5" maxlength="300" rows="3" style="min-height:90px"></textarea>

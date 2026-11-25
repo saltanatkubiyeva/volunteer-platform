@@ -1,9 +1,35 @@
 {% extends "org/_layout.html" %}
 {% from "partials/macros.html" import status, empty %}
 {% block title %}{{ _('nav_reports') }}{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  var f = document.querySelector('[data-rep-pick]');
+  if (!f) return;
+  var y = f.querySelector('[data-rep-years]'), m = f.querySelector('[data-rep-months]');
+  f.querySelectorAll('[data-rep-kind]').forEach(function (r) {
+    r.addEventListener('change', function () {
+      var month = f.querySelector('[data-rep-kind]:checked').value === 'month';
+      m.hidden = m.disabled = !month; y.hidden = y.disabled = month;
+    });
+  });
+})();
+</script>
+{% endblock %}
 {% block cab %}
 <div class="cab-head"><div><h1>{{ _('org_reports_title') }}</h1><p>{{ _('org_reports_subtitle') }}</p></div>
   <a class="btn btn-ghost" href="{{ url_for('org.reports', format='csv') }}">{{ icon('download', 16) }} {{ _('export_csv') }}</a></div>
+<form class="card card-pad mb-3 rep-pick" method="get" action="{{ url_for('org.report_summary') }}" target="_blank" data-rep-pick>
+  <div class="rep-pick-text"><h3 class="mb-0">{{ icon('file-text', 20) }} {{ _('rep_title') }}</h3>
+    <p class="small muted mb-0">{{ _('rep_pick_hint') }}</p></div>
+  <div class="row tight rep-pick-controls">
+    <label class="check-chip"><input type="radio" name="period" value="year" checked data-rep-kind><span>{{ _('rep_year') }}</span></label>
+    <label class="check-chip"><input type="radio" name="period" value="month" data-rep-kind><span>{{ _('rep_month') }}</span></label>
+    <select class="select" name="value" data-rep-years aria-label="{{ _('rep_year') }}">{% for y in years %}<option value="{{ y }}">{{ y }}</option>{% endfor %}</select>
+    <select class="select" name="value" data-rep-months aria-label="{{ _('rep_month') }}" disabled hidden>{% for m in months %}<option value="{{ m.strftime('%Y-%m') }}">{{ month_name(m.month) }} {{ m.year }}</option>{% endfor %}</select>
+    <button class="btn btn-primary">{{ icon('file-text', 16) }} {{ _('rep_open') }}</button>
+  </div>
+</form>
 <div class="grid grid-4 mb-3">
   <div class="stat dark"><div class="num">{{ fmt_hours(stats.hours) }}</div><div class="lbl">{{ _('stat_hours') }}</div></div>
   <div class="stat"><div class="num">{{ stats.completed }}</div><div class="lbl">{{ _('stat_events_done') }}</div></div>
