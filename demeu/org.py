@@ -27,6 +27,14 @@ def owner_only():
         abort(403)
 
 
+@bp.context_processor
+def org_counts():
+    if not g.get("org"):
+        return {}
+    return dict(deeds_open=scalar("SELECT COUNT(*) FROM deed_requests WHERE status='open' AND city_id=?",
+                                  (g.org["city_id"],)))
+
+
 def own_event(event_id):
     ev = S.get_event(event_id)
     if not ev or ev["org_id"] != g.coordinator["org_id"] or ev["deleted_at"]:
@@ -212,6 +220,14 @@ def _event_form(ev=None):
             errors.add("registration_deadline", "err_date")
         elif st and dl > st:
             errors.add("registration_deadline", "err_deadline")
+        point = (None, None)
+        if f["lat"] or f["lng"]:
+            try:
+                point = (round(float(f["lat"]), 6), round(float(f["lng"]), 6))
+                if not (40.0 <= point[0] <= 56.0 and 46.0 <= point[1] <= 88.0):
+                    raise ValueError
+            except ValueError:
+                errors.add("point", "err_point")
         if not f["max_volunteers"] or not 1 <= f["max_volunteers"] <= 1000:
             errors.add("max_volunteers", "err_capacity")
         elif f["max_volunteers"] < taken:
@@ -258,13 +274,13 @@ def _event_form(ev=None):
             values = (f["title"], f["summary"], f["description"], f["address"], f["requirements"] or None,
                       f["provided"] or None, f["direction_id"], f["city_id"], f["coordinator_id"],
                       st.strftime("%Y-%m-%d %H:%M"), en.strftime("%Y-%m-%d %H:%M"), dl.strftime("%Y-%m-%d %H:%M"),
-                      f["max_volunteers"], f["min_age"], f["requires_approval"], cover)
+                      f["max_volunteers"], f["min_age"], f["requires_approval"], cover) + point
             if ev is None:
                 status = "published" if publish else "draft"
                 with transaction():
                     new_id = execute("""INSERT INTO events (title, summary, description, address, requirements, provided,
                         direction_id, city_id, coordinator_id, starts_at, ends_at, registration_deadline, max_volunteers,
-                        min_age, requires_approval, cover_path, org_id, status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                        min_age, requires_approval, cover_path, lat, lng, org_id, status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                                      values + (g.coordinator["org_id"], status))
                     _sync_shifts(new_id, shift_rows if f["has_shifts"] else [])
                     _sync_requirements(new_id, f["doc_skills"])
@@ -279,7 +295,7 @@ def _event_form(ev=None):
             with transaction():
                 execute("""UPDATE events SET title=?, summary=?, description=?, address=?, requirements=?, provided=?,
                     direction_id=?, city_id=?, coordinator_id=?, starts_at=?, ends_at=?, registration_deadline=?,
-                    max_volunteers=?, min_age=?, requires_approval=?, cover_path=?, status=?, updated_at=?
+                    max_volunteers=?, min_age=?, requires_approval=?, cover_path=?, lat=?, lng=?, status=?, updated_at=?
                     WHERE event_id=?""", values + (status, now_str(), ev["event_id"]))
                 _sync_shifts(ev["event_id"], shift_rows if f["has_shifts"] else [])
                 _sync_requirements(ev["event_id"], f["doc_skills"])
@@ -704,6 +720,41 @@ def reports():
                         headers={"Content-Disposition": "attachment; filename=demeu_org_report.csv"})
     return render_template("org/reports.html", rows=rows, stats=S.org_stats(oid), years=OR.years(oid),
                            months=OR.months(oid))
+
+
+@bp.route("/requests")
+@coordinator_only
+def deeds():
+    DD.refresh()
+    tab = request.args.get("tab", "city")
+    if tab not in ("city", "all", "ours"):
+        tab = "city"
+    city = query("SELECT * FROM cities WHERE city_id=?", (g.org["city_id"],), one=True)
+    return render_template("org/deeds.html", tab=tab, rows=DD.org_list(g.org, tab, city_only=tab == "city"),
+                           counts=DD.org_counts(g.org), city=city)
+
+
+@bp.route("/requests/<int:request_id>/take", methods=["POST"])
+@coordinator_only
+def deed_take(request_id):
+    try:
+        eid = DD.take(g.user, g.coordinator, g.org, request_id)
+        flash(_("flash_deed_taken"), "success")
+        return redirect(url_for("org.event_edit", event_id=eid))
+    except S.RuleError as e:
+        flash(_(e.key, **e.params), "error")
+        return redirect(url_for("org.deeds"))
+
+
+@bp.route("/requests/<int:request_id>/release", methods=["POST"])
+@coordinator_only
+def deed_release(request_id):
+    try:
+        DD.release(g.user, g.org["org_id"], request_id)
+        flash(_("flash_deed_released"), "info")
+    except S.RuleError as e:
+        flash(_(e.key, **e.params), "error")
+    return redirect(url_for("org.deeds", tab="ours"))
 
 
 @bp.route("/reports/summary")

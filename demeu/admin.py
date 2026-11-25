@@ -760,6 +760,24 @@ def blocks():
                            state=BL.state)
 
 
+@bp.route("/good-deeds", methods=["GET", "POST"])
+@admin_only
+def deeds():
+    tab = request.args.get("tab", "pending")
+    if request.method == "POST":
+        try:
+            DD.moderate(g.user, form_int("request_id"), request.form.get("action"), clean(request.form.get("reason"), 300))
+            flash(_("flash_saved"), "success")
+        except S.RuleError as e:
+            flash(_(e.key, **e.params), "error")
+        return redirect(url_for("admin.deeds", tab=tab))
+    DD.refresh()
+    counts = dict(pending=DD.queue_count(),
+                  open=scalar("SELECT COUNT(*) FROM deed_requests WHERE status IN ('open','taken')"),
+                  closed=scalar("SELECT COUNT(*) FROM deed_requests WHERE status IN ('done','rejected','expired','withdrawn','unconfirmed')"))
+    return render_template("admin/deeds.html", tab=tab, rows=DD.admin_list(tab), counts=counts)
+
+
 @bp.route("/trash", methods=["GET", "POST"])
 @admin_only
 def trash():

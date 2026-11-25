@@ -120,9 +120,17 @@ CREATE TABLE events (
     status                TEXT NOT NULL DEFAULT 'published'
                           CHECK (status IN ('draft','published','cancelled','completed')),
     cancel_reason         TEXT,
+    is_urgent             INTEGER NOT NULL DEFAULT 0 CHECK (is_urgent IN (0,1)),
+    urgent_at             TEXT,
+    lat                   REAL CHECK (lat IS NULL OR lat BETWEEN -90 AND 90),
+    lng                   REAL CHECK (lng IS NULL OR lng BETWEEN -180 AND 180),
+    series_id             INTEGER REFERENCES events(event_id) ON DELETE SET NULL,
+    deleted_at            TEXT,
+    deleted_by            INTEGER REFERENCES users(user_id) ON DELETE SET NULL,
     created_at            TEXT NOT NULL DEFAULT (datetime('now','localtime')),
     updated_at            TEXT,
     CHECK (ends_at > starts_at),
+    CHECK ((lat IS NULL) = (lng IS NULL)),
     CHECK (registration_deadline <= starts_at)
 );
 
@@ -477,6 +485,40 @@ CREATE TABLE IF NOT EXISTS blocks (
 );
 CREATE INDEX IF NOT EXISTS idx_blocks_user ON blocks(user_id, lifted_at, ends_at);
 CREATE INDEX IF NOT EXISTS idx_blocks_org ON blocks(org_id, lifted_at);
+
+CREATE TABLE IF NOT EXISTS deed_requests (
+    request_id     INTEGER PRIMARY KEY,
+    title          TEXT NOT NULL CHECK (length(trim(title)) >= 5),
+    description    TEXT NOT NULL CHECK (length(trim(description)) >= 20),
+    direction_id   INTEGER NOT NULL REFERENCES directions(direction_id) ON DELETE RESTRICT,
+    city_id        INTEGER NOT NULL REFERENCES cities(city_id) ON DELETE RESTRICT,
+    area           TEXT NOT NULL,
+    when_kind      TEXT NOT NULL CHECK (when_kind IN ('on','by','any')),
+    when_date      TEXT,
+    people_needed  INTEGER CHECK (people_needed IS NULL OR people_needed BETWEEN 1 AND 200),
+    contact_name   TEXT NOT NULL CHECK (length(trim(contact_name)) >= 2),
+    contact_email  TEXT NOT NULL,
+    contact_phone  TEXT,
+    user_id        INTEGER REFERENCES users(user_id) ON DELETE SET NULL,
+    token_hash     TEXT NOT NULL UNIQUE,
+    status         TEXT NOT NULL DEFAULT 'unconfirmed'
+                   CHECK (status IN ('unconfirmed','pending','open','taken','done','rejected','expired','withdrawn')),
+    reject_reason  TEXT,
+    reviewed_by    INTEGER REFERENCES users(user_id) ON DELETE SET NULL,
+    reviewed_at    TEXT,
+    taken_org_id   INTEGER REFERENCES organizations(org_id) ON DELETE SET NULL,
+    taken_by       INTEGER REFERENCES users(user_id) ON DELETE SET NULL,
+    taken_at       TEXT,
+    event_id       INTEGER REFERENCES events(event_id) ON DELETE SET NULL,
+    created_at     TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+    confirmed_at   TEXT,
+    closed_at      TEXT,
+    CHECK ((when_kind = 'any') = (when_date IS NULL)),
+    CHECK (status <> 'taken' OR (taken_org_id IS NOT NULL AND taken_at IS NOT NULL)),
+    CHECK (status <> 'rejected' OR reject_reason IS NOT NULL)
+);
+CREATE INDEX IF NOT EXISTS idx_deeds_status ON deed_requests(status, city_id);
+CREATE INDEX IF NOT EXISTS idx_deeds_org ON deed_requests(taken_org_id, status);
 
 CREATE TABLE IF NOT EXISTS friendships (
     friendship_id INTEGER PRIMARY KEY,

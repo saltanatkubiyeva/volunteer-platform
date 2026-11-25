@@ -1113,6 +1113,62 @@ def main():
         return x(f"INSERT INTO deed_requests ({', '.join(keys)}) VALUES ({', '.join('?' * len(keys))})",
                  [cols[k] for k in keys]).lastrowid
 
+    deed("New Year party for kids at the children's oncology ward",
+         "The ward has 14 children who will spend the New Year holidays in hospital. Parents and nurses want a small party: "
+         "Father Frost and Snow Maiden, games, crafts and gifts. We need volunteers to run games and help with decorations. "
+         "The doctors allow visits in masks, no more than 10 people at a time.",
+         "children", "Astana", "Astana, Regional Children's Hospital, Kerey and Zhanibek Khans St 3", "on", 33, 8,
+         "Gulnara Sadykova", "gulnara.sadykova@gmail.com", "+77015552318", "open", 2)
+    deed("Clear snow for an elderly neighbour",
+         "My neighbour Raisa Ivanovna is 82 and lives alone in a private house. After every snowfall she cannot get out "
+         "of the yard. Two or three people with shovels for an hour would help her a lot. Tea is on her!",
+         "seniors", "Astana", "Astana, Saryarka district, Zhenis microdistrict", "any", 0, 3,
+         "Daulet Abenov", "daulet.abenov@mail.kz", None, "open", 1)
+    deed("Warm clothes for a family after a house fire",
+         "A family with three children (4, 9 and 13 years old) lost their house in a fire last week. They need winter clothes "
+         "and shoes. We would like volunteers to set up a collection point at school No. 72, sort the clothes by size and deliver them.",
+         "social", "Astana", "Astana, school No. 72, Zhubanov St 5", "by", 12, 5,
+         "Aigerim Tulegenova", "a.tulegenova@school72.kz", "+77473330912", "open", 3)
+    deed("Paint the fence at the dog shelter",
+         "The shelter fence is old and rusty; the paint is already bought. We need 6–8 people for one Saturday. "
+         "Some of the dogs are nervous with strangers, so the shelter staff will show where it is safe to work.",
+         "animals", "Almaty", "Almaty, Turksib district, shelter on Kazybayev St", "by", 20, 7,
+         "Marat Ospanov", "marat.ospanov@gmail.com", None, "open", 4)
+    deed("Reading club for kids at the city library",
+         "The children's library wants to start a Saturday reading club for kids 7–10 years old. "
+         "We are looking for volunteers who can read aloud in Kazakh or Russian and play simple word games.",
+         "education", "Astana", "Astana, Children's Library named after Altynsarin", "on", 18, 4,
+         "Saule Bekova", "saule.bekova@gmail.com", "+77012228844", "pending", 0)
+    deed("Help us collect money for a new playground",
+         "Please send any amount to the card number below, we need 2 million tenge for a playground in our yard.",
+         "social", "Astana", "Astana, Almaty district", "any", 0, None,
+         "Erlan K.", "erlan.k.2026@mail.ru", None, "rejected", 6,
+         reject_reason="DEMEU does not collect money. You can suggest a clean-up or a building day instead.",
+         closed_at=dt(NOW - timedelta(days=5)))
+    gs_dana = con.execute("SELECT user_id FROM users WHERE email='org@demeu.kz'").fetchone()[0]
+    gs_dana_coord = con.execute("SELECT coordinator_id FROM coordinators WHERE user_id=?", (gs_dana,)).fetchone()[0]
+    yard_start = (NOW + timedelta(days=16)).replace(hour=11, minute=0, second=0, microsecond=0)
+    yard_desc = ("The benches in our courtyard are broken and the flower beds are empty. Residents bought paint, boards and "
+                 "200 tulip bulbs. We need people who can work with a screwdriver and a few who can plant bulbs.")
+    yard_event = x("""INSERT INTO events (org_id, coordinator_id, direction_id, city_id, title, summary, description, address,
+        starts_at, ends_at, registration_deadline, max_volunteers, min_age, requires_approval, status, created_at)
+        VALUES (1,?,?,?,?,?,?,?,?,?,?,6,14,1,'draft',?)""",
+                   (gs_dana_coord, D["ecology"], C["Astana"], "Repair benches and plant tulips in our courtyard",
+                    yard_desc[:150].rsplit(" ", 1)[0] + "…", yard_desc, "Astana, Kenesary St 40, courtyard",
+                    dt(yard_start), dt(yard_start + timedelta(hours=3)), dt(yard_start - timedelta(days=1)),
+                    dt(NOW - timedelta(days=1)))).lastrowid
+    deed("Repair benches and plant tulips in our courtyard", yard_desc, "ecology", "Astana",
+         "Astana, Kenesary St 40, courtyard", "on", 16, 6, "Nurlan Akhmetov", "nurlan.akhmetov@inbox.kz", "+77019874411",
+         "taken", 5, taken_org_id=1, taken_by=gs_dana, taken_at=dt(NOW - timedelta(days=1)), event_id=yard_event)
+    deed("Weekly clean-up on the Esil embankment",
+         "I run along the embankment every morning and there is more and more plastic near the Atyrau bridge. "
+         "Could volunteers clean it regularly, maybe every Saturday?",
+         "ecology", "Astana", "Astana, Esil embankment near the Atyrau bridge", "any", 0, 10,
+         "Timur Aliyev", "timur.aliyev.run@gmail.com", None, "done", 12, taken_org_id=1, taken_by=gs_dana,
+         taken_at=dt(NOW - timedelta(days=10)), event_id=esil, closed_at=dt(NOW - timedelta(days=4)))
+    note("org@demeu.kz", "n_deed_new", "/org/requests", 26, 0, title="New Year party for kids at the children's oncology ward")
+    note("admin@demeu.kz", "n_admin_deed", "/admin/good-deeds", 3, 0)
+
     for other, days in ((1011, 60), (1022, 45), (1023, 30), (1057, 20), (1019, 12)):
         x("""INSERT INTO friendships (requester_id, addressee_id, status, created_at, accepted_at)
              VALUES (?, 1024, 'accepted', ?, ?)""", (other, dt(NOW - timedelta(days=days)), dt(NOW - timedelta(days=days - 1))))
@@ -1124,6 +1180,21 @@ def main():
     note("volunteer@demeu.kz", "n_friend_going", f"/events/{esil}", 5, 0, name="Kirill",
          event="Saturday Clean-up at the Esil Embankment")
     note("volunteer@demeu.kz", "n_friend_request", "/me/friends?tab=requests", 3, 0, name="Yerlan Ivanov")
+
+    known_points = {
+        "Storm Clean-up in Central Park": (51.152770, 71.436240),
+        "Tree Planting in the Botanical Garden": (51.108560, 71.416340),
+        "Food Parcel Delivery to Families": (51.090590, 71.418020),
+        "Insulating Dog Houses for Winter": (51.177450, 71.540210),
+    }
+    for eid, title, lat, lng in con.execute("""SELECT e.event_id, e.title, c.lat, c.lng FROM events e
+            JOIN cities c USING (city_id) WHERE e.lat IS NULL""").fetchall():
+        if title in known_points:
+            plat, plng = known_points[title]
+        else:
+            prnd = random.Random(eid * 7919)
+            plat, plng = lat + prnd.uniform(-0.035, 0.035), lng + prnd.uniform(-0.055, 0.055)
+        x("UPDATE events SET lat=?, lng=? WHERE event_id=?", (round(plat, 6), round(plng, 6), eid))
 
     con.commit()
     docs_dir = os.path.join(BASE, "instance", "uploads", "documents")

@@ -456,6 +456,38 @@ class FlowTest(unittest.TestCase):
         self.assertEqual(self.sql("SELECT COUNT(*) FROM notifications WHERE kind='n_urgent_call'")[0][0], sent)
         self.assertEqual(self.sql("SELECT is_urgent FROM events WHERE event_id=?", (ev["event_id"],))[0][0], 1)
 
+    def test_catalog_calendar_and_map_views(self):
+        c = self.app.test_client()
+        ev = self.sql("""SELECT event_id, title, starts_at FROM events WHERE status='published'
+                         AND starts_at > datetime('now','localtime') ORDER BY starts_at LIMIT 1""")[0]
+        r = c.get(f"/events?view=calendar&month={ev['starts_at'][:7]}")
+        self.assertEqual(r.status_code, 200)
+        self.assertIn(f"/events/{ev['event_id']}", r.get_data(as_text=True))
+        r = c.get("/events?view=calendar&month=bad")
+        self.assertEqual(r.status_code, 200)
+        r = c.get("/events?view=map&city=1")
+        self.assertEqual(r.status_code, 200)
+        self.assertIn('"lat":', r.get_data(as_text=True))
+        r = c.get(f"/events?date={ev['starts_at'][:10]}")
+        self.assertIn(f"/events/{ev['event_id']}", r.get_data(as_text=True))
+
+    def test_event_point_saved_and_validated(self):
+        org = self.client("org@demeu.kz")
+        start = datetime.now() + timedelta(days=6)
+        data = {"title": "Point test event", "summary": "Checking the map point",
+                "description": "We check that the map point of the meeting place is saved with the event.",
+                "address": "Astana, Central Park", "direction_id": 1, "city_id": 1, "coordinator_id": 1,
+                "starts_at": start.strftime("%Y-%m-%dT10:00"), "ends_at": start.strftime("%Y-%m-%dT13:00"),
+                "registration_deadline": (start - timedelta(days=1)).strftime("%Y-%m-%dT10:00"),
+                "max_volunteers": 10, "min_age": 16, "action": "publish", "lat": "10.5", "lng": "71.4"}
+        self.post(org, "/org/events/new", data)
+        self.assertFalse(self.sql("SELECT 1 FROM events WHERE title='Point test event'"))
+        data.update(lat="51.152770", lng="71.436240")
+        self.post(org, "/org/events/new", data)
+        row = self.sql("SELECT lat, lng FROM events WHERE title='Point test event'")[0]
+        self.assertAlmostEqual(row["lat"], 51.15277)
+        self.assertAlmostEqual(row["lng"], 71.43624)
+
     def _jpeg(self):
         return io.BytesIO(b"\xff\xd8\xff\xe0" + b"\x00" * 200 + b"\xff\xd9")
 
@@ -738,6 +770,51 @@ class FlowTest(unittest.TestCase):
         self.assertIn(f'<div class="n">{int(hours) if float(hours).is_integer() else hours}</div>', html)
         self.assertEqual(org.get("/org/reports/summary?period=month&value=2099-01").status_code, 200)
         self.assertEqual(self.client("volunteer@demeu.kz").get("/org/reports/summary").status_code, 403)
+
+    def test_good_deed_request_flow(self):
+        guest = self.app.test_client()
+        day = (datetime.now() + timedelta(days=20)).strftime("%Y-%m-%d")
+        astana = self.sql("SELECT city_id FROM cities WHERE name_en='Astana'")[0][0]
+        data = {"title": "Concert for the care home", "description": "Residents of the care home would love a small concert and tea.",
+                "direction_id": self.sql("SELECT direction_id FROM directions WHERE slug='seniors'")[0][0], "city_id": astana,
+                "area": "Astana, care home No. 3", "when_kind": "on", "when_date": day, "people_needed": "5",
+                "contact_name": "Aliya", "contact_email": "aliya.test@example.kz", "agree": "1"}
+        self.post(guest, "/good-deeds/new", dict(data, agree=""))
+        self.assertFalse(self.sql("SELECT 1 FROM deed_requests WHERE contact_email='aliya.test@example.kz'"))
+        self.post(guest, "/good-deeds/new", data)
+        req = self.sql("SELECT * FROM deed_requests WHERE contact_email='aliya.test@example.kz'")[0]
+        self.assertEqual(req["status"], "unconfirmed")
+        body = self.sql("SELECT body FROM outbox WHERE to_email='aliya.test@example.kz' ORDER BY message_id DESC")[0][0]
+        token = re.search(r"/good-deeds/confirm/([\w-]+)", body).group(1)
+        guest.get(f"/good-deeds/confirm/{token}")
+        self.assertEqual(self.sql("SELECT status FROM deed_requests WHERE request_id=?", (req["request_id"],))[0][0], "pending")
+        org = self.client("org@demeu.kz")
+        self.assertNotIn("Concert for the care home", org.get("/org/requests").get_data(as_text=True))
+        admin = self.client("admin@demeu.kz")
+        self.post(admin, "/admin/good-deeds", {"request_id": req["request_id"], "action": "approve"})
+        page = org.get("/org/requests").get_data(as_text=True)
+        self.assertIn("Concert for the care home", page)
+        self.assertNotIn("care home No. 3", page)
+        self.post(org, f"/org/requests/{req['request_id']}/take")
+        req = self.sql("SELECT * FROM deed_requests WHERE request_id=?", (req["request_id"],))[0]
+        self.assertEqual((req["status"], req["taken_org_id"]), ("taken", 1))
+        ev = self.sql("SELECT * FROM events WHERE event_id=?", (req["event_id"],))[0]
+        self.assertEqual((ev["status"], ev["title"], ev["starts_at"][:10]), ("draft", "Concert for the care home", day))
+        self.assertIn("care home No. 3", org.get("/org/requests?tab=ours").get_data(as_text=True))
+        other_org = self.sql("""SELECT u.email FROM coordinators c JOIN users u USING (user_id) JOIN organizations o USING (org_id)
+                                WHERE o.org_id<>1 AND o.status='verified' LIMIT 1""")[0][0]
+        self.post(self.client(other_org), f"/org/requests/{req['request_id']}/take")
+        self.assertEqual(self.sql("SELECT COUNT(*) FROM events WHERE title='Concert for the care home'")[0][0], 1)
+        self.post(org, f"/org/requests/{req['request_id']}/release")
+        self.assertEqual(self.sql("SELECT status FROM deed_requests WHERE request_id=?", (req["request_id"],))[0][0], "open")
+        self.assertTrue(self.sql("SELECT deleted_at FROM events WHERE event_id=?", (ev["event_id"],))[0][0])
+        self.post(org, f"/org/requests/{req['request_id']}/take")
+        eid = self.sql("SELECT event_id FROM deed_requests WHERE request_id=?", (req["request_id"],))[0][0]
+        con = sqlite3.connect(self.db)
+        con.execute("UPDATE events SET status='published' WHERE event_id=?", (eid,))
+        con.commit(); con.close()
+        self.assertIn("Event published", guest.get(f"/good-deeds/s/{token}").get_data(as_text=True))
+        self.assertEqual(self.sql("SELECT status FROM deed_requests WHERE request_id=?", (req["request_id"],))[0][0], "done")
 
     def test_friends_requests_and_privacy(self):
         anel_email = self.sql("SELECT u.email FROM volunteers v JOIN users u USING (user_id) WHERE v.volunteer_id=1047")[0][0]

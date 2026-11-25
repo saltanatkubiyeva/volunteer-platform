@@ -1,0 +1,43 @@
+{% extends "org/_layout.html" %}
+{% from "partials/macros.html" import empty %}
+{% block title %}{{ _('org_deeds') }}{% endblock %}
+{% block cab %}
+<div class="cab-head"><div><h1>{{ _('org_deeds') }}</h1><p>{{ _('org_deeds_subtitle') }}</p></div></div>
+<nav class="tabs">
+  <a class="{{ 'on' if tab == 'city' }}" href="?tab=city">{{ _('deeds_tab_city', city=loc(city, 'name')) }} <span class="n">{{ counts.open_city }}</span></a>
+  <a class="{{ 'on' if tab == 'all' }}" href="?tab=all">{{ _('deeds_tab_all') }} <span class="n">{{ counts.open_all }}</span></a>
+  <a class="{{ 'on' if tab == 'ours' }}" href="?tab=ours">{{ _('deeds_tab_ours') }} <span class="n">{{ counts.ours }}</span></a>
+</nav>
+{% for r in rows %}
+<div class="card card-pad mb-2 deed-card">
+  <div class="row between">
+    <div class="row tight"><span class="tag tone-{{ r.dir_tone }}">{{ icon(r.dir_icon, 12) }}{{ loc(r, 'dir_name') }}</span>
+      <span class="tag">{{ icon('map-pin', 12) }}{{ loc(r, 'city_name') }}</span>
+      {% if r.when_date %}<span class="tag">{{ icon('calendar', 12) }}{{ _('deed_when_' ~ r.when_kind) }} {{ fmt_date(r.when_date) }}</span>{% else %}<span class="tag">{{ icon('calendar', 12) }}{{ _('deed_when_any') }}</span>{% endif %}
+      {% if r.people_needed %}<span class="tag">{{ icon('users', 12) }}{{ _('deed_people_n', n=r.people_needed) }}</span>{% endif %}</div>
+    <span class="xs muted">{{ fmt_date(r.created_at) }}</span>
+  </div>
+  <h3 class="mt-1 mb-1">{{ r.title }}</h3>
+  <p class="small mb-1 deed-desc">{{ r.description }}</p>
+  {% if tab == 'ours' %}
+    <div class="deed-contact small">{{ icon('user', 14) }} <b>{{ r.contact_name }}</b> · <a href="mailto:{{ r.contact_email }}">{{ r.contact_email }}</a>{% if r.contact_phone %} · <a href="tel:{{ r.contact_phone }}">{{ r.contact_phone }}</a>{% endif %} · {{ icon('map-pin', 14) }} {{ r.area }}</div>
+    <div class="row tight mt-2">
+      {% if r.status == 'done' %}<span class="status st-verified">{{ _('deed_st_done') }}</span>
+        {% if r.event_id %}<a class="btn btn-ghost btn-xs" href="{{ url_for('org.event_manage', event_id=r.event_id) }}">{{ _('manage') }}</a>{% endif %}
+      {% else %}
+        {% if r.event_id %}<a class="btn btn-primary btn-xs" href="{{ url_for('org.event_edit', event_id=r.event_id) }}">{{ icon('pencil', 14) }} {{ _('deed_finish_draft') }}</a>{% endif %}
+        <form method="post" action="{{ url_for('org.deed_release', request_id=r.request_id) }}" onsubmit="return confirm(this.dataset.msg)" data-msg="{{ _('deed_release_confirm') }}">{{ csrf_field() }}
+          <button class="btn btn-ghost btn-xs">{{ icon('rotate-ccw', 14) }} {{ _('deed_release') }}</button></form>
+        <span class="xs muted">{{ _('deed_take_hint', n=7) }}</span>
+      {% endif %}
+    </div>
+  {% else %}
+    <p class="xs muted mb-1">{{ icon('lock', 12) }} {{ _('deed_private_hint') }}</p>
+    <form method="post" action="{{ url_for('org.deed_take', request_id=r.request_id) }}" class="mt-1">{{ csrf_field() }}
+      <button class="btn btn-primary btn-sm">{{ icon('check', 15) }} {{ _('deed_take') }}</button></form>
+  {% endif %}
+</div>
+{% else %}
+  {{ empty('heart', _('deeds_empty')) }}
+{% endfor %}
+{% endblock %}

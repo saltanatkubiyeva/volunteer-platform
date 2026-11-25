@@ -71,6 +71,7 @@ def home():
 def events():
     q = clean(request.args.get("q"), 100)
     city, direction = arg_int("city"), arg_int("direction")
+    view = request.args.get("view") if request.args.get("view") in ("calendar", "map") else "list"
     when = request.args.get("when", "upcoming")
     only_free = request.args.get("free") == "1"
     sort = request.args.get("sort", "soon")
@@ -84,10 +85,30 @@ def events():
     if q:
         where.append("(e.title LIKE ? OR e.summary LIKE ? OR e.description LIKE ? OR o.name LIKE ? OR e.address LIKE ?)")
         args += [f"%{q}%"] * 5
-    if city:
+    if city and view != "map":
         where.append("e.city_id = ?"); args.append(city)
     if direction:
         where.append("e.direction_id = ?"); args.append(direction)
+    if only_free:
+        where.append("""(SELECT COUNT(*) FROM registrations r WHERE r.event_id=e.event_id
+                         AND r.status IN ('approved','attended')) < e.max_volunteers
+                        AND e.registration_deadline >= ?""")
+        args.append(now_str())
+    common = dict(q=q, city=city, direction=direction, when=when, only_free=only_free, sort=sort, view=view, day=day,
+                  **ref())
+
+    if view == "calendar":
+        month = EC.parse_month(request.args.get("month"), date.fromisoformat(day) if day else now.date())
+        weeks, prev_month, next_month = EC.month_grid(month)
+        rows = query(S.EVENT_SELECT + " WHERE " + " AND ".join(where) +
+                     " AND e.starts_at BETWEEN ? AND ? ORDER BY e.starts_at",
+                     args + [f"{weeks[0][0]} 00:00", f"{weeks[-1][-1]} 23:59"])
+        in_month = sum(1 for ev in rows if ev["starts_at"][:7] == month.strftime("%Y-%m"))
+        return render_template("public/events.html", events=rows, days=EC.group_by_day(rows), weeks=weeks,
+                               month=month, prev_month=prev_month, next_month=next_month, today=now.date(),
+                               month_name=EC.MONTH_NAMES[g.get("lang", "en")][month.month - 1],
+                               total=in_month, **common)
+
     if when == "past":
         where.append("e.ends_at < ?"); args.append(now_str())
     else:
@@ -109,6 +130,18 @@ def events():
     if when == "past":
         order = "e.starts_at DESC"
     base = S.EVENT_SELECT + " WHERE " + " AND ".join(where)
+
+    if view == "map":
+        rows = query(f"{base} ORDER BY e.starts_at LIMIT 500", args)
+        points = EC.map_points(rows, loc, fmt_date, fmt_time, url_for)
+        per_city = {}
+        for ev in rows:
+            per_city[ev["city_id"]] = per_city.get(ev["city_id"], 0) + 1
+        city_xy = {c["city_id"]: [c["lat"], c["lng"]] for c in query("SELECT city_id, lat, lng FROM cities")}
+        return render_template("public/events.html", events=rows, points=points,
+                               total=per_city.get(city, 0) if city else len(rows), all_total=len(rows),
+                               per_city=per_city, city_xy=city_xy, no_point=len(rows) - len(points), **common)
+
     total = scalar(f"SELECT COUNT(*) FROM ({base})", args)
     page = Page(total, page_arg(), 9)
     rows = query(f"{base} ORDER BY {order} LIMIT ? OFFSET ?", args + [page.per_page, page.offset])
@@ -470,6 +503,103 @@ def contacts():
             flash(_("flash_message_sent"), "success")
             return redirect(url_for("public.contacts"))
     return render_template("public/contacts.html", offices=offices, f=f, errors=errors)
+
+
+def _deed_form():
+    f = {k: clean(request.form.get(k), 2000 if k == "description" else 160) for k in
+         ("title", "description", "area", "when_kind", "when_date", "contact_name", "contact_email", "contact_phone")}
+    f["direction_id"], f["city_id"], f["people_needed"] = form_int("direction_id"), form_int("city_id"), form_int("people_needed")
+    f["contact_email"] = f["contact_email"].lower()
+    errors = Errors()
+    if len(f["title"]) < 5:
+        errors.add("title", "err_deed_title")
+    if len(f["description"]) < 20:
+        errors.add("description", "err_deed_description")
+    if not scalar("SELECT 1 FROM directions WHERE direction_id=?", (f["direction_id"] or 0,)):
+        errors.add("direction_id", "err_required")
+    if not scalar("SELECT 1 FROM cities WHERE city_id=?", (f["city_id"] or 0,)):
+        errors.add("city_id", "err_city")
+    if len(f["area"]) < 3:
+        errors.add("area", "err_required")
+    if f["when_kind"] not in DD.WHEN_KINDS:
+        f["when_kind"] = "any"
+    if f["when_kind"] == "any":
+        f["when_date"] = ""
+    else:
+        try:
+            d = datetime.strptime(f["when_date"], "%Y-%m-%d").date()
+            if d <= date.today() or d > date.today() + timedelta(days=365):
+                errors.add("when_date", "err_deed_date")
+        except ValueError:
+            errors.add("when_date", "err_date")
+    if f["people_needed"] is not None and not 1 <= f["people_needed"] <= 200:
+        errors.add("people_needed", "err_deed_people")
+    if len(f["contact_name"]) < 2:
+        errors.add("contact_name", "err_required")
+    if not valid_email(f["contact_email"]):
+        errors.add("contact_email", "err_email")
+    if not request.form.get("agree"):
+        errors.add("agree", "err_deed_agree")
+    return f, errors
+
+
+@bp.route("/good-deeds/new", methods=["GET", "POST"])
+def deed_new():
+    f, errors = dict(when_kind="on", city_id=None, direction_id=None), Errors()
+    if g.user and request.method == "GET":
+        person = g.volunteer or g.coordinator
+        f.update(contact_name=person["full_name"] if person else "", contact_email=g.user["email"],
+                 contact_phone=person["phone"] if person else "", city_id=g.volunteer["city_id"] if g.volunteer else None)
+    if request.method == "POST":
+        if request.form.get("website"):
+            return redirect(url_for("public.home"))
+        f, errors = _deed_form()
+        if not errors:
+            confirmed = g.user is not None and g.user["email"] == f["contact_email"]
+            rid, token = DD.create(f, g.user if confirmed else None)
+            if confirmed:
+                flash(_("flash_deed_sent"), "success")
+                return redirect(url_for("public.deed_status", token=token))
+            return render_template("public/deed_check_email.html", email=f["contact_email"])
+    return render_template("public/deed_new.html", f=f, errors=errors,
+                           cities=query("SELECT * FROM cities ORDER BY name_en"),
+                           directions=query("SELECT * FROM directions ORDER BY direction_id"))
+
+
+@bp.route("/good-deeds/confirm/<token>")
+def deed_confirm(token):
+    req = DD.confirm(token)
+    if not req:
+        abort(404)
+    flash(_("flash_deed_confirmed"), "success")
+    return redirect(url_for("public.deed_status", token=token))
+
+
+@bp.route("/good-deeds/s/<token>")
+def deed_status(token):
+    DD.refresh()
+    req = DD.by_token(token)
+    if not req:
+        abort(404)
+    return render_template("public/deed_status.html", req=req, token=token)
+
+
+@bp.route("/good-deeds/s/<token>/withdraw", methods=["POST"])
+def deed_withdraw(token):
+    try:
+        DD.withdraw(token)
+        flash(_("flash_deed_withdrawn"), "info")
+    except S.RuleError as e:
+        flash(_(e.key, **e.params), "error")
+    return redirect(url_for("public.deed_status", token=token))
+
+
+@bp.route("/good-deeds/mine")
+@login_required
+def deeds_mine():
+    DD.refresh()
+    rows = query(DD.LIST_SQL + " WHERE d.user_id=? ORDER BY d.created_at DESC", (g.user["user_id"],))
+    return render_template("public/deeds_mine.html", rows=rows)
 
 
 @bp.route("/search")

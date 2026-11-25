@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}{{ _('deed_title') }}{% endblock %}
+{% block content %}
+<div class="wrap deed-done">
+  <div class="card card-pad center">
+    <div class="deed-done-ic">{{ icon('mail', 28) }}</div>
+    <h1>{{ _('deed_check_title') }}</h1>
+    <p>{{ _('deed_check_text', email=email) }}</p>
+    <p class="small muted">{{ _('deed_check_hint') }}</p>
+    <a class="btn btn-ghost mt-2" href="{{ url_for('public.home') }}">{{ _('home') }}</a>
+  </div>
+</div>
+{% endblock %}

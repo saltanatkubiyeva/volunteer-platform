@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% from "partials/macros.html" import empty %}
+{% block title %}{{ _('deeds_mine') }}{% endblock %}
+{% block content %}
+<div class="wrap deed-done">
+  <div class="row between mb-2"><h1 class="mb-0">{{ _('deeds_mine') }}</h1>
+    <a class="btn btn-primary btn-sm" href="{{ url_for('public.deed_new') }}">{{ icon('plus', 15) }} {{ _('deed_title') }}</a></div>
+  {% for r in rows %}
+  <div class="card card-pad mb-2"><div class="row between"><b>{{ r.title }}</b><span class="status st-{{ 'verified' if r.status == 'done' else 'rejected' if r.status in ('rejected', 'expired', 'withdrawn') else 'pending' }}">{{ _('deed_st_' ~ r.status) }}</span></div>
+    <div class="xs muted mt-1">{{ loc(r, 'city_name') }} · {{ fmt_dt(r.created_at) }}{% if r.event_id and r.status == 'done' %} · <a href="{{ url_for('public.event_detail', event_id=r.event_id) }}">{{ _('deed_open_event') }}</a>{% endif %}</div></div>
+  {% else %}{{ empty('heart', _('deeds_mine_empty')) }}{% endfor %}
+</div>
+{% endblock %}

@@ -1,7 +1,8 @@
 {% extends "base.html" %}
 {% from "partials/macros.html" import cover_url, cover_attrs, dir_tag, org_logo, avatar, rating, status, event_card %}
 {% block title %}{{ ev.title }}{% endblock %}
-{% from "partials/report.html" import report_button with context %}
+{% block head %}{% if ev.lat is not none %}<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">{% endif %}{% endblock %}
+{% from "partials/report.html" import report_button, review_report with context %}
 {% block content %}
 {% set phase = event_phase(ev) %}
 {% set left = ev.max_volunteers - ev.taken %}
@@ -114,6 +115,13 @@
         <button class="photo-nav next" type="button" data-photo-next aria-label="{{ _('next') }}">{{ icon('chevron-right', 22) }}</button>
         <button class="photo-close" type="button" data-close aria-label="{{ _('close') }}">{{ icon('x', 20) }}</button>
       </dialog>
+      {% endif %}
+
+      {% if ev.lat is not none %}
+      <h3 class="mt-4">{{ _('where_on_map') }}</h3>
+      <div class="ev-mini-map card"><div id="ev-mini-map" data-lat="{{ ev.lat }}" data-lng="{{ ev.lng }}" data-title="{{ ev.title }}" data-address="{{ ev.address }}"></div></div>
+      <div class="row between mt-1"><span class="small muted">{{ icon('map-pin', 14) }} {{ ev.address }}</span>
+        <a class="small" href="https://www.openstreetmap.org/?mlat={{ ev.lat }}&mlon={{ ev.lng }}#map=17/{{ ev.lat }}/{{ ev.lng }}" target="_blank" rel="noopener">{{ _('open_big_map') }} {{ icon('external-link', 13) }}</a></div>
       {% endif %}
 
       <h3 class="mt-4">{{ _('organizer') }}</h3>
@@ -282,3 +290,21 @@
 </div>
 {% endblock %}
 
+{% block scripts %}
+{% if ev.lat is not none %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<script>
+(function () {
+  var el = document.getElementById('ev-mini-map');
+  if (!el || !window.L) return;
+  var pt = [parseFloat(el.dataset.lat), parseFloat(el.dataset.lng)];
+  var map = L.map(el, {scrollWheelZoom: true, touchZoom: true, doubleClickZoom: true}).setView(pt, 15);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom: 18, attribution: '&copy; OpenStreetMap'}).addTo(map);
+  var box = document.createElement('div');
+  var b = document.createElement('b'); b.textContent = el.dataset.title; box.appendChild(b);
+  box.appendChild(document.createElement('br')); box.appendChild(document.createTextNode(el.dataset.address));
+  L.circleMarker(pt, {radius: 10, color: '#1f0d49', weight: 3, fillColor: '#c8f04a', fillOpacity: 1}).addTo(map).bindPopup(box);
+})();
+</script>
+{% endif %}
+{% endblock %}

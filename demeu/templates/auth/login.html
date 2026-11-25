@@ -6,6 +6,10 @@
   {% include "auth/_side.html" %}
   <div class="auth-main">
     <div class="auth-box">
+      <nav class="auth-tabs" aria-label="{{ _('login') }} / {{ _('register') }}">
+        <a href="{{ url_for('auth.register') }}" class="{{ 'on' if request.endpoint == 'auth.register' }}">{{ _('register') }}</a>
+        <a href="{{ url_for('auth.login') }}" class="{{ 'on' if request.endpoint == 'auth.login' }}">{{ _('login') }}</a>
+      </nav>
       <h1 style="font-size:32px">{{ _('login_title') }}</h1>
       <p class="muted">{{ _('login_subtitle') }}</p>
       <form method="post" class="mt-3" novalidate>

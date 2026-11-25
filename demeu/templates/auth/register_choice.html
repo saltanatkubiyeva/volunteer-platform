@@ -5,7 +5,11 @@
 <div class="auth-wrap">
   {% include "auth/_side.html" %}
   <div class="auth-main">
-    <div class="auth-box" style="max-width:520px">
+    <div class="auth-box">
+      <nav class="auth-tabs" aria-label="{{ _('login') }} / {{ _('register') }}">
+        <a href="{{ url_for('auth.register') }}" class="{{ 'on' if request.endpoint == 'auth.register' }}">{{ _('register') }}</a>
+        <a href="{{ url_for('auth.login') }}" class="{{ 'on' if request.endpoint == 'auth.login' }}">{{ _('login') }}</a>
+      </nav>
       <h1 style="font-size:32px">{{ _('register_title') }}</h1>
       <p class="muted">{{ _('register_choice_subtitle') }}</p>
       <div class="grid mt-3" style="gap:16px">

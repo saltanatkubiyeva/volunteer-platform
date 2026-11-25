@@ -1,6 +1,7 @@
 {% extends "org/_layout.html" %}
 {% from "partials/macros.html" import field_error, cover_url, cover_attrs %}
 {% block title %}{{ _('edit_event') if ev else _('new_event') }}{% endblock %}
+{% block head %}<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">{% endblock %}
 {% block cab %}
 <div class="cab-head"><div><h1>{{ _('edit_event') if ev else _('new_event') }}</h1><p>{{ _('event_form_subtitle') }}</p></div>
   {% if ev %}<a class="btn btn-ghost" href="{{ url_for('org.event_manage', event_id=ev.event_id) }}">{{ icon('arrow-left', 16) }} {{ _('back') }}</a>{% endif %}</div>
@@ -36,9 +37,18 @@
         <input class="input" type="datetime-local" id="registration_deadline" name="registration_deadline" value="{{ f.registration_deadline or '' }}" {{ 'data-auto=1' if not ev }}>
         <span class="hint">{{ _('deadline_hint') }}</span>{{ field_error(errors, 'registration_deadline') }}</div>
       <div class="field {{ 'has-error' if errors.city_id }}"><label class="req" for="city_id">{{ _('city') }}</label>
-        <select class="select" id="city_id" name="city_id">{% for c in cities %}<option value="{{ c.city_id }}" {{ 'selected' if f.city_id|string == c.city_id|string }}>{{ loc(c, 'name') }}</option>{% endfor %}</select>{{ field_error(errors, 'city_id') }}</div>
+        <select class="select" id="city_id" name="city_id">{% for c in cities %}<option value="{{ c.city_id }}" data-lat="{{ c.lat }}" data-lng="{{ c.lng }}" {{ 'selected' if f.city_id|string == c.city_id|string }}>{{ loc(c, 'name') }}</option>{% endfor %}</select>{{ field_error(errors, 'city_id') }}</div>
       <div class="field span-2 {{ 'has-error' if errors.address }}"><label class="req" for="address">{{ _('meeting_point') }}</label>
         <input class="input" id="address" name="address" value="{{ f.address or '' }}" maxlength="200" placeholder="{{ _('meeting_point_placeholder') }}">{{ field_error(errors, 'address') }}</div>
+      <div class="field span-2 {{ 'has-error' if errors.point }}"><label>{{ _('event_point') }} <span class="label-note">({{ _('recommended') }})</span></label>
+        <div class="point-picker card" data-point-picker>
+          <div id="point-map"></div>
+          <input type="hidden" name="lat" value="{{ f.lat if f.lat is not none else '' }}" data-point-lat>
+          <input type="hidden" name="lng" value="{{ f.lng if f.lng is not none else '' }}" data-point-lng>
+        </div>
+        <div class="row between mt-1"><span class="hint" data-point-status data-empty="{{ _('event_point_hint') }}" data-set="{{ _('event_point_set') }}">{{ _('event_point_hint') }}</span>
+          <button class="btn btn-ghost btn-xs" type="button" data-point-clear>{{ icon('x', 14) }} {{ _('event_point_clear') }}</button></div>
+        {{ field_error(errors, 'point') }}</div>
     </div>
   </div>
   <div class="form-section">
@@ -111,3 +121,47 @@
 </form>
 {% endblock %}
 
+{% block scripts %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<script>
+(function () {
+  var box = document.querySelector('[data-point-picker]');
+  if (!box || !window.L) return;
+  var latIn = box.querySelector('[data-point-lat]'), lngIn = box.querySelector('[data-point-lng]');
+  var status = document.querySelector('[data-point-status]'), clear = document.querySelector('[data-point-clear]');
+  var city = document.getElementById('city_id');
+  function cityCenter() {
+    var o = city.options[city.selectedIndex];
+    return o && o.dataset.lat ? [parseFloat(o.dataset.lat), parseFloat(o.dataset.lng)] : [51.1694, 71.4491];
+  }
+  var map = L.map('point-map', {scrollWheelZoom: true, touchZoom: true, doubleClickZoom: true}).setView(cityCenter(), 12);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom: 18, attribution: '&copy; OpenStreetMap'}).addTo(map);
+  var marker = null;
+  function update() {
+    if (marker) {
+      var p = marker.getLatLng();
+      latIn.value = p.lat.toFixed(6); lngIn.value = p.lng.toFixed(6);
+      status.textContent = status.dataset.set + ' ' + p.lat.toFixed(5) + ', ' + p.lng.toFixed(5);
+    } else {
+      latIn.value = ''; lngIn.value = ''; status.textContent = status.dataset.empty;
+    }
+    clear.hidden = !marker;
+  }
+  function place(latlng) {
+    if (marker) { marker.setLatLng(latlng); }
+    else {
+      marker = L.marker(latlng, {draggable: true}).addTo(map);
+      marker.on('dragend', update);
+    }
+    update();
+  }
+  if (latIn.value && lngIn.value) {
+    var pt = [parseFloat(latIn.value), parseFloat(lngIn.value)];
+    place(pt); map.setView(pt, 15);
+  } else { update(); }
+  map.on('click', function (e) { place(e.latlng); });
+  clear.addEventListener('click', function () { if (marker) { map.removeLayer(marker); marker = null; } update(); });
+  city.addEventListener('change', function () { if (!marker) map.setView(cityCenter(), 12); });
+})();
+</script>
+{% endblock %}

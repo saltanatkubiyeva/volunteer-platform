@@ -1,0 +1,28 @@
+{% extends "admin/_layout.html" %}
+{% from "partials/macros.html" import empty %}
+{% block title %}{{ _('adm_deeds') }}{% endblock %}
+{% block admin %}
+<div class="cab-head"><div><h1>{{ _('adm_deeds') }}</h1><p>{{ _('adm_deeds_subtitle') }}</p></div></div>
+<nav class="tabs">
+  {% for t in ['pending', 'open', 'closed'] %}<a class="{{ 'on' if tab == t }}" href="?tab={{ t }}">{{ _('deeds_adm_' ~ t) }} <span class="n">{{ counts[t] }}</span></a>{% endfor %}
+</nav>
+{% for r in rows %}
+<div class="card card-pad mb-2 deed-card">
+  <div class="row between"><div class="row tight"><span class="tag tone-{{ r.dir_tone }}">{{ icon(r.dir_icon, 12) }}{{ loc(r, 'dir_name') }}</span>
+    <span class="tag">{{ loc(r, 'city_name') }}</span><span class="status st-{{ 'verified' if r.status in ('open', 'done') else 'pending' if r.status in ('pending', 'taken') else 'rejected' }}">{{ _('deed_st_' ~ r.status) }}</span>
+    {% if r.org_name %}<span class="xs muted">{{ r.org_name }}</span>{% endif %}</div>
+    <span class="xs muted">{{ fmt_dt(r.created_at) }}</span></div>
+  <h3 class="mt-1 mb-1">{{ r.title }}</h3>
+  <p class="small mb-1 deed-desc">{{ r.description }}</p>
+  <div class="xs muted">{{ r.contact_name }} · {{ r.contact_email }}{% if r.contact_phone %} · {{ r.contact_phone }}{% endif %} · {{ r.area }}{% if r.when_date %} · {{ _('deed_when_' ~ r.when_kind) }} {{ fmt_date(r.when_date) }}{% endif %}</div>
+  {% if r.reject_reason %}<p class="xs mt-1 mb-0">{{ r.reject_reason }}</p>{% endif %}
+  {% if r.status == 'pending' %}
+  <form method="post" class="row tight mt-2">{{ csrf_field() }}<input type="hidden" name="request_id" value="{{ r.request_id }}">
+    <button class="btn btn-primary btn-xs" name="action" value="approve">{{ icon('check', 14) }} {{ _('deed_approve') }}</button>
+    <input class="input deed-reason" name="reason" maxlength="300" placeholder="{{ _('deed_reject_ph') }}">
+    <button class="btn btn-danger btn-xs" name="action" value="reject">{{ icon('x', 14) }} {{ _('deed_reject') }}</button>
+  </form>
+  {% endif %}
+</div>
+{% else %}{{ empty('heart', _('queue_empty')) }}{% endfor %}
+{% endblock %}

@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% from "partials/macros.html" import event_card, pagination, empty %}
 {% block title %}{{ _('nav_events') }}{% endblock %}
+{% block head %}{% if view == 'map' %}<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">{% endif %}{% endblock %}
 {% block content %}
 <section class="page-head">
   <div class="wrap">
@@ -15,6 +16,7 @@
       <h4>{{ _('search') }}</h4>
       <label class="input-icon"><span class="sr-only">{{ _('search') }}</span>{{ icon('search', 17) }}
         <input class="input pill" name="q" value="{{ q }}" placeholder="{{ _('search_short_placeholder') }}"></label>
+      {% if view != 'calendar' %}
       <h4>{{ _('when') }}</h4>
       <div class="radio-list">
         {% for v, k in [('upcoming','when_any'),('weekend','when_weekend'),('week','when_week'),('month','when_month'),('past','when_past')] %}
@@ -32,23 +34,33 @@
         <option value="">{{ _('all_directions') }}</option>
         {% for d in directions %}<option value="{{ d.direction_id }}" {{ 'selected' if direction == d.direction_id }}>{{ loc(d, 'name') }}</option>{% endfor %}
       </select>
-      {% if when != 'past' %}
+      {% if when != 'past' or view == 'calendar' %}
       <h4>{{ _('availability') }}</h4>
       <label class="check"><input type="checkbox" name="free" value="1" {{ 'checked' if only_free }}> {{ _('only_with_places') }}</label>
       {% endif %}
       <input type="hidden" name="sort" value="{{ sort }}">
+      {% if view != 'list' %}<input type="hidden" name="view" value="{{ view }}">{% endif %}
+      {% if view == 'calendar' %}<input type="hidden" name="month" value="{{ month.strftime('%Y-%m') }}">{% endif %}
+      {% if view == 'list' and day %}<input type="hidden" name="date" value="{{ day }}">{% endif %}
       <div class="row mt-3">
         <button class="btn btn-dark btn-sm grow" type="submit">{{ _('apply_filters') }}</button>
-        <a class="btn btn-ghost btn-sm" href="{{ url_for('public.events') }}">{{ _('reset') }}</a>
+        <a class="btn btn-ghost btn-sm" href="{{ url_for('public.events', view=view if view != 'list' else None) }}">{{ _('reset') }}</a>
       </div>
     </form>
 
     <div>
+      {% set args = request.args.to_dict() %}
+      {% set base_args = dict(args) %}{% for k in ('page', 'month', 'date', 'view') %}{% set _x = base_args.pop(k, None) %}{% endfor %}
       <div class="results-bar">
-        <span class="count">{{ _('found_n', n=page.total) }}</span>
+        <span class="count" data-found="{{ _('found_n', n='{n}') }}">{% if view == 'calendar' %}{{ month_name }} {{ month.year }} · {{ _('found_n', n=total) }}{% else %}{{ _('found_n', n=total) }}{% endif %}</span>
         <div class="row">
           <button class="btn btn-ghost btn-sm filters-toggle" type="button" data-toggle="filters">{{ icon('filter', 16) }} {{ _('filters') }}</button>
-          {% if when != 'past' %}
+          <nav class="view-switch" aria-label="{{ _('view_mode') }}">
+            {% for v, ic, k in [('list', 'list', 'view_list'), ('calendar', 'calendar', 'view_calendar'), ('map', 'map-pin', 'view_map')] %}
+            <a class="{{ 'on' if view == v }}" href="{{ url_for('public.events', **dict(base_args, view=v if v != 'list' else None)) }}" {{ 'aria-current=page' if view == v }}>{{ icon(ic, 16) }}<span>{{ _(k) }}</span></a>
+            {% endfor %}
+          </nav>
+          {% if view == 'list' and when != 'past' %}
           <form method="get" data-autosubmit class="row tight">
             {% for k, v in request.args.items() if k not in ('sort', 'page') %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}
             <label class="small muted" for="sort">{{ _('sort_by') }}</label>
@@ -62,15 +74,64 @@
           {% endif %}
         </div>
       </div>
-      {% if q or city or direction or only_free or when != 'upcoming' %}
+      {% if q or (city and view != 'map') or direction or only_free or (when != 'upcoming' and view != 'calendar') or (day and view == 'list') %}
       <div class="active-filters">
         {% if q %}<a href="{{ url_for('public.events', **dict(args, q='', page=1)) }}">“{{ q }}” {{ icon('x', 13) }}</a>{% endif %}
-        {% if when != 'upcoming' %}<a href="{{ url_for('public.events', **dict(args, when='upcoming', page=1)) }}">{{ _('when_' ~ when) }} {{ icon('x', 13) }}</a>{% endif %}
-        {% if city %}{% for c in cities if c.city_id == city %}<a href="{{ url_for('public.events', **dict(args, city='', page=1)) }}">{{ loc(c, 'name') }} {{ icon('x', 13) }}</a>{% endfor %}{% endif %}
+        {% if day and view == 'list' %}<a href="{{ url_for('public.events', **dict(args, date='', page=1)) }}">{{ fmt_date(day, True) }} {{ icon('x', 13) }}</a>{% endif %}
+        {% if when != 'upcoming' and view != 'calendar' %}<a href="{{ url_for('public.events', **dict(args, when='upcoming', page=1)) }}">{{ _('when_' ~ when) }} {{ icon('x', 13) }}</a>{% endif %}
+        {% if city and view != 'map' %}{% for c in cities if c.city_id == city %}<a href="{{ url_for('public.events', **dict(args, city='', page=1)) }}">{{ loc(c, 'name') }} {{ icon('x', 13) }}</a>{% endfor %}{% endif %}
         {% if direction %}{% for d in directions if d.direction_id == direction %}<a href="{{ url_for('public.events', **dict(args, direction='', page=1)) }}">{{ loc(d, 'name') }} {{ icon('x', 13) }}</a>{% endfor %}{% endif %}
         {% if only_free %}<a href="{{ url_for('public.events', **dict(args, free='', page=1)) }}">{{ _('only_with_places') }} {{ icon('x', 13) }}</a>{% endif %}
       </div>
       {% endif %}
+
+      {% if view == 'calendar' %}
+        {% set this_month = month.strftime('%Y-%m') %}
+        <div class="cal card">
+          <div class="cal-head">
+            <a class="icon-btn" href="{{ url_for('public.events', **dict(base_args, view='calendar', month=prev_month.strftime('%Y-%m'))) }}" aria-label="{{ _('cal_prev') }}">{{ icon('chevron-left', 18) }}</a>
+            <h2>{{ month_name }} <span>{{ month.year }}</span></h2>
+            <a class="icon-btn" href="{{ url_for('public.events', **dict(base_args, view='calendar', month=next_month.strftime('%Y-%m'))) }}" aria-label="{{ _('cal_next') }}">{{ icon('chevron-right', 18) }}</a>
+            {% if this_month != today.strftime('%Y-%m') %}<a class="btn btn-ghost btn-xs" href="{{ url_for('public.events', **dict(base_args, view='calendar')) }}">{{ _('today') }}</a>{% endif %}
+          </div>
+          <div class="cal-grid" role="grid">
+            {% for wd in range(7) %}<div class="cal-wd" role="columnheader">{{ _('wd_' ~ wd) }}</div>{% endfor %}
+            {% for week in weeks %}{% for d in week %}
+              {% set key = d.isoformat() %}{% set evs = days.get(key, []) %}
+              <div class="cal-day {{ 'out' if key[:7] != this_month }} {{ 'today' if d == today }} {{ 'past' if d < today }} {{ 'has' if evs }}" role="gridcell">
+                <span class="cal-num">{{ d.day }}</span>
+                {% for ev in evs[:3] %}
+                  {% set left = ev.max_volunteers - ev.taken %}
+                  <a class="cal-ev {{ 'urgent' if ev.is_urgent and left > 0 and d >= today }}" href="{{ url_for('public.event_detail', event_id=ev.event_id) }}" title="{{ fmt_time(ev.starts_at) }} · {{ ev.title }} · {{ ev.org_name }}">
+                    {% if ev.is_urgent and left > 0 and d >= today %}{{ icon('alert', 11) }}{% endif %}<b>{{ fmt_time(ev.starts_at) }}</b> {{ ev.title }}</a>
+                {% endfor %}
+                {% if evs|length > 3 %}<a class="cal-more" href="{{ url_for('public.events', **dict(base_args, date=key, when='past' if d < today else 'upcoming')) }}">{{ _('cal_more', n=evs|length - 3) }}</a>{% endif %}
+              </div>
+            {% endfor %}{% endfor %}
+          </div>
+          <div class="cal-agenda">
+            {% set ns = namespace(any=False) %}
+            {% for week in weeks %}{% for d in week if d.isoformat()[:7] == this_month and days.get(d.isoformat()) %}
+              {% set ns.any = True %}
+              <div class="cal-agenda-day {{ 'today' if d == today }}"><span class="n">{{ d.day }}</span><span>{{ fmt_date(d.isoformat(), True, False) }}</span></div>
+              {% for ev in days[d.isoformat()] %}
+              <a class="cal-ev {{ 'urgent' if ev.is_urgent and ev.max_volunteers > ev.taken and d >= today }}" href="{{ url_for('public.event_detail', event_id=ev.event_id) }}">{% if ev.is_urgent and ev.max_volunteers > ev.taken and d >= today %}{{ icon('alert', 13) }}{% endif %}<b>{{ fmt_time(ev.starts_at) }}</b> {{ ev.title }}</a>
+              {% endfor %}
+            {% endfor %}{% endfor %}
+            {% if not ns.any %}<p class="small muted center mb-0">{{ _('cal_empty_month') }}</p>{% endif %}
+          </div>
+          {% if not total %}<p class="cal-empty small muted">{{ _('cal_empty_month') }}</p>{% endif %}
+        </div>
+        <p class="xs muted mt-1">{{ icon('info', 12) }} {{ _('cal_hint') }}</p>
+
+      {% elif view == 'map' %}
+        <div class="ev-map card"><div id="ev-map" data-points='{{ points|tojson }}' data-city='{{ city or 0 }}' data-cities='{{ city_xy|tojson }}' data-counts='{{ per_city|tojson }}' data-all='{{ all_total }}'>
+          <noscript><p class="small muted">{{ _('map_needs_js') }}</p></noscript></div></div>
+        <div class="row between mt-1">
+          <span class="xs muted">{{ icon('info', 12) }} {{ _('map_hint') }}</span>
+          {% if no_point %}<span class="xs muted">{{ _('map_no_point', n=no_point) }}</span>{% endif %}
+        </div>
+        {% if not points %}<div class="mt-2">{{ empty('map-pin', _('map_empty_title'), _('no_events_text'), url_for('public.events', view='map'), _('reset_filters')) }}</div>{% endif %}
 
       {% elif events %}
         <div class="grid grid-3" style="grid-template-columns:repeat(auto-fill,minmax(270px,1fr))">
@@ -85,3 +146,64 @@
 </div>
 {% endblock %}
 
+{% block scripts %}
+{% if view == 'map' %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<script>
+(function () {
+  var el = document.getElementById('ev-map');
+  if (!el || !window.L) return;
+  var points = JSON.parse(el.dataset.points || '[]');
+  var cityXY = JSON.parse(el.dataset.cities || '{}'), counts = JSON.parse(el.dataset.counts || '{}');
+  var allTotal = parseInt(el.dataset.all || '0', 10);
+  var urgentIcon = {{ icon('alert', 12)|string|tojson }};
+  var t = {{ {'open': _('map_open_event'), 'urgent': _('urgent'), 'left': _('n_left', n='{n}'), 'full': _('full')}|tojson }};
+  var map = L.map(el, {scrollWheelZoom: true, touchZoom: true, doubleClickZoom: true}).setView([48.0, 68.0], 5);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom: 18, attribution: '&copy; OpenStreetMap'}).addTo(map);
+  function node(tag, cls, text) { var n = document.createElement(tag); if (cls) n.className = cls; if (text) n.textContent = text; return n; }
+  var bounds = [];
+  points.forEach(function (p) {
+    var m = L.circleMarker([p.lat, p.lng], {radius: p.urgent ? 11 : 8, color: p.urgent ? '#fff' : '#1f0d49', weight: p.urgent ? 3 : 2.5,
+      fillColor: p.urgent ? '#b42318' : p.color, fillOpacity: 1}).addTo(map);
+    var box = node('div', 'map-pop');
+    var tags = node('div', 'map-pop-tags');
+    tags.appendChild(node('span', 'tag tone-' + p.tone, p.dir));
+    if (p.urgent) { var ut = node('span', 'tag urgent-tag'); ut.innerHTML = urgentIcon; ut.appendChild(document.createTextNode(t.urgent)); tags.appendChild(ut); }
+    box.appendChild(tags);
+    var a = node('a', 'map-pop-title', p.title); a.href = p.url; box.appendChild(a);
+    box.appendChild(node('div', 'map-pop-meta', p.when));
+    box.appendChild(node('div', 'map-pop-meta', p.address));
+    box.appendChild(node('div', 'map-pop-org', p.org));
+    var foot = node('div', 'map-pop-foot');
+    foot.appendChild(node('span', 'map-pop-left', p.left > 0 ? t.left.replace('{n}', p.left) : t.full));
+    var go = node('a', 'btn btn-primary btn-xs', t.open); go.href = p.url; foot.appendChild(go);
+    box.appendChild(foot);
+    m.bindPopup(box, {minWidth: 240, maxWidth: 280});
+    m.bindTooltip(p.title, {direction: 'top', offset: [0, -8]});
+    bounds.push([p.lat, p.lng]);
+  });
+  var countEl = document.querySelector('.results-bar .count');
+  function focusCity(id, animate) {
+    var pts = points.filter(function (p) { return !id || p.city_id === id; }).map(function (p) { return [p.lat, p.lng]; });
+    var opts = {padding: [40, 40], maxZoom: id ? 14 : 12, animate: animate};
+    if (pts.length) map.fitBounds(pts, opts);
+    else if (id && cityXY[id]) map.setView(cityXY[id], 12, {animate: animate});
+    else map.setView([48.0, 68.0], 5, {animate: animate});
+    if (countEl) countEl.textContent = countEl.dataset.found.replace('{n}', id ? (counts[id] || 0) : allTotal);
+  }
+  focusCity(parseInt(el.dataset.city || '0', 10), false);
+  var citySel = document.querySelector('#filters select[name=city]');
+  if (citySel) citySel.addEventListener('change', function (e) {
+    e.stopPropagation();
+    var id = parseInt(citySel.value || '0', 10);
+    focusCity(id, true);
+    try {
+      var u = new URL(window.location.href);
+      if (id) u.searchParams.set('city', id); else u.searchParams.delete('city');
+      history.replaceState(null, '', u.toString());
+    } catch (err) {}
+  });
+})();
+</script>
+{% endif %}
+{% endblock %}

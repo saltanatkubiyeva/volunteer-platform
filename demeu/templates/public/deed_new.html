@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% from "partials/macros.html" import field_error %}
+{% block title %}{{ _('deed_title') }}{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div class="wrap">
+    <div class="crumbs"><a href="{{ url_for('public.home') }}">{{ _('home') }}</a>{{ icon('chevron-right', 14) }}<span>{{ _('deed_title') }}</span></div>
+    <h1>{{ _('deed_title') }}</h1><p>{{ _('deed_subtitle') }}</p>
+  </div>
+</section>
+<div class="wrap deed-wrap">
+  <form class="card card-pad deed-form" method="post" novalidate>
+    {{ csrf_field() }}
+    <div class="sr-only"><label>Website <input name="website" tabindex="-1" autocomplete="off"></label></div>
+    <h3>{{ _('deed_what') }}</h3>
+    <div class="form-grid">
+      <div class="field span-2 {{ 'has-error' if errors.title }}"><label class="req" for="d-title">{{ _('deed_f_title') }}</label>
+        <input class="input" id="d-title" name="title" value="{{ f.title or '' }}" maxlength="120" placeholder="{{ _('deed_f_title_ph') }}">{{ field_error(errors, 'title') }}</div>
+      <div class="field span-2 {{ 'has-error' if errors.description }}"><label class="req" for="d-desc">{{ _('deed_f_description') }}</label>
+        <textarea class="textarea" id="d-desc" name="description" maxlength="2000" rows="5" placeholder="{{ _('deed_f_description_ph') }}">{{ f.description or '' }}</textarea>{{ field_error(errors, 'description') }}</div>
+      <div class="field {{ 'has-error' if errors.direction_id }}"><label class="req" for="d-dir">{{ _('direction') }}</label>
+        <select class="select" id="d-dir" name="direction_id"><option value="">{{ _('choose') }}</option>
+          {% for d in directions %}<option value="{{ d.direction_id }}" {{ 'selected' if f.direction_id == d.direction_id }}>{{ loc(d, 'name') }}</option>{% endfor %}</select>{{ field_error(errors, 'direction_id') }}</div>
+      <div class="field {{ 'has-error' if errors.people_needed }}"><label for="d-people">{{ _('deed_f_people') }} <span class="label-note">({{ _('optional') }})</span></label>
+        <input class="input" id="d-people" name="people_needed" type="number" min="1" max="200" value="{{ f.people_needed or '' }}">{{ field_error(errors, 'people_needed') }}</div>
+      <div class="field {{ 'has-error' if errors.city_id }}"><label class="req" for="d-city">{{ _('city') }}</label>
+        <select class="select" id="d-city" name="city_id"><option value="">{{ _('choose') }}</option>
+          {% for c in cities %}<option value="{{ c.city_id }}" {{ 'selected' if f.city_id == c.city_id }}>{{ loc(c, 'name') }}</option>{% endfor %}</select>{{ field_error(errors, 'city_id') }}</div>
+      <div class="field {{ 'has-error' if errors.area }}"><label class="req" for="d-area">{{ _('deed_f_area') }}</label>
+        <input class="input" id="d-area" name="area" value="{{ f.area or '' }}" maxlength="160" placeholder="{{ _('deed_f_area_ph') }}">{{ field_error(errors, 'area') }}</div>
+      <div class="field span-2 {{ 'has-error' if errors.when_date }}"><label>{{ _('deed_f_when') }}</label>
+        <div class="row tight">
+          {% for k in ['on', 'by', 'any'] %}<label class="check-chip"><input type="radio" name="when_kind" value="{{ k }}" {{ 'checked' if f.when_kind == k }} data-deed-when><span>{{ _('deed_when_' ~ k) }}</span></label>{% endfor %}
+          <input class="input deed-date" type="date" name="when_date" value="{{ f.when_date or '' }}" aria-label="{{ _('date') }}" {{ 'hidden' if f.when_kind == 'any' }} data-deed-date>
+        </div>{{ field_error(errors, 'when_date') }}</div>
+    </div>
+    <h3 class="mt-3">{{ _('deed_contact') }}</h3>
+    <p class="small muted">{{ _('deed_contact_hint') }}</p>
+    <div class="form-grid">
+      <div class="field {{ 'has-error' if errors.contact_name }}"><label class="req" for="d-name">{{ _('your_name') }}</label>
+        <input class="input" id="d-name" name="contact_name" value="{{ f.contact_name or '' }}" maxlength="80">{{ field_error(errors, 'contact_name') }}</div>
+      <div class="field {{ 'has-error' if errors.contact_email }}"><label class="req" for="d-email">Email</label>
+        <input class="input" id="d-email" type="email" name="contact_email" value="{{ f.contact_email or '' }}" maxlength="120">{{ field_error(errors, 'contact_email') }}</div>
+      <div class="field"><label for="d-phone">{{ _('phone') }} <span class="label-note">({{ _('optional') }})</span></label>
+        <input class="input" id="d-phone" name="contact_phone" value="{{ f.contact_phone or '' }}" maxlength="30" placeholder="+7 7__ ___ __ __"></div>
+    </div>
+    <label class="check mt-2 {{ 'has-error' if errors.agree }}"><input type="checkbox" name="agree" value="1" {{ 'checked' if request.form.get('agree') }}>
+      <span class="small">{{ _('deed_agree') }}</span></label>{{ field_error(errors, 'agree') }}
+    <div class="alert alert-info mt-2">{{ icon('info') }}<div class="small">{{ _('deed_no_money') }}</div></div>
+    <button class="btn btn-primary mt-2">{{ icon('send', 16) }} {{ _('deed_send') }}</button>
+  </form>
+  <aside class="deed-aside">
+    <h4>{{ _('deed_how') }}</h4>
+    <ol class="deed-steps">
+      <li><b>{{ _('deed_step1') }}</b><span>{{ _('deed_step1_text') }}</span></li>
+      <li><b>{{ _('deed_step2') }}</b><span>{{ _('deed_step2_text') }}</span></li>
+      <li><b>{{ _('deed_step3') }}</b><span>{{ _('deed_step3_text') }}</span></li>
+      <li><b>{{ _('deed_step4') }}</b><span>{{ _('deed_step4_text') }}</span></li>
+    </ol>
+  </aside>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  var date = document.querySelector('[data-deed-date]');
+  document.querySelectorAll('[data-deed-when]').forEach(function (r) {
+    r.addEventListener('change', function () { date.hidden = r.value === 'any'; });
+  });
+})();
+</script>
+{% endblock %}

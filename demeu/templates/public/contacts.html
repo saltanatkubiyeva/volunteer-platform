@@ -62,11 +62,11 @@
   var offices = [{% for o in offices %}{lat: {{ o.lat }}, lng: {{ o.lng }}, title: {{ loc(o, 'city_name')|tojson }}, addr: {{ o.address|tojson }}, head: {{ 'true' if o.is_head else 'false' }}}{{ ',' if not loop.last }}{% endfor %}];
   var el = document.getElementById('map');
   el.innerHTML = '';
-  var map = L.map(el, {scrollWheelZoom: false}).setView([48.0, 68.0], 5);
+  var map = L.map(el, {scrollWheelZoom: true, touchZoom: true, doubleClickZoom: true}).setView([48.0, 68.0], 5);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom: 18, attribution: '&copy; OpenStreetMap'}).addTo(map);
   var bounds = [];
   offices.forEach(function (o) {
-    var m = L.circleMarker([o.lat, o.lng], {radius: o.head ? 11 : 8, color: '#0f3823', weight: 3, fillColor: '#9be809', fillOpacity: 1}).addTo(map);
+    var m = L.circleMarker([o.lat, o.lng], {radius: o.head ? 11 : 8, color: '#1f0d49', weight: 3, fillColor: '#c8f04a', fillOpacity: 1}).addTo(map);
     var div = document.createElement('div');
     var b = document.createElement('b'); b.textContent = o.title; div.appendChild(b);
     div.appendChild(document.createElement('br')); div.appendChild(document.createTextNode(o.addr));

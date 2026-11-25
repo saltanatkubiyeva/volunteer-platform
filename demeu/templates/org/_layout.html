@@ -9,6 +9,7 @@
       <a class="{{ 'on' if ep == 'org.dashboard' }}" href="{{ url_for('org.dashboard') }}">{{ icon('dashboard') }} {{ _('overview') }}</a>
       <a class="{{ 'on' if ep in ('org.events', 'org.event_manage', 'org.event_edit') }}" href="{{ url_for('org.events') }}">{{ icon('calendar') }} {{ _('org_events') }}</a>
       <a class="{{ 'on' if ep == 'org.event_new' }}" href="{{ url_for('org.event_new') }}">{{ icon('plus') }} {{ _('new_event') }}</a>
+      <a class="{{ 'on' if ep == 'org.deeds' }}" href="{{ url_for('org.deeds') }}">{{ icon('heart') }} {{ _('org_deeds') }}{% if deeds_open %}<span class="badge">{{ deeds_open }}</span>{% endif %}</a>
       <a class="{{ 'on' if ep == 'org.reports' }}" href="{{ url_for('org.reports') }}">{{ icon('chart') }} {{ _('nav_reports') }}</a>
       {% if g.coordinator.is_owner %}
       <a class="{{ 'on' if ep == 'org.profile' }}" href="{{ url_for('org.profile') }}">{{ icon('building') }} {{ _('org_profile') }}</a>
