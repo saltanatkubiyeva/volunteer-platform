@@ -1,0 +1,23 @@
+{% extends "admin/_layout.html" %}
+{% from "partials/macros.html" import status, empty %}
+{% block title %}{{ _('adm_documents') }}{% endblock %}
+{% block admin %}
+<div class="cab-head"><div><h1>{{ _('adm_documents') }}</h1><p>{{ _('adm_documents_subtitle') }}</p></div></div>
+{% for d in rows %}
+<div class="card card-pad mb-2">
+  <div class="row between">
+    <div class="row" style="flex-wrap:nowrap"><span class="ic-wrap">{{ icon(d.icon) }}</span>
+      <div><b>{{ loc(d, 'name') }}</b> <span class="small muted">· <a href="{{ url_for('public.volunteer_profile', volunteer_id=d.volunteer_id) }}">{{ d.full_name }}</a>, {{ _('age_n', n=age_on(d.birth_date)) }}</span>
+        <div class="xs muted">{{ _('uploaded_on', d=fmt_dt(d.uploaded_at)) }}{% if d.expires_at %} · {{ _('valid_until', d=fmt_date(d.expires_at)) }}{% if d.expires_at < today %} <b style="color:var(--danger)">({{ _('doc_state_expired') }})</b>{% endif %}{% elif not d.has_expiry %} · {{ _('no_expiry') }}{% endif %}</div></div></div>
+    <div class="row">{{ status(d.status) }}<a class="btn btn-ghost btn-sm" target="_blank" href="{{ url_for('media.document_file', doc_id=d.volunteer_skill_id) }}">{{ icon('file-text', 16) }} {{ _('open_document') }}</a></div>
+  </div>
+  {% if d.status == 'pending' %}
+  <form class="row mt-2" method="post">{{ csrf_field() }}<input type="hidden" name="doc_id" value="{{ d.volunteer_skill_id }}">
+    <input class="input grow" name="comment" maxlength="300" placeholder="{{ _('doc_reject_placeholder') }}" style="height:40px">
+    <button class="btn btn-primary btn-sm" name="action" value="approve">{{ icon('check', 16) }} {{ _('approve') }}</button>
+    <button class="btn btn-danger btn-sm" name="action" value="reject">{{ icon('x', 16) }} {{ _('reject') }}</button></form>
+  <p class="xs muted mt-1 mb-0">{{ _('doc_check_hint') }}</p>
+  {% else %}<p class="xs muted mt-1 mb-0">{{ d.reviewer or '' }}{% if d.reviewed_at %}, {{ fmt_dt(d.reviewed_at) }}{% endif %}{% if d.review_comment %} · {{ d.review_comment }}{% endif %}</p>{% endif %}
+</div>
+{% else %}{{ empty('file-text', _('queue_empty')) }}{% endfor %}
+{% endblock %}

@@ -1,0 +1,54 @@
+{% extends "volunteer/_layout.html" %}
+{% from "partials/macros.html" import avatar, empty %}
+{% block title %}{{ _('friends') }}{% endblock %}
+{% macro fr_row(row, show_link=True, label='') -%}
+<div class="fr-person">{{ avatar(row.avatar_path, row.full_name) }}
+  <div class="grow"><b>{% if show_link %}<a href="{{ url_for('public.volunteer_profile', volunteer_id=row.volunteer_id) }}">{{ row.full_name }}</a>{% else %}{{ label }}{% endif %}</b>
+    <div class="xs muted">{{ _('fr_hours', n=fmt_hours(row.hours)) }}{% if row.shared %} · {{ _('fr_shared', n=row.shared) }}{% endif %}{% if row.last_event %} · {{ row.last_event }}{% endif %}</div></div>
+  {{ caller() }}
+</div>
+{%- endmacro %}
+{% block cab %}
+<div class="cab-head"><div><h1>{{ _('friends') }}</h1><p>{{ _('friends_subtitle') }}</p></div></div>
+<nav class="tabs">
+  <a class="{{ 'on' if tab == 'friends' }}" href="?tab=friends">{{ _('fr_tab_friends') }} <span class="n">{{ friends|length }}</span></a>
+  <a class="{{ 'on' if tab == 'requests' }}" href="?tab=requests">{{ _('fr_tab_requests') }} <span class="n">{{ incoming|length }}</span></a>
+  <a class="{{ 'on' if tab == 'met' }}" href="?tab=met">{{ _('fr_tab_met') }} <span class="n">{{ met|length }}</span></a>
+</nav>
+
+{% if tab == 'requests' %}
+  {% if incoming %}<h4 class="mb-1">{{ _('fr_incoming') }}</h4>
+  <div class="card fr-list mb-3">{% for p in incoming %}
+    {% call fr_row(p, p.is_public, short_name(p)) %}
+      <form method="post" action="{{ url_for('volunteer.friend_accept', friendship_id=p.friendship_id) }}">{{ csrf_field() }}<button class="btn btn-primary btn-xs">{{ icon('check', 14) }} {{ _('fr_accept') }}</button></form>
+      <form method="post" action="{{ url_for('volunteer.friend_remove', friendship_id=p.friendship_id) }}">{{ csrf_field() }}<input type="hidden" name="next" value="{{ url_for('volunteer.friends', tab='requests') }}"><button class="btn btn-ghost btn-xs">{{ _('fr_decline') }}</button></form>
+    {% endcall %}{% endfor %}</div>{% endif %}
+  {% if outgoing %}<h4 class="mb-1">{{ _('fr_outgoing') }}</h4>
+  <div class="card fr-list">{% for p in outgoing %}
+    {% call fr_row(p, p.is_public, short_name(p)) %}
+      <span class="xs muted">{{ _('fr_waiting') }}</span>
+      <form method="post" action="{{ url_for('volunteer.friend_remove', friendship_id=p.friendship_id) }}">{{ csrf_field() }}<input type="hidden" name="next" value="{{ url_for('volunteer.friends', tab='requests') }}"><button class="btn btn-ghost btn-xs">{{ _('fr_cancel') }}</button></form>
+    {% endcall %}{% endfor %}</div>{% endif %}
+  {% if not incoming and not outgoing %}{{ empty('users', _('fr_no_requests')) }}{% endif %}
+
+{% elif tab == 'met' %}
+  <p class="small muted">{{ icon('info', 13) }} {{ _('fr_met_hint') }}</p>
+  {% if met %}<div class="card fr-list">{% for p in met %}
+    {% call fr_row(p, p.is_public, short_name(p)) %}
+      <form method="post" action="{{ url_for('volunteer.friend_add', volunteer_id=p.volunteer_id) }}">{{ csrf_field() }}<input type="hidden" name="next" value="{{ url_for('volunteer.friends', tab='met') }}"><button class="btn btn-ghost btn-xs">{{ icon('plus', 14) }} {{ _('fr_add') }}</button></form>
+    {% endcall %}{% endfor %}</div>
+  {% else %}{{ empty('users', _('fr_met_empty'), '', url_for('public.events'), _('find_event')) }}{% endif %}
+
+{% else %}
+  {% if wins %}
+  <div class="card card-pad mb-3"><h4 class="mb-1">{{ _('fr_wins') }}</h4>
+    {% for w in wins %}{% include "volunteer/_friend_win.html" %}{% endfor %}</div>
+  {% endif %}
+  {% if friends %}<div class="card fr-list">{% for p in friends %}
+    {% call fr_row(p) %}
+      <form method="post" action="{{ url_for('volunteer.friend_remove', friendship_id=p.friendship_id) }}" onsubmit="return confirm(this.dataset.msg)" data-msg="{{ _('fr_remove_confirm', name=p.full_name) }}">{{ csrf_field() }}
+        <button class="btn btn-text btn-xs muted">{{ _('fr_remove') }}</button></form>
+    {% endcall %}{% endfor %}</div>
+  {% else %}{{ empty('users', _('fr_none'), _('fr_none_text'), url_for('volunteer.friends', tab='met'), _('fr_tab_met')) }}{% endif %}
+{% endif %}
+{% endblock %}

@@ -1,0 +1,6 @@
+<div class="fr-win">{{ avatar(w.avatar_path, w.name, 'sm') }}
+  <div class="grow small">{{ _('fr_win_text', name=w.name.split()[0], n=w.n) }}<div class="xs muted">{{ fmt_dt(w.at) }}</div></div>
+  {% if (w.vid, w.n) in kudos_given %}<span class="fr-cheered">👏 {{ _('fr_cheered') }}</span>
+  {% else %}<form method="post" action="{{ url_for('volunteer.friend_kudos') }}">{{ csrf_field() }}<input type="hidden" name="volunteer_id" value="{{ w.vid }}"><input type="hidden" name="n" value="{{ w.n }}">
+    <input type="hidden" name="next" value="{{ request.full_path }}"><button class="btn btn-ghost btn-xs">👏 {{ _('fr_congratulate') }}</button></form>{% endif %}
+</div>
