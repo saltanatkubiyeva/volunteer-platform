@@ -31,7 +31,7 @@ def create_app(test_config=None):
         DATABASE=os.path.join(instance_dir, "demeu.db"),
         UPLOAD_DIR=os.path.join(instance_dir, "uploads"),
         MAX_UPLOAD_MB=5,
-        MAX_CONTENT_LENGTH=6 * 1024 * 1024,
+        MAX_CONTENT_LENGTH=52 * 1024 * 1024,
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",
         PERMANENT_SESSION_LIFETIME=timedelta(days=7),
@@ -63,9 +63,45 @@ def create_app(test_config=None):
         LANGS=core.LANGS, LANG_LABELS=core.LANG_LABELS, event_phase=core.event_phase,
         age_on=core.age_on, duration_hours=core.duration_hours,
         notification_text=core.notification_text,
+        notification_style=core.notification_style, notification_day=core.notification_day,
         direction_photo=photos.direction_photo, photo_url=photos.photo_url,
         fallback_url=photos.fallback_url, HERO_PHOTO=photos.HERO, CITY_PHOTO=photos.CITY,
     )
+
+    def static_v(filename):
+        from flask import url_for
+        try:
+            v = int(os.path.getmtime(os.path.join(app.static_folder, filename)))
+        except OSError:
+            v = 0
+        return url_for("static", filename=filename, v=v)
+
+    app.jinja_env.globals["static_v"] = static_v
+
+    def mark_words(text, words):
+        import re
+        from markupsafe import Markup, escape
+        text = str(escape(text or ""))
+        if not words:
+            return Markup(text)
+        pattern = re.compile(r"(?<!\w)(" + "|".join(re.escape(str(escape(w))) for w in words) + r")", re.IGNORECASE)
+        return Markup(pattern.sub(r"<mark>\1</mark>", text))
+
+    app.jinja_env.filters["mark_words"] = mark_words
+
+    def month_name(n, short=False):
+        from .eventcal import MONTH_NAMES
+        name = MONTH_NAMES.get(g.get("lang", "en"), MONTH_NAMES["en"])[n - 1]
+        return name[:3] if short else name
+
+    app.jinja_env.globals["month_name"] = month_name
+
+    def friends_going():
+        from .friends import going_for_cards
+        return going_for_cards()
+
+    app.jinja_env.globals["friends_going"] = friends_going
+    app.jinja_env.filters["first_word"] = lambda v: (v or "").split()[0] if v else ""
 
     @app.context_processor
     def inject():

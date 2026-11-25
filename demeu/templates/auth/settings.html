@@ -42,5 +42,16 @@
     </div>
     <button class="btn btn-dark mt-3" type="submit">{{ _('change_password') }}</button>
   </form>
+
+  {% if g.volunteer %}
+  <form class="card card-pad mt-3" id="friends" method="post" action="{{ url_for('volunteer.friend_settings') }}">
+    {{ csrf_field() }}<h3>{{ icon('users') }} {{ _('friends') }}</h3>
+    <label class="check"><input type="checkbox" name="share_plans" value="1" {{ 'checked' if g.volunteer.share_plans }}><span><b>{{ _('fr_set_share') }}</b><br><span class="small muted">{{ _('fr_set_share_hint') }}</span></span></label>
+    <label class="check mt-1"><input type="checkbox" name="notify_friend_plans" value="1" {{ 'checked' if g.volunteer.notify_friend_plans }}><span>{{ _('fr_set_plans') }}</span></label>
+    <label class="check mt-1"><input type="checkbox" name="notify_friend_achievements" value="1" {{ 'checked' if g.volunteer.notify_friend_achievements }}><span>{{ _('fr_set_wins') }}</span></label>
+    <button class="btn btn-dark btn-sm mt-2">{{ _('save') }}</button>
+  </form>
+  {% endif %}
+
 </div>
 {% endblock %}

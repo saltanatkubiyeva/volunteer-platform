@@ -9,6 +9,8 @@
       <a class="{{ 'on' if ep == 'volunteer.dashboard' }}" href="{{ url_for('volunteer.dashboard') }}">{{ icon('dashboard') }} {{ _('overview') }}</a>
       <a class="{{ 'on' if ep == 'volunteer.applications' }}" href="{{ url_for('volunteer.applications') }}">{{ icon('clipboard-check') }} {{ _('my_applications') }}</a>
       <a href="{{ url_for('public.events') }}">{{ icon('search') }} {{ _('find_event') }}</a>
+      <a class="{{ 'on' if ep == 'volunteer.friends' }}" href="{{ url_for('volunteer.friends') }}">{{ icon('users') }} {{ _('friends') }}{% if friend_requests %}<span class="badge">{{ friend_requests }}</span>{% endif %}</a>
+      <a class="{{ 'on' if ep == 'volunteer.documents' }}" href="{{ url_for('volunteer.documents') }}">{{ icon('file-text') }} {{ _('my_documents') }}</a>
       <a class="{{ 'on' if ep == 'volunteer.profile_edit' }}" href="{{ url_for('volunteer.profile_edit') }}">{{ icon('user') }} {{ _('edit_profile') }}</a>
       {% if age_on(g.volunteer.birth_date) < 18 %}
       <a class="{{ 'on' if ep == 'volunteer.consent' }}" href="{{ url_for('volunteer.consent') }}">{{ icon('file-text') }} {{ _('parental_consent') }}</a>

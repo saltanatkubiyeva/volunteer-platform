@@ -74,6 +74,8 @@ def events():
     return render_template("org/events.html", rows=rows, tab=tab, counts=counts)
 
 
+
+
 EVENT_FIELDS = ("title", "summary", "description", "address", "requirements", "provided")
 
 
@@ -93,6 +95,19 @@ def _sync_shifts(event_id, rows):
                        VALUES (?,?,?,?,?,?)""", (event_id, r["title"], r["starts_at"], r["ends_at"], r["need"], pos))
 
 
+def _sync_requirements(event_id, skill_ids):
+    execute("DELETE FROM event_requirements WHERE event_id=?", (event_id,))
+    for sid in skill_ids:
+        execute("INSERT INTO event_requirements (event_id, skill_id) VALUES (?,?)", (event_id, sid))
+
+
+def _send_urgent(event_id):
+    try:
+        flash(_("flash_urgent_sent", n=S.urgent_call(g.coordinator, event_id)), "success")
+    except S.RuleError as e:
+        flash(_(e.key, **e.params), "error")
+
+
 def _event_form(ev=None):
     oid = g.coordinator["org_id"]
     errors = Errors()
@@ -107,12 +122,13 @@ def _event_form(ev=None):
         f["shifts"] = [dict(id=str(x["shift_id"]), title=x["title"], start=x["starts_at"][11:16],
                             end=x["ends_at"][11:16], need=str(x["max_volunteers"])) for x in S.event_shifts(ev["event_id"])]
         f["has_shifts"] = bool(f["shifts"])
+        f["doc_skills"] = [r["skill_id"] for r in S.event_requirements(ev["event_id"])]
     else:
         start = (datetime.now() + timedelta(days=10)).replace(hour=10, minute=0)
         f = dict(starts_at=start.strftime("%Y-%m-%dT%H:%M"),
                  ends_at=(start + timedelta(hours=4)).strftime("%Y-%m-%dT%H:%M"),
                  registration_deadline=(start - timedelta(hours=24)).strftime("%Y-%m-%dT%H:%M"),
-                 shifts=[], has_shifts=False,
+                 shifts=[], has_shifts=False, doc_skills=[], is_urgent=0,
                  max_volunteers=20, min_age=14, requires_approval=1, city_id=g.org["city_id"],
                  coordinator_id=g.coordinator["coordinator_id"])
     if request.method == "POST":
@@ -126,6 +142,10 @@ def _event_form(ev=None):
         f["requires_approval"] = 1 if request.form.get("requires_approval") else 0
         publish = request.form.get("action") == "publish"
         f["has_shifts"] = bool(request.form.get("has_shifts"))
+        valid_skills = {r["skill_id"] for r in query("SELECT skill_id FROM skills")}
+        f["doc_skills"] = sorted({int(x) for x in request.form.getlist("doc_skills") if x.isdigit()} & valid_skills)
+        f["is_urgent"] = 1 if request.form.get("is_urgent") else 0
+        f["lat"], f["lng"] = clean(request.form.get("lat"), 20), clean(request.form.get("lng"), 20)
         f["shifts"] = [dict(id=i, title=clean(t, 80), start=a, end=b, need=n) for i, t, a, b, n in zip(
             request.form.getlist("shift_id"), request.form.getlist("shift_title"), request.form.getlist("shift_start"),
             request.form.getlist("shift_end"), request.form.getlist("shift_need")) if (t or "").strip() or a or b or n]
@@ -214,10 +234,13 @@ def _event_form(ev=None):
                         min_age, requires_approval, cover_path, org_id, status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                                      values + (g.coordinator["org_id"], status))
                     _sync_shifts(new_id, shift_rows if f["has_shifts"] else [])
+                    _sync_requirements(new_id, f["doc_skills"])
                     audit("event_created", "events", new_id, None, status)
                     if status == "published":
                         S.notify_subscribers(new_id)
                 flash(_("flash_event_published" if publish else "flash_event_draft"), "success")
+                if status == "published" and f["is_urgent"]:
+                    _send_urgent(new_id)
                 return None, new_id
             status = "published" if (publish or ev["status"] == "published") else "draft"
             with transaction():
@@ -226,6 +249,7 @@ def _event_form(ev=None):
                     max_volunteers=?, min_age=?, requires_approval=?, cover_path=?, status=?, updated_at=?
                     WHERE event_id=?""", values + (status, now_str(), ev["event_id"]))
                 _sync_shifts(ev["event_id"], shift_rows if f["has_shifts"] else [])
+                _sync_requirements(ev["event_id"], f["doc_skills"])
                 changed = (ev["starts_at"] != values[9] or ev["ends_at"] != values[10] or ev["address"] != values[3]
                            or ev["city_id"] != values[7])
                 if status == "published":
@@ -239,8 +263,11 @@ def _event_form(ev=None):
                                event=f["title"])
                 audit("event_updated", "events", ev["event_id"], ev["status"], status)
             flash(_("flash_event_saved"), "success")
+            if status == "published" and ev["status"] == "draft" and f["is_urgent"]:
+                _send_urgent(ev["event_id"])
             return None, ev["event_id"]
-    return render_template("org/event_form.html", f=f, ev=ev, errors=errors, **ref), None
+    return render_template("org/event_form.html", f=f, ev=ev, errors=errors,
+                           all_skills=query("SELECT * FROM skills ORDER BY skill_id"), **ref), None
 
 
 @bp.route("/events/new", methods=["GET", "POST"])
@@ -277,6 +304,13 @@ def event_manage(event_id):
         "closed": ("rejected", "cancelled")}.items()}
     waiting = query("""SELECT w.*, v.full_name, v.avatar_path, v.birth_date FROM waitlist w
         JOIN volunteers v USING (volunteer_id) WHERE w.event_id=? ORDER BY w.joined_at, w.waitlist_id""", (event_id,))
+    reqs = S.event_requirements(event_id)
+    vol_docs = {}
+    if reqs:
+        for d in query(f"""SELECT * FROM volunteer_skills WHERE skill_id IN ({",".join("?" * len(reqs))})
+                           AND volunteer_id IN (SELECT volunteer_id FROM registrations WHERE event_id=?)""",
+                       [r["skill_id"] for r in reqs] + [event_id]):
+            vol_docs.setdefault(d["volunteer_id"], {})[d["skill_id"]] = d
     shifts, load, unassigned = S.shift_load(event_id)
     if shifts:
         groups["participants"].sort(key=lambda r: (-1 if r["all_shifts"] else (r["shift_pos"] if r["shift_id"] else 99),
@@ -292,6 +326,18 @@ def event_manage(event_id):
                            finished=ev["ends_at"] <= now_str(),
                            hours=duration_hours(ev["starts_at"], ev["ends_at"]),
                            unmarked=sum(1 for r in regs if r["status"] == "approved"))
+
+
+@bp.route("/events/<int:event_id>/urgent", methods=["POST"])
+@coordinator_only
+def urgent(event_id):
+    own_event(event_id)
+    try:
+        n = S.urgent_call(g.coordinator, event_id)
+        flash(_("flash_urgent_sent", n=n), "success")
+    except S.RuleError as e:
+        flash(_(e.key, **e.params), "error")
+    return redirect(url_for("org.event_manage", event_id=event_id))
 
 
 @bp.route("/events/<int:event_id>/shifts", methods=["POST"])

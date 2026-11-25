@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&family=Inter:wght@400;500;600;700&family=Oswald:wght@500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+  <link rel="stylesheet" href="{{ static_v('css/app.css') }}">
   {% block head %}{% endblock %}
 </head>
 <body class="{% block body_class %}{% endblock %}">
@@ -70,8 +70,7 @@
           </div>
         </div>
       {% else %}
-        <a class="btn btn-ghost btn-sm hide-md" href="{{ url_for('auth.login', next=request.full_path if ep not in ('auth.login','auth.register') else None) }}">{{ _('login') }}</a>
-        <a class="btn btn-primary btn-sm" href="{{ url_for('auth.register') }}">{{ _('join') }}</a>
+        <a class="btn btn-primary btn-sm" href="{{ url_for('auth.login', next=request.full_path if ep not in ('auth.login','auth.register') else None) }}">{{ _('login') }}</a>
       {% endif %}
       <button class="icon-btn burger" data-toggle="mobile-nav" aria-label="{{ _('main_menu') }}" aria-expanded="false">{{ icon('menu') }}</button>
     </div>
@@ -151,7 +150,7 @@
     </div>
   </div>
 </dialog>
-<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+<script src="{{ static_v('js/app.js') }}"></script>
 {% block scripts %}{% endblock %}
 </body>
 </html>

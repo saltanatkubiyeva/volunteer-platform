@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 import random
@@ -6,6 +7,8 @@ import sys
 from datetime import date, datetime, timedelta
 
 from werkzeug.security import generate_password_hash
+
+from demeu.db import SKILLS as SKILL_TYPES
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.environ.get("DEMEU_DB") or os.path.join(BASE, "instance", "demeu.db")
@@ -290,10 +293,26 @@ def dt(d):
     return d.strftime(FMT)
 
 
+def wipe_in_place(path):
+    con = sqlite3.connect(path, timeout=10)
+    con.execute("PRAGMA foreign_keys = OFF")
+    names = [r[0] for r in con.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")]
+    for name in names:
+        con.execute(f'DROP TABLE IF EXISTS "{name}"')
+    con.commit()
+    con.close()
+
+
 def main():
+    wiped = False
     if "--reset" in sys.argv and os.path.exists(DB):
-        os.remove(DB)
-    if os.path.exists(DB):
+        try:
+            os.remove(DB)
+        except PermissionError:
+            wipe_in_place(DB)
+            wiped = True
+    if os.path.exists(DB) and not wiped:
         print("Database already exists:", DB, "(use --reset to recreate)")
         return
     os.makedirs(os.path.dirname(DB), exist_ok=True)
@@ -676,6 +695,96 @@ def main():
         x("INSERT INTO notifications (user_id,kind,params,link,is_read,created_at) VALUES (?,?,?,?,?,?)",
           (uid, kind, json.dumps(params, ensure_ascii=False), link, read, dt(NOW - timedelta(hours=ago_h))))
 
+    con.executemany("INSERT INTO skills (slug, name_en, name_ru, name_kk, icon, has_expiry) VALUES (?,?,?,?,?,?)", SKILL_TYPES)
+    SK = {slug: sid for sid, slug in con.execute("SELECT skill_id, slug FROM skills")}
+    admin_uid = con.execute("SELECT user_id FROM users WHERE email='admin@demeu.kz'").fetchone()[0]
+    fstart = (NOW + timedelta(days=6)).replace(hour=10, minute=0, second=0, microsecond=0)
+    food_id = x("""INSERT INTO events (org_id,coordinator_id,direction_id,city_id,title,summary,description,address,
+         starts_at,ends_at,registration_deadline,max_volunteers,min_age,requires_approval,requirements,provided,
+         status,created_at) VALUES (6,9,?,?,?,?,?,?,?,?,?,8,18,1,?,?,'published',?)""",
+                (D["social"], C["Astana"], "Food Parcel Delivery to Families",
+                 "Deliver food parcels by car to 40 families in the outskirts of Astana.",
+                 "We load 40 food parcels at the warehouse at 10:00 and deliver them by your own car to families in Koktal and Industrialny districts. Each driver gets a route of 5 addresses and a partner who carries the boxes. Fuel is compensated.",
+                 "Astana, Steppe University warehouse, Kabanbay Batyr 53", dt(fstart), dt(fstart + timedelta(hours=5)),
+                 dt(fstart - timedelta(hours=24)), "Driver's licence and your own car", "Fuel compensation, lunch",
+                 dt(NOW - timedelta(days=2)))).lastrowid
+    for slug in ("driver_license", "own_car"):
+        x("INSERT INTO event_requirements (event_id, skill_id) VALUES (?,?)", (food_id, SK[slug]))
+    docs = [
+        (1024, "driver_license", "2033-04-12", "pending", None, 5),
+        (1024, "own_car", None, "pending", None, 5),
+        (1011, "driver_license", "2031-09-01", "approved", None, 30),
+        (1011, "own_car", None, "approved", None, 30),
+        (1017, "driver_license", "2029-05-20", "approved", None, 20),
+        (1017, "own_car", None, "approved", None, 20),
+        (1009, "driver_license", "2030-01-15", "rejected", "The scan is blurred, the name is not readable. Please upload a clear photo.", 12),
+        (1013, "driver_license", "2026-10-01", "approved", None, 200),
+        (1021, "own_car", None, "pending", None, 26),
+    ]
+    for vid, slug, exp, st, comment, ago in docs:
+        up = NOW - timedelta(hours=ago)
+        x("""INSERT INTO volunteer_skills (volunteer_id, skill_id, file_path, expires_at, status, review_comment,
+             reviewed_by, reviewed_at, uploaded_at) VALUES (?,?,?,?,?,?,?,?,?)""",
+          (vid, SK[slug], "documents/sample_document.pdf", exp, st, comment,
+           admin_uid if st != "pending" else None, dt(up + timedelta(hours=3)) if st != "pending" else None, dt(up)))
+    kirill_free = not con.execute("""SELECT 1 FROM registrations r JOIN events e USING (event_id) WHERE r.volunteer_id=1011
+        AND r.status IN ('pending','approved') AND e.starts_at < ? AND e.ends_at > ?""",
+                                  (dt(fstart + timedelta(hours=5)), dt(fstart))).fetchone()
+    if kirill_free:
+        x("""INSERT INTO registrations (volunteer_id, event_id, status, motivation, applied_at)
+             VALUES (1011, ?, 'pending', 'I have a minivan and can take more boxes than usual.', ?)""",
+          (food_id, dt(NOW - timedelta(hours=20))))
+    urgent = con.execute("SELECT event_id FROM events WHERE title='Warm Clothes Collection Point' AND starts_at > ?",
+                         (dt(NOW),)).fetchone()
+    if urgent:
+        x("UPDATE events SET is_urgent=1, urgent_at=? WHERE event_id=?", (dt(NOW - timedelta(hours=3)), urgent[0]))
+
+    fresh = [
+        (1, 1, "ecology", "Tree Planting in the Botanical Garden",
+         "Plant young birches and pines along the new alley of the Botanical Garden.",
+         "We plant 300 seedlings along the new alley. Team leaders show how to plant, water and tie the young trees. Work in groups of five.",
+         "Astana, Botanical Garden, south entrance", 9, 10, 3, 25, 14, 1, "Gloves and comfortable shoes", "Tools, water and tea", 30),
+        (6, 9, "animals", "Insulating Dog Houses for Winter",
+         "Help a city shelter prepare dog houses for the cold season.",
+         "We line 20 dog houses with felt and straw and fix the roofs before the frost. No experience needed, the shelter staff explain everything on site.",
+         "Astana, Happy Paws shelter, Koktal district", 12, 11, 4, 15, 16, 0, "Warm clothes you do not mind getting dirty", "Materials, gloves and hot lunch", 5),
+    ]
+    for org_id, coord_id, dslug, title, summary, desc, place, days, hour, dur, cap, age, appr, req, prov, ago in fresh:
+        start = (NOW + timedelta(days=days)).replace(hour=hour, minute=0, second=0, microsecond=0)
+        new_id = x("""INSERT INTO events (org_id,coordinator_id,direction_id,city_id,title,summary,description,address,
+             starts_at,ends_at,registration_deadline,max_volunteers,min_age,requires_approval,requirements,provided,
+             status,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'published',?)""",
+                   (org_id, coord_id, D[dslug], C["Astana"], title, summary, desc, place, dt(start),
+                    dt(start + timedelta(hours=dur)), dt(start - timedelta(hours=24)), cap, age, appr, req, prov,
+                    dt(NOW - timedelta(hours=ago)))).lastrowid
+        note("volunteer@demeu.kz", "n_new_for_you", f"/events/{new_id}", ago, 0, event=title, date=dt(start)[:10])
+
+    storm_start = (NOW + timedelta(days=2)).replace(hour=10, minute=0, second=0, microsecond=0)
+    storm_id = x("""INSERT INTO events (org_id,coordinator_id,direction_id,city_id,title,summary,description,address,
+         starts_at,ends_at,registration_deadline,max_volunteers,min_age,requires_approval,requirements,provided,
+         status,is_urgent,urgent_at,created_at) VALUES (1,1,?,?,?,?,?,?,?,?,?,20,16,0,?,?,'published',1,?,?)""",
+                 (D["ecology"], C["Astana"], "Storm Clean-up in Central Park",
+                  "Clear broken branches and save young trees in Central Park after last night's storm.",
+                  "Last night a strong wind broke dozens of trees in Central Park, and branches now block the paths and the playground. "
+                  "City services are removing the fallen trunks, and we need volunteers to collect branches, rake the paths "
+                  "and re-tie and support the young trees we planted in autumn before the frost. Team leaders show what to do on site.",
+                  "Astana, Central Park, main entrance from Kenesary St", dt(storm_start), dt(storm_start + timedelta(hours=4)),
+                  dt(storm_start - timedelta(hours=24)), "Warm clothes and boots",
+                  "Work gloves, rakes, hot tea and lunch", dt(NOW - timedelta(hours=4)), dt(NOW - timedelta(hours=5)))).lastrowid
+    storm_busy = """SELECT 1 FROM registrations r JOIN events e USING (event_id) WHERE r.volunteer_id=?
+        AND r.status IN ('pending','approved') AND e.starts_at < ? AND e.ends_at > ?"""
+    joined = 0
+    for vid in (1011, 1017, 1003, 1007, 1015):
+        if not con.execute(storm_busy, (vid, dt(storm_start + timedelta(hours=4)), dt(storm_start))).fetchone():
+            x("""INSERT INTO registrations (volunteer_id, event_id, status, applied_at, decided_at)
+                 VALUES (?, ?, 'approved', ?, ?)""", (vid, storm_id, dt(NOW - timedelta(hours=3)), dt(NOW - timedelta(hours=3))))
+            joined += 1
+    for (email,) in con.execute("""SELECT u.email FROM volunteers v JOIN users u USING (user_id) WHERE v.city_id=? AND u.is_active=1
+            AND v.volunteer_id NOT IN (SELECT volunteer_id FROM registrations WHERE event_id=?)""", (C["Astana"], storm_id)).fetchall():
+        note(email, "n_urgent_call", f"/events/{storm_id}", 4, 0, event="Storm Clean-up in Central Park", org="Green Steppe",
+             date=dt(storm_start)[:10], time="10:00", n=20 - joined)
+
+    note("admin@demeu.kz", "n_admin_new_document", "/admin/documents", 5, 0, name="Aruzhan Kassymova")
     note("volunteer@demeu.kz", "n_hours_confirmed", "/me/", 24 * 44, 1, event="City Park Clean-up", hours="3")
     note("volunteer@demeu.kz", "n_approved", "/me/applications", 26, 0,
          event=con.execute("""SELECT e.title FROM registrations r JOIN events e USING (event_id)
@@ -704,7 +813,47 @@ def main():
         x("INSERT INTO contact_messages (name,email,topic,message,status,created_at) VALUES (?,?,?,?,?,?)",
           (name, email, topic, text, "new" if ago < 10 else "in_progress", dt(NOW - timedelta(hours=ago))))
 
+    def last_completed(title, org_id):
+        return con.execute("""SELECT event_id, ends_at FROM events WHERE title=? AND org_id=? AND status='completed'
+                              ORDER BY starts_at DESC LIMIT 1""", (title, org_id)).fetchone()
+
+    def attended_users(event_id):
+        return [r[0] for r in con.execute("""SELECT v.user_id FROM registrations r JOIN volunteers v USING (volunteer_id)
+            WHERE r.event_id=? AND r.status='attended' ORDER BY v.volunteer_id=1024 DESC, r.registration_id""", (event_id,))]
+
+    def coord_user(org_id):
+        return con.execute("SELECT user_id FROM coordinators WHERE org_id=? ORDER BY is_owner DESC LIMIT 1", (org_id,)).fetchone()[0]
+
+    ev_cols = [r[1] for r in con.execute("PRAGMA table_info(events)")
+               if r[1] not in ("event_id", "starts_at", "ends_at", "registration_deadline", "created_at", "series_id",
+                               "is_urgent", "urgent_at", "updated_at", "cancel_reason")]
+
+    trash_cols = [r[1] for r in con.execute("PRAGMA table_info(events)")
+                  if r[1] not in ("event_id", "title", "status", "starts_at", "ends_at", "registration_deadline", "created_at",
+                                  "deleted_at", "deleted_by", "series_id", "cancel_reason", "is_urgent", "urgent_at", "updated_at")]
+
+    def vol_user(vid):
+        return con.execute("SELECT user_id FROM volunteers WHERE volunteer_id=?", (vid,)).fetchone()[0]
+
+    for other, days in ((1011, 60), (1022, 45), (1023, 30), (1057, 20), (1019, 12)):
+        x("""INSERT INTO friendships (requester_id, addressee_id, status, created_at, accepted_at)
+             VALUES (?, 1024, 'accepted', ?, ?)""", (other, dt(NOW - timedelta(days=days)), dt(NOW - timedelta(days=days - 1))))
+    x("INSERT INTO friendships (requester_id, addressee_id, created_at) VALUES (1046, 1024, ?)", (dt(NOW - timedelta(hours=3)),))
+    x("INSERT INTO friendships (requester_id, addressee_id, created_at) VALUES (1024, 1047, ?)", (dt(NOW - timedelta(days=1)),))
+    x("INSERT INTO kudos (from_id, to_id, milestone, created_at) VALUES (1011, 1024, 20, ?)", (dt(NOW - timedelta(days=50)),))
+    note("volunteer@demeu.kz", "n_kudos", "/volunteers/1011", 24 * 50, 1, name="Kirill", n=20)
+    note("volunteer@demeu.kz", "n_friend_milestone", "/me/friends", 26, 0, name="Ramazan", n=50, vid=1022)
+    note("volunteer@demeu.kz", "n_friend_going", f"/events/{esil}", 5, 0, name="Kirill",
+         event="Saturday Clean-up at the Esil Embankment")
+    note("volunteer@demeu.kz", "n_friend_request", "/me/friends?tab=requests", 3, 0, name="Yerlan Ivanov")
+
     con.commit()
+    docs_dir = os.path.join(BASE, "instance", "uploads", "documents")
+    os.makedirs(docs_dir, exist_ok=True)
+    sample_doc = os.path.join(BASE, "demeu", "static", "sample_document.pdf")
+    if os.path.exists(sample_doc):
+        with open(sample_doc, "rb") as src, open(os.path.join(docs_dir, "sample_document.pdf"), "wb") as dst:
+            dst.write(src.read())
     folder = os.path.join(BASE, "instance", "uploads", "consents")
     os.makedirs(folder, exist_ok=True)
     sample = os.path.join(BASE, "demeu", "static", "sample_consent.pdf")

@@ -5,7 +5,7 @@ from flask import (Blueprint, abort, flash, g, redirect, render_template,
 
 from . import complaints as C
 from . import services as S
-from .core import LANGS, Page, _, arg_int, form_int, login_required, notify, now_str, page_arg, safe_next
+from .core import LANGS, Page, _, arg_int, fmt_date, fmt_time, loc, form_int, login_required, notify, now_str, page_arg, safe_next
 from .db import execute, query, scalar
 from .forms import Errors, clean, valid_email
 
@@ -67,6 +67,11 @@ def events():
     when = request.args.get("when", "upcoming")
     only_free = request.args.get("free") == "1"
     sort = request.args.get("sort", "soon")
+    day = request.args.get("date") or ""
+    try:
+        day = date.fromisoformat(day).isoformat() if day else ""
+    except ValueError:
+        day = ""
     now = datetime.now()
     where, args = [S.PUBLIC_WHERE], []
     if q:
@@ -90,12 +95,9 @@ def events():
             args += [f"{sat} 00:00", f"{sat + timedelta(days=1)} 23:59"]
         elif when == "month":
             where.append("e.starts_at <= ?"); args.append((now + timedelta(days=30)).strftime("%Y-%m-%d 23:59"))
-    if only_free:
-        where.append("""(SELECT COUNT(*) FROM registrations r WHERE r.event_id=e.event_id
-                         AND r.status IN ('approved','attended')) < e.max_volunteers
-                        AND e.registration_deadline >= ?""")
-        args.append(now_str())
-    order = {"soon": "e.starts_at ASC", "new": "e.created_at DESC",
+    if day:
+        where.append("substr(e.starts_at, 1, 10) = ?"); args.append(day)
+    order = {"soon": "(e.is_urgent = 1 AND taken < e.max_volunteers AND e.starts_at > datetime('now','localtime')) DESC, e.starts_at ASC", "new": "e.created_at DESC",
              "spots": "(e.max_volunteers - taken) DESC"}.get(sort, "e.starts_at ASC")
     if when == "past":
         order = "e.starts_at DESC"
@@ -103,8 +105,9 @@ def events():
     total = scalar(f"SELECT COUNT(*) FROM ({base})", args)
     page = Page(total, page_arg(), 9)
     rows = query(f"{base} ORDER BY {order} LIMIT ? OFFSET ?", args + [page.per_page, page.offset])
-    return render_template("public/events.html", events=rows, page=page, q=q, city=city,
-                           direction=direction, when=when, only_free=only_free, sort=sort, **ref())
+    return render_template("public/events.html", events=rows, page=page, total=total, **common)
+
+
 
 
 @bp.route("/events/<int:event_id>")
@@ -123,6 +126,13 @@ def event_detail(event_id):
                        (g.volunteer["volunteer_id"], event_id), one=True)
         reason = S.eligibility(g.volunteer, ev)
         consent = S.consent_status(g.volunteer["volunteer_id"])
+    requirements = S.event_requirements(event_id)
+    doc_rows = {}
+    if g.volunteer and requirements:
+        mine = S.volunteer_documents(g.volunteer["volunteer_id"])
+        doc_rows = {r["skill_id"]: dict(row=mine.get(r["skill_id"]),
+                                        state=S.document_state(mine.get(r["skill_id"]), ev["ends_at"]))
+                    for r in requirements}
     team = []
     if my_reg and my_reg["is_team_lead"] and my_reg["status"] in ("approved", "attended"):
         team = query("""SELECT v.full_name, v.phone, r.is_team_lead FROM registrations r JOIN volunteers v USING (volunteer_id)
@@ -143,7 +153,9 @@ def event_detail(event_id):
     return render_template("public/event_detail.html", ev=ev, my_reg=my_reg, reason=reason, consent=consent,
                            participants=participants, coordinator=coordinator, similar=similar,
                            reviews=reviews, own_org=own_org, wait_pos=wait_pos, team=team,
-                           shifts=S.event_shifts(event_id),
+                           my_review_reports=_my_review_reports(),
+                           friends_here=FR.going(g.volunteer["volunteer_id"], [event_id]).get(event_id, []) if g.volunteer else [],
+                           shifts=S.event_shifts(event_id), requirements=requirements, doc_rows=doc_rows,
                            can_report=C.can_report(g.user, C.target(event_id=event_id)),
                            waitlist_size=scalar("SELECT COUNT(*) FROM waitlist WHERE event_id=?", (event_id,)),
                            hours=S.duration_hours(ev["starts_at"], ev["ends_at"]))
@@ -210,7 +222,10 @@ def volunteer_profile(volunteer_id):
     if not v:
         abort(404)
     is_self = g.volunteer is not None and g.volunteer["volunteer_id"] == volunteer_id
-    if not v["is_public"] and not is_self and not can_see_contacts(v):
+    rel = FR.relation(g.volunteer["volunteer_id"], volunteer_id) if g.volunteer else dict(state=None)
+    if not v["is_public"] and not is_self and not can_see_contacts(v) and rel["state"] not in ("friends", "received"):
+        abort(404)
+    if scalar("SELECT deleted_at FROM users WHERE user_id=?", (v["user_id"],)):
         abort(404)
     email = scalar("SELECT email FROM users WHERE user_id=?", (v["user_id"],))
     activity = query("""SELECT r.*, e.title, e.starts_at, e.event_id, o.name AS org_name, o.org_id,
@@ -225,7 +240,8 @@ def volunteer_profile(volunteer_id):
     return render_template("public/volunteer_profile.html", v=v, email=email, is_self=is_self,
                            show_contacts=can_see_contacts(v), activity=activity, by_direction=by_direction,
                            dirs=volunteer_directions([volunteer_id]).get(volunteer_id, []),
-                           stats=S.volunteer_stats(volunteer_id))
+                           stats=S.volunteer_stats(volunteer_id), feedback=VF.for_volunteer(volunteer_id), rel=rel,
+                           n_friends=len(FR.friend_ids(volunteer_id)))
 
 
 ORG_SELECT = """SELECT o.*, c.name_en AS city_name_en, c.name_ru AS city_name_ru, c.name_kk AS city_name_kk,

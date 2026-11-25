@@ -62,6 +62,12 @@ def init_db(path, schema_path):
     conn.close()
 
 
+SKILLS = [
+    ("driver_license", "Driver's licence (category B)", "Водительские права (категория B)", "Жүргізуші куәлігі (B санаты)", "car", 1),
+    ("own_car", "Own car (registration certificate)", "Своя машина (техпаспорт)", "Жеке көлік (техпаспорт)", "car", 0),
+]
+
+
 def upgrade_db(path, schema_path):
     with open(schema_path, encoding="utf-8") as f:
         schema = f.read()
@@ -79,6 +85,47 @@ def upgrade_db(path, schema_path):
     for name, definition in new_cols:
         if name not in reg_cols:
             conn.execute(f"ALTER TABLE registrations ADD COLUMN {name} {definition}")
+    if "deleted_at" not in [r[1] for r in conn.execute("PRAGMA table_info(users)")]:
+        conn.execute("ALTER TABLE users ADD COLUMN deleted_at TEXT")
+    ev_cols = [r[1] for r in conn.execute("PRAGMA table_info(events)")]
+    if "is_urgent" not in ev_cols:
+        conn.execute("ALTER TABLE events ADD COLUMN is_urgent INTEGER NOT NULL DEFAULT 0 CHECK (is_urgent IN (0,1))")
+    if "urgent_at" not in ev_cols:
+        conn.execute("ALTER TABLE events ADD COLUMN urgent_at TEXT")
+    for col in ("lat", "lng"):
+        if col not in ev_cols:
+            conn.execute(f"ALTER TABLE events ADD COLUMN {col} REAL")
+    if "series_id" not in ev_cols:
+        conn.execute("ALTER TABLE events ADD COLUMN series_id INTEGER REFERENCES events(event_id) ON DELETE SET NULL")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_events_series ON events(series_id)")
+    for table in ("events", "organizations"):
+        cols = [r[1] for r in conn.execute(f"PRAGMA table_info({table})")]
+        if "deleted_at" not in cols:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN deleted_at TEXT")
+        if "deleted_by" not in cols:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN deleted_by INTEGER REFERENCES users(user_id) ON DELETE SET NULL")
+    fb_cols = [r[1] for r in conn.execute("PRAGMA table_info(feedback)")]
+    for name, definition in (("status", "TEXT NOT NULL DEFAULT 'published' CHECK (status IN ('published','pending','hidden'))"),
+                             ("flagged_words", "TEXT"), ("hide_reason", "TEXT"),
+                             ("reviewed_by", "INTEGER REFERENCES users(user_id) ON DELETE SET NULL"), ("reviewed_at", "TEXT")):
+        if name not in fb_cols:
+            conn.execute(f"ALTER TABLE feedback ADD COLUMN {name} {definition}")
+            if name == "status":
+                conn.execute("UPDATE feedback SET status='hidden' WHERE is_hidden=1")
+    vol_cols = [r[1] for r in conn.execute("PRAGMA table_info(volunteers)")]
+    for name in ("share_plans", "notify_friend_plans", "notify_friend_achievements"):
+        if name not in vol_cols:
+            conn.execute(f"ALTER TABLE volunteers ADD COLUMN {name} INTEGER NOT NULL DEFAULT 1 CHECK ({name} IN (0,1))")
+    for sql in later:
+        conn.execute(sql)
+    keep = tuple(sk[0] for sk in SKILLS)
+    marks = ",".join("?" * len(keep))
+    old = f"SELECT skill_id FROM skills WHERE slug NOT IN ({marks})"
+    conn.execute(f"DELETE FROM event_requirements WHERE skill_id IN ({old})", keep)
+    conn.execute(f"DELETE FROM volunteer_skills WHERE skill_id IN ({old})", keep)
+    conn.execute(f"DELETE FROM skills WHERE slug NOT IN ({marks})", keep)
+    if not conn.execute("SELECT 1 FROM skills").fetchone():
+        conn.executemany("INSERT INTO skills (slug, name_en, name_ru, name_kk, icon, has_expiry) VALUES (?,?,?,?,?,?)", SKILLS)
     cert_cols = [r[1] for r in conn.execute("PRAGMA table_info(certificates)")]
     if "type" not in cert_cols:
         create = re.search(r"CREATE TABLE certificates \(.*?\n\);", schema, re.S).group(0)

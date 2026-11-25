@@ -1,5 +1,6 @@
 import os
 import sqlite3
+from datetime import datetime, timedelta
 
 from flask import (Blueprint, abort, current_app, flash, g, redirect, render_template,
                    request, send_file, url_for)
@@ -9,9 +10,9 @@ from . import backups as B
 from . import complaints as C
 from . import resets as R
 from . import services as S
-from .core import (Page, _, audit, notify, now_str, page_arg, role_required)
+from .core import (Page, _, audit, form_int, notify, now_str, page_arg, role_required, safe_next)
 from .db import close_db, execute, get_db, query, scalar, transaction
-from .forms import Errors, clean, password_problem, valid_email
+from .forms import Errors, clean, parse_local_dt, password_problem, valid_email
 
 bp = Blueprint("admin", __name__, url_prefix="/admin")
 admin_only = role_required("admin")
@@ -246,6 +247,26 @@ def consents():
     return render_template("admin/consents.html", rows=rows)
 
 
+@bp.route("/documents", methods=["GET", "POST"])
+@admin_only
+def documents():
+    if request.method == "POST":
+        try:
+            S.review_document(g.user, form_int("doc_id"), request.form.get("action") == "approve",
+                              clean(request.form.get("comment"), 300))
+            flash(_("flash_saved"), "success")
+        except S.RuleError as e:
+            flash(_(e.key, **e.params), "error")
+        return redirect(url_for("admin.documents"))
+    rows = query("""SELECT vs.*, s.name_en, s.name_ru, s.name_kk, s.icon, s.has_expiry, v.full_name, v.birth_date,
+                    v.volunteer_id, u.email AS reviewer FROM volunteer_skills vs JOIN skills s USING (skill_id)
+                    JOIN volunteers v USING (volunteer_id) LEFT JOIN users u ON u.user_id = vs.reviewed_by
+                    ORDER BY vs.status='pending' DESC, COALESCE(vs.reviewed_at, vs.uploaded_at) DESC LIMIT 60""")
+    return render_template("admin/documents.html", rows=rows, today=now_str()[:10])
+
+
+
+
 @bp.route("/messages")
 @admin_only
 def messages():
@@ -456,7 +477,8 @@ def entity_list(entity):
         if val in choices:
             outer.append(f"{col} = ?"); oargs.append(val)
             active_filters[col] = val
-    base = cfg["list_sql"] + (" WHERE " + " AND ".join(where) if where else "")
+    joiner = " AND " if " WHERE " in cfg["list_sql"] else " WHERE "
+    base = cfg["list_sql"] + (joiner + " AND ".join(where) if where else "")
     base = f"SELECT * FROM ({base})" + (" WHERE " + " AND ".join(outer) if outer else "")
     args += oargs
     page = Page(scalar(f"SELECT COUNT(*) FROM ({base})", args), page_arg(), 25)

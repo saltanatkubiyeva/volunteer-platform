@@ -8,13 +8,21 @@
     {% if unread %}<form method="post" action="{{ url_for('auth.notifications_read') }}">{{ csrf_field() }}<button class="btn btn-ghost btn-sm">{{ icon('check', 16) }} {{ _('mark_all_read') }}</button></form>{% endif %}
   </div>
   {% if rows %}
-  <div class="card" style="padding:8px">
+  <div class="notif-list">
+    {% set ns = namespace(day=None) %}
     {% for n in rows %}
-    <form method="post" action="{{ url_for('auth.notifications_read') }}" class="notif {{ 'unread' if not n.is_read }}">
+    {% set day = notification_day(n.created_at) %}
+    {% if day != ns.day %}{% set ns.day = day %}<div class="notif-day">{{ day }}</div>{% endif %}
+    {% set ic, tone = notification_style(n.kind) %}
+    <form method="post" action="{{ url_for('auth.notifications_read') }}" class="notif tone-{{ tone }} {{ 'unread' if not n.is_read }}">
       {{ csrf_field() }}<input type="hidden" name="id" value="{{ n.notification_id }}">
-      <span class="dot"></span>
-      <button type="submit"><div>{{ notification_text(n) }}</div><div class="time">{{ fmt_dt(n.created_at) }}</div></button>
-      {% if n.link %}{{ icon('chevron-right', 16) }}{% endif %}
+      <span class="notif-ic">{{ icon(ic, 18) }}</span>
+      <button type="submit">
+        <span class="notif-text">{{ notification_text(n) }}</span>
+        <span class="time">{{ fmt_time(n.created_at) if day in (_('today'), _('yesterday')) else fmt_dt(n.created_at) }}</span>
+      </button>
+      {% if not n.is_read %}<span class="dot" aria-label="new"></span>{% endif %}
+      {% if n.link %}<span class="notif-go">{{ icon('chevron-right', 16) }}</span>{% endif %}
     </form>
     {% endfor %}
   </div>

@@ -21,6 +21,7 @@
         <label><input type="radio" name="when" value="{{ v }}" {{ 'checked' if when == v }}> {{ _(k) }}</label>
         {% endfor %}
       </div>
+      {% endif %}
       <h4>{{ _('city') }}</h4>
       <select class="select" name="city" aria-label="{{ _('city') }}">
         <option value="">{{ _('all_cities') }}</option>
@@ -63,7 +64,6 @@
       </div>
       {% if q or city or direction or only_free or when != 'upcoming' %}
       <div class="active-filters">
-        {% set args = request.args.to_dict() %}
         {% if q %}<a href="{{ url_for('public.events', **dict(args, q='', page=1)) }}">“{{ q }}” {{ icon('x', 13) }}</a>{% endif %}
         {% if when != 'upcoming' %}<a href="{{ url_for('public.events', **dict(args, when='upcoming', page=1)) }}">{{ _('when_' ~ when) }} {{ icon('x', 13) }}</a>{% endif %}
         {% if city %}{% for c in cities if c.city_id == city %}<a href="{{ url_for('public.events', **dict(args, city='', page=1)) }}">{{ loc(c, 'name') }} {{ icon('x', 13) }}</a>{% endfor %}{% endif %}
@@ -71,7 +71,8 @@
         {% if only_free %}<a href="{{ url_for('public.events', **dict(args, free='', page=1)) }}">{{ _('only_with_places') }} {{ icon('x', 13) }}</a>{% endif %}
       </div>
       {% endif %}
-      {% if events %}
+
+      {% elif events %}
         <div class="grid grid-3" style="grid-template-columns:repeat(auto-fill,minmax(270px,1fr))">
           {% for ev in events %}{{ event_card(ev) }}{% endfor %}
         </div>
@@ -83,3 +84,4 @@
   </div>
 </div>
 {% endblock %}
+

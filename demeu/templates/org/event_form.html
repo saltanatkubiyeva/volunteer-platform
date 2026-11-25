@@ -52,6 +52,13 @@
         <span class="hint">{{ _('min_age_hint') }}</span>{{ field_error(errors, 'min_age') }}</div>
       <div class="field span-2"><label class="check"><input type="checkbox" name="requires_approval" value="1" {{ 'checked' if f.requires_approval }}>
         <span><b>{{ _('requires_approval') }}</b><br><span class="small muted">{{ _('requires_approval_hint') }}</span></span></label></div>
+      {% if not ev or ev.status == 'draft' %}
+      <div class="field span-2"><label class="check urgent-check"><input type="checkbox" name="is_urgent" value="1" {{ 'checked' if f.is_urgent }}>
+        <span><b>{{ icon('alert', 15) }} {{ _('urgent_on_publish') }}</b><br><span class="small muted">{{ _('urgent_on_publish_hint') }}</span></span></label></div>
+      {% endif %}
+      <div class="field span-2"><label>{{ _('required_documents') }} <span class="label-note">({{ _('optional') }})</span></label>
+        <div class="check-grid">{% for sk in all_skills %}<label class="check-chip"><input type="checkbox" name="doc_skills" value="{{ sk.skill_id }}" {{ 'checked' if sk.skill_id in (f.doc_skills or []) }}><span>{{ icon(sk.icon, 15) }}{{ loc(sk, 'name') }}</span></label>{% endfor %}</div>
+        <span class="hint">{{ _('requirements_hint') }}</span></div>
       <div class="field span-2 shifts-field {{ 'has-error' if errors.shifts }}" data-shifts>
         <label class="check"><input type="checkbox" name="has_shifts" value="1" data-shifts-toggle {{ 'checked' if f.has_shifts }}>
           <span><b>{{ _('has_shifts') }}</b><br><span class="small muted">{{ _('has_shifts_hint') }}</span></span></label>
@@ -103,3 +110,4 @@
   </div>
 </form>
 {% endblock %}
+

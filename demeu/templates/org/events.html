@@ -15,6 +15,8 @@
   <div><h4><a href="{{ url_for('org.event_manage', event_id=ev.event_id) }}">{{ ev.title }}</a></h4>
     <div class="meta"><span>{{ icon('calendar', 14) }}{{ fmt_date(ev.starts_at, True) }}, {{ fmt_time(ev.starts_at) }}</span><span>{{ icon('map-pin', 14) }}{{ loc(ev, 'city_name') }}</span>
       <span>{{ icon('users', 14) }}{{ ev.taken }}/{{ ev.max_volunteers }}</span>
+      {% if ev.is_urgent and event_phase(ev) == 'upcoming' and ev.taken < ev.max_volunteers %}<span class="tag urgent-tag">{{ icon('alert', 12) }}{{ _('urgent') }}</span>{% endif %}
+      {% if ev.series_id %}<span class="tag tone-sky">{{ icon('repeat', 12) }}{{ _('series_tag') }}</span>{% endif %}
       {% if ev.pending %}<span class="tag tone-butter">{{ _('n_pending_apps', n=ev.pending) }}</span>{% endif %}</div></div>
   <div class="actions">{{ status(event_phase(ev)) }}
     <a class="btn btn-ghost btn-xs" href="{{ url_for('org.event_manage', event_id=ev.event_id) }}">{{ _('manage') }}</a></div>
@@ -22,4 +24,5 @@
 {% else %}
   {{ empty('calendar', _('no_events_in_tab'), '', url_for('org.event_new'), _('new_event')) }}
 {% endfor %}
+{% endif %}
 {% endblock %}

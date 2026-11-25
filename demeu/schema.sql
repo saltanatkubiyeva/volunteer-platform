@@ -44,6 +44,9 @@ CREATE TABLE volunteers (
     avatar_path   TEXT,
     is_public     INTEGER NOT NULL DEFAULT 1 CHECK (is_public IN (0,1)),
     show_contacts INTEGER NOT NULL DEFAULT 0 CHECK (show_contacts IN (0,1)),
+    share_plans   INTEGER NOT NULL DEFAULT 1 CHECK (share_plans IN (0,1)),
+    notify_friend_plans INTEGER NOT NULL DEFAULT 1 CHECK (notify_friend_plans IN (0,1)),
+    notify_friend_achievements INTEGER NOT NULL DEFAULT 1 CHECK (notify_friend_achievements IN (0,1)),
     created_at    TEXT NOT NULL DEFAULT (datetime('now','localtime'))
 );
 
@@ -281,6 +284,38 @@ CREATE TABLE IF NOT EXISTS complaints (
 );
 CREATE INDEX IF NOT EXISTS idx_complaints_status ON complaints(status, created_at);
 
+CREATE TABLE IF NOT EXISTS skills (
+    skill_id    INTEGER PRIMARY KEY,
+    slug        TEXT NOT NULL UNIQUE,
+    name_en     TEXT NOT NULL,
+    name_ru     TEXT NOT NULL,
+    name_kk     TEXT NOT NULL,
+    icon        TEXT NOT NULL DEFAULT 'file-text',
+    has_expiry  INTEGER NOT NULL DEFAULT 1 CHECK (has_expiry IN (0,1))
+);
+
+CREATE TABLE IF NOT EXISTS volunteer_skills (
+    volunteer_skill_id INTEGER PRIMARY KEY,
+    volunteer_id   INTEGER NOT NULL REFERENCES volunteers(volunteer_id) ON DELETE CASCADE,
+    skill_id       INTEGER NOT NULL REFERENCES skills(skill_id) ON DELETE RESTRICT,
+    file_path      TEXT NOT NULL,
+    expires_at     TEXT,
+    status         TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','approved','rejected')),
+    review_comment TEXT,
+    reviewed_by    INTEGER REFERENCES users(user_id) ON DELETE SET NULL,
+    reviewed_at    TEXT,
+    uploaded_at    TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+    UNIQUE (volunteer_id, skill_id),
+    CHECK (status = 'pending' OR reviewed_at IS NOT NULL)
+);
+CREATE INDEX IF NOT EXISTS idx_vskills_status ON volunteer_skills(status, uploaded_at);
+
+CREATE TABLE IF NOT EXISTS event_requirements (
+    event_id INTEGER NOT NULL REFERENCES events(event_id) ON DELETE CASCADE,
+    skill_id INTEGER NOT NULL REFERENCES skills(skill_id) ON DELETE RESTRICT,
+    PRIMARY KEY (event_id, skill_id)
+);
+
 CREATE TABLE IF NOT EXISTS waitlist (
     waitlist_id  INTEGER PRIMARY KEY,
     volunteer_id INTEGER NOT NULL REFERENCES volunteers(volunteer_id) ON DELETE CASCADE,
@@ -311,3 +346,26 @@ SELECT v.volunteer_id,
 FROM volunteers v
 LEFT JOIN registrations r ON r.volunteer_id = v.volunteer_id
 GROUP BY v.volunteer_id;
+
+CREATE TABLE IF NOT EXISTS friendships (
+    friendship_id INTEGER PRIMARY KEY,
+    requester_id  INTEGER NOT NULL REFERENCES volunteers(volunteer_id) ON DELETE CASCADE,
+    addressee_id  INTEGER NOT NULL REFERENCES volunteers(volunteer_id) ON DELETE CASCADE,
+    status        TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','accepted')),
+    created_at    TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+    accepted_at   TEXT,
+    CHECK (requester_id <> addressee_id),
+    CHECK (status = 'pending' OR accepted_at IS NOT NULL)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_friend_pair ON friendships(min(requester_id, addressee_id), max(requester_id, addressee_id));
+CREATE INDEX IF NOT EXISTS idx_friend_addressee ON friendships(addressee_id, status);
+
+CREATE TABLE IF NOT EXISTS kudos (
+    kudos_id     INTEGER PRIMARY KEY,
+    from_id      INTEGER NOT NULL REFERENCES volunteers(volunteer_id) ON DELETE CASCADE,
+    to_id        INTEGER NOT NULL REFERENCES volunteers(volunteer_id) ON DELETE CASCADE,
+    milestone    INTEGER NOT NULL CHECK (milestone IN (20, 50, 100, 200)),
+    created_at   TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+    UNIQUE (from_id, to_id, milestone),
+    CHECK (from_id <> to_id)
+);

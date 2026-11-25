@@ -19,7 +19,6 @@
       </div>
     </div>
     <div class="hero-visual">
-      <svg class="hero-spark" viewBox="0 0 64 64" aria-hidden="true"><g stroke="currentColor" stroke-width="6" stroke-linecap="round"><path d="M40 6 L36 22"/><path d="M58 22 L44 30"/><path d="M8 26 L24 32"/></g></svg>
       <div class="hero-photo"><img src="{{ photo_url(HERO_PHOTO, 1200) }}" onerror="this.onerror=null;this.src='{{ fallback_url('ecology') }}'" alt="{{ _('hero_photo_alt') }}"></div>
       {% if top %}
       <a class="next-panel" href="{{ url_for('public.event_detail', event_id=top.event_id) }}">

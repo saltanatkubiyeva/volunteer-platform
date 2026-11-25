@@ -38,6 +38,7 @@ src="{{ cover_url(ev, w) }}" onerror="this.onerror=null;this.src='{{ fallback_ur
   <a class="ev-photo" href="{{ url_for('public.event_detail', event_id=ev.event_id) }}" tabindex="-1" aria-hidden="true">
     <img {{ cover_attrs(ev, 1200 if 'wide' in cls else 800) }} alt="" loading="lazy">
     <span class="ev-cat">{{ dir_tag(ev) }}</span>
+    {% if phase == 'upcoming' and ev.is_urgent and left > 0 %}<span class="tag urgent-tag">{{ icon('alert', 12) }}{{ _('urgent') }}</span>{% endif %}
     {% if phase == 'upcoming' and left <= 0 %}<span class="ev-flag tag tag-dark">{{ _('full') }}</span>
     {% elif phase == 'upcoming' and left <= 5 %}<span class="ev-flag tag tag-white">{{ _('spots_left', n=left) }}</span>
     {% elif phase in ('finished', 'cancelled') %}<span class="ev-flag tag tag-white">{{ _('st_' ~ phase) }}</span>{% endif %}
@@ -49,7 +50,13 @@ src="{{ cover_url(ev, w) }}" onerror="this.onerror=null;this.src='{{ fallback_ur
     <p class="ev-sum">{{ ev.summary }}</p>
     <a class="ev-org" href="{{ url_for('public.organization_profile', org_id=ev.org_id) }}">{{ ev.org_name }}</a>
     <div class="ev-foot">
+      {% set fr = friends_going().get(ev.event_id) if friends_going is defined else none %}
+      {% if fr and phase == 'upcoming' %}
+      <span class="ev-going ev-friends" title="{{ fr|map(attribute='short')|join(', ') }}"><span class="fr-stack">{% for f in fr[:2] %}{{ avatar(f.avatar_path, f.full_name, 'xs') }}{% endfor %}</span>
+        <span><b>{{ _('fr_one_going', name=fr[0].short.split()[0]) if fr|length == 1 else _('fr_n_going', n=fr|length) }}</b></span></span>
+      {% else %}
       <span class="ev-going">{{ icon('users', 16) }}<span>{{ _('n_going', n=ev.taken) }}{% if phase == 'upcoming' and left > 0 %} · {{ _('n_left', n=left) }}{% endif %}</span></span>
+      {% endif %}
       <span class="round-go" aria-hidden="true">{{ icon('arrow-right', 17) }}</span>
     </div>
   </div>

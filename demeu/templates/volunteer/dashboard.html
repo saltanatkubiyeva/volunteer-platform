@@ -1,5 +1,5 @@
 {% extends "volunteer/_layout.html" %}
-{% from "partials/macros.html" import event_card, status, cover_url, cover_attrs, dir_tag, empty %}
+{% from "partials/macros.html" import event_card, status, cover_url, cover_attrs, dir_tag, empty, avatar %}
 {% block title %}{{ _('my_cabinet') }}{% endblock %}
 {% block cab %}
 <div class="cab-head">
@@ -83,11 +83,31 @@
     {% endif %}
   </div>
   <div>
+    {% if friend_plans or friend_wins %}
+    <div class="card card-pad mb-3 fr-block">
+      <div class="row between mb-1"><h3 class="mb-0">{{ _('fr_where_going') }}</h3><a class="small" href="{{ url_for('volunteer.friends') }}">{{ _('friends') }}</a></div>
+      {% for item in friend_plans %}{% set ev = item.ev %}
+      <div class="fr-plan">
+        <div class="fr-stack">{% for f in item.friends[:3] %}{{ avatar(f.avatar_path, f.full_name, 'sm') }}{% endfor %}</div>
+        <div class="grow"><a class="small" href="{{ url_for('public.event_detail', event_id=ev.event_id) }}"><b>{{ ev.title }}</b></a>
+          <div class="xs muted">{{ fmt_date(ev.starts_at, True, False) }} · {{ fmt_time(ev.starts_at) }}</div>
+          <div class="xs fr-names">{{ item.friends[:2]|map(attribute='full_name')|map('truncate', 40)|map('first_word')|join(', ') }}{% if item.friends|length > 2 %} {{ _('fr_and_more', n=item.friends|length - 2) }}{% endif %}</div></div>
+        {% if item.my_status in ('approved', 'pending') %}<span class="xs fr-you">{{ icon('check', 12) }} {{ _('fr_you_too') }}</span>
+        {% else %}<a class="btn btn-primary btn-xs" href="{{ url_for('public.event_detail', event_id=ev.event_id) }}#apply">{{ _('fr_join_too') }}</a>{% endif %}
+      </div>
+      {% else %}<p class="small muted mb-0">{{ _('fr_nobody_going') }}</p>{% endfor %}
+      {% if friend_wins %}<div class="fr-wins mt-2">{% for w in friend_wins[:3] %}{% include "volunteer/_friend_win.html" %}{% endfor %}</div>{% endif %}
+    </div>
+    {% endif %}
     <div class="card card-pad">
       <div class="row between mb-1"><h3 class="mb-0">{{ _('notifications') }}</h3><a class="small" href="{{ url_for('auth.notifications') }}">{{ _('all') }}</a></div>
+      <div class="notif-list notif-compact">
       {% for n in notifications %}
-        <div class="notif {{ 'unread' if not n.is_read }}" style="padding:10px 8px"><span class="dot"></span><div><div class="small">{{ notification_text(n) }}</div><div class="time">{{ fmt_dt(n.created_at) }}</div></div></div>
+        {% set ic, tone = notification_style(n.kind) %}
+        <a class="notif tone-{{ tone }} {{ 'unread' if not n.is_read }}" href="{{ n.link or url_for('auth.notifications') }}"><span class="notif-ic">{{ icon(ic, 15) }}</span>
+          <span class="notif-body"><span class="notif-text">{{ notification_text(n) }}</span><span class="time">{{ fmt_dt(n.created_at) }}</span></span></a>
       {% else %}<p class="small muted mb-0">{{ _('no_notifications') }}</p>{% endfor %}
+      </div>
     </div>
     {% if recent %}
     <div class="card card-pad mt-3">
@@ -119,7 +139,7 @@
 
 {% if recommended %}
 <h3 class="mt-4">{{ _('recommended_for_you') }}</h3>
-<p class="small muted">{{ _('recommended_hint') }}</p>
+<p class="small muted">{{ _('rec_other_cities', city=loc(my_city, 'name')) if rec_other_cities else _('recommended_hint') }}</p>
 <div class="grid grid-3">{% for ev in recommended %}{{ event_card(ev) }}{% endfor %}</div>
 {% endif %}
 {% endblock %}

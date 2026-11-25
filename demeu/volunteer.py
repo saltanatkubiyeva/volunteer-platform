@@ -1,9 +1,13 @@
+from datetime import date, datetime
+
 from flask import (Blueprint, abort, flash, g, redirect, render_template,
                    request, url_for)
 
+from . import friends as FR
+from . import reviews as RV
 from . import services as S
 from .core import (IMAGE_EXT, DOC_EXT, _, age_on, audit, form_int, notify,
-                   now_str, role_required, save_upload)
+                   now_str, role_required, safe_next, save_upload)
 from .db import execute, query, scalar, transaction
 from .forms import Errors, clean, normalize_phone
 
@@ -23,6 +27,82 @@ REG_SELECT = """SELECT r.*, e.title, e.starts_at, e.ends_at, e.address, e.status
     LEFT JOIN feedback f ON f.registration_id = r.registration_id"""
 
 
+@bp.context_processor
+def friend_badge():
+    if not g.get("volunteer"):
+        return {}
+    return dict(friend_requests=FR.incoming_count(g.volunteer["volunteer_id"]))
+
+
+@bp.route("/friends")
+@volunteer_only
+def friends():
+    vid = g.volunteer["volunteer_id"]
+    tab = request.args.get("tab", "friends")
+    incoming, outgoing = FR.requests(vid)
+    met = FR.met(vid)
+    return render_template("volunteer/friends.html", tab=tab, friends=FR.friends(vid), incoming=incoming,
+                           outgoing=outgoing, met=met, wins=FR.recent_achievements(g.volunteer),
+                           kudos_given=FR.kudos_given(vid), short_name=FR.short_name)
+
+
+def _back(default_tab="friends"):
+    return redirect(safe_next(request.form.get("next")) or url_for("volunteer.friends", tab=default_tab))
+
+
+@bp.route("/friends/add/<int:volunteer_id>", methods=["POST"])
+@volunteer_only
+def friend_add(volunteer_id):
+    try:
+        result = FR.send(g.volunteer, volunteer_id)
+        flash(_("flash_friend_" + result), "success")
+    except S.RuleError as e:
+        flash(_(e.key, **e.params), "error")
+    return _back("met")
+
+
+@bp.route("/friends/<int:friendship_id>/accept", methods=["POST"])
+@volunteer_only
+def friend_accept(friendship_id):
+    try:
+        FR.accept(g.volunteer, friendship_id)
+        flash(_("flash_friend_friends"), "success")
+    except S.RuleError as e:
+        flash(_(e.key, **e.params), "error")
+    return _back("requests")
+
+
+@bp.route("/friends/<int:friendship_id>/remove", methods=["POST"])
+@volunteer_only
+def friend_remove(friendship_id):
+    try:
+        FR.remove(g.volunteer, friendship_id)
+    except S.RuleError as e:
+        flash(_(e.key, **e.params), "error")
+    return _back()
+
+
+@bp.route("/friends/kudos", methods=["POST"])
+@volunteer_only
+def friend_kudos():
+    try:
+        FR.give_kudos(g.volunteer, form_int("volunteer_id"), form_int("n"))
+        flash(_("flash_kudos"), "success")
+    except S.RuleError as e:
+        flash(_(e.key, **e.params), "error")
+    return _back()
+
+
+@bp.route("/friends/settings", methods=["POST"])
+@volunteer_only
+def friend_settings():
+    vals = [1 if request.form.get(k) else 0 for k in ("share_plans", "notify_friend_plans", "notify_friend_achievements")]
+    execute("""UPDATE volunteers SET share_plans=?, notify_friend_plans=?, notify_friend_achievements=?
+               WHERE volunteer_id=?""", vals + [g.volunteer["volunteer_id"]])
+    flash(_("flash_saved"), "success")
+    return redirect(url_for("auth.settings") + "#friends")
+
+
 @bp.route("/")
 @volunteer_only
 def dashboard():
@@ -36,13 +116,20 @@ def dashboard():
                    (vid,))
     my_dirs = [r["direction_id"] for r in query("SELECT direction_id FROM volunteer_directions WHERE volunteer_id=?", (vid,))]
     marks = ",".join("?" * len(my_dirs)) or "NULL"
-    recommended = query(S.EVENT_SELECT + f""" WHERE {S.PUBLIC_WHERE} AND e.status='published'
-        AND e.registration_deadline >= ? AND e.direction_id IN ({marks})
-        AND NOT EXISTS (SELECT 1 FROM registrations r WHERE r.event_id=e.event_id AND r.volunteer_id=?)
-        AND (SELECT COUNT(*) FROM registrations r WHERE r.event_id=e.event_id AND r.status IN ('approved','attended')) < e.max_volunteers
-        ORDER BY (e.city_id = ?) DESC, e.starts_at LIMIT 3""",
-                        [now] + my_dirs + [vid, g.volunteer["city_id"]])
     age = age_on(g.volunteer["birth_date"])
+    open_sql = S.EVENT_SELECT + f""" WHERE {S.PUBLIC_WHERE} AND e.status='published'
+        AND e.registration_deadline >= ? AND e.min_age <= ?
+        AND NOT EXISTS (SELECT 1 FROM registrations r WHERE r.event_id=e.event_id AND r.volunteer_id=?)
+        AND (SELECT COUNT(*) FROM registrations r WHERE r.event_id=e.event_id AND r.status IN ('approved','attended')) < e.max_volunteers"""
+    recommended = query(open_sql + f""" AND e.city_id = ?
+        ORDER BY (e.direction_id IN ({marks})) DESC, e.starts_at LIMIT 3""",
+                        [now, age, vid, g.volunteer["city_id"]] + my_dirs)
+    rec_other_cities = False
+    if not recommended:
+        recommended = query(open_sql + f" AND e.direction_id IN ({marks}) ORDER BY e.starts_at LIMIT 3",
+                            [now, age, vid] + my_dirs)
+        rec_other_cities = bool(recommended)
+    city_row = query("SELECT * FROM cities WHERE city_id=?", (g.volunteer["city_id"],), one=True)
     notifications = query("SELECT * FROM notifications WHERE user_id=? ORDER BY created_at DESC, notification_id DESC LIMIT 5",
                           (g.user["user_id"],))
     profile_missing = [k for k in ("about", "skills", "avatar_path") if not g.volunteer[k]]
@@ -52,9 +139,10 @@ def dashboard():
 =======
     has_subs = bool(scalar("SELECT 1 FROM subscriptions WHERE volunteer_id=?", (vid,)))
     return render_template("volunteer/dashboard.html", milestones=S.milestone_certificates(vid),
+                           friend_plans=FR.upcoming_with_friends(vid, 4), friend_wins=FR.recent_achievements(g.volunteer),
+                           kudos_given=FR.kudos_given(vid),
                            has_subs=has_subs, for_you=S.new_for_you(g.volunteer, 3) if has_subs else [], upcoming=upcoming, to_review=to_review, recent=recent,
                            recommended=recommended, rec_other_cities=rec_other_cities, my_city=city_row, stats=S.volunteer_stats(vid), age=age,
->>>>>>> Stashed changes
                            consent=S.consent_status(vid), notifications=notifications,
                            profile_missing=profile_missing)
 
@@ -86,12 +174,60 @@ def applications():
 @volunteer_only
 def apply(event_id):
     motivation = clean(request.form.get("motivation"), 500)
+    ev = S.get_event(event_id)
+    needed = {r["skill_id"] for r in S.event_requirements(event_id)} if ev else set()
+    confirmed = {int(x) for x in request.form.getlist("has_doc") if x.isdigit()}
+    if needed - confirmed:
+        flash(_("err_confirm_documents"), "error")
+        return redirect(url_for("public.event_detail", event_id=event_id))
     try:
         status = S.apply(g.volunteer, event_id, motivation, request.form.get("shift_pref"))
         flash(_("flash_applied_pending" if status == "pending" else "flash_applied_approved"), "success")
     except S.RuleError as e:
         flash(_(e.key, **e.params), "error")
     return redirect(url_for("public.event_detail", event_id=event_id))
+
+
+@bp.route("/documents", methods=["GET", "POST"])
+@volunteer_only
+def documents():
+    v = g.volunteer
+    skills = query("SELECT * FROM skills ORDER BY skill_id")
+    back = safe_next(request.values.get("next"))
+    if request.method == "POST":
+        skill = next((x for x in skills if str(x["skill_id"]) == request.form.get("skill_id", "")), None)
+        if not skill:
+            abort(400)
+        expires = clean(request.form.get("expires_at"), 10) or None
+        problem = None
+        if skill["has_expiry"]:
+            try:
+                if not expires or datetime.strptime(expires, "%Y-%m-%d").date() <= date.today():
+                    problem = "err_doc_expiry"
+            except ValueError:
+                problem = "err_doc_expiry"
+        else:
+            expires = None
+        path = None
+        if not problem:
+            try:
+                path = save_upload(request.files.get("document"), DOC_EXT, "documents")
+                if not path:
+                    problem = "err_file_required"
+            except ValueError as e:
+                problem = str(e)
+        if problem:
+            flash(_(problem), "error")
+        else:
+            S.save_document(v, skill["skill_id"], path, expires)
+            flash(_("flash_document_uploaded"), "success")
+            if back:
+                return redirect(back)
+        return redirect(url_for("volunteer.documents", skill=skill["skill_id"], next=back or None))
+    docs = S.volunteer_documents(v["volunteer_id"])
+    states = {sid: S.document_state(row) for sid, row in docs.items()}
+    return render_template("volunteer/documents.html", skills=skills, docs=docs, states=states, back=back,
+                           focus=request.args.get("skill", type=int), today=date.today().isoformat())
 
 
 @bp.route("/waitlist/<int:event_id>", methods=["POST"])

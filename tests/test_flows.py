@@ -1,3 +1,5 @@
+import io
+import json
 import os
 import re
 import sqlite3
@@ -399,6 +401,121 @@ class FlowTest(unittest.TestCase):
         self.post(admin, f"/admin/complaints/{cid}", {"decision": "resolved", "action": "account_blocked",
                                                       "note": "Advertising after a warning."})
         self.assertEqual(self.sql("SELECT is_active FROM users WHERE user_id=?", (owner,))[0][0], 0)
+    def test_required_documents_flow(self):
+        eid = self.sql("SELECT event_id FROM events WHERE title='Food Parcel Delivery to Families'")[0][0]
+        vol = self.client("volunteer@demeu.kz")
+        self.post(vol, f"/me/apply/{eid}", {"has_doc": ["1", "2"]})
+        self.assertFalse(self.sql("SELECT 1 FROM registrations WHERE volunteer_id=1024 AND event_id=?", (eid,)))
+        admin = self.client("admin@demeu.kz")
+        self.assertEqual(admin.get("/admin/documents").status_code, 200)
+        pending = [r[0] for r in self.sql("SELECT volunteer_skill_id FROM volunteer_skills WHERE volunteer_id=1024 AND status='pending'")]
+        self.post(admin, "/admin/documents", {"doc_id": pending[0], "action": "reject", "comment": "x"})
+        self.assertEqual(self.sql("SELECT status FROM volunteer_skills WHERE volunteer_skill_id=?", (pending[0],))[0][0], "pending")
+        for d in pending:
+            self.post(admin, "/admin/documents", {"doc_id": d, "action": "approve"})
+        self.post(vol, f"/me/apply/{eid}", {"has_doc": ["1"]})
+        self.assertFalse(self.sql("SELECT 1 FROM registrations WHERE volunteer_id=1024 AND event_id=?", (eid,)))
+        skills = [str(r[0]) for r in self.sql("SELECT skill_id FROM event_requirements WHERE event_id=?", (eid,))]
+        self.post(vol, f"/me/apply/{eid}", {"has_doc": skills})
+        self.assertTrue(self.sql("SELECT 1 FROM registrations WHERE volunteer_id=1024 AND event_id=?", (eid,)))
+        doc = pending[0]
+        self.assertEqual(self.client("org@demeu.kz").get(f"/documents/{doc}/file").status_code, 403)
+        self.assertEqual(vol.get(f"/documents/{doc}/file").status_code, 200)
+
+    def test_document_upload_needs_expiry(self):
+        vol = self.client("minor@demeu.kz")
+        sid = self.sql("SELECT skill_id FROM skills WHERE slug='driver_license'")[0][0]
+        pdf = open(os.path.join(os.path.dirname(__file__), "..", "demeu", "static", "sample_document.pdf"), "rb").read()
+        self.post(vol, "/me/documents", {"skill_id": sid, "document": (io.BytesIO(pdf), "doc.pdf")})
+        self.assertFalse(self.sql("SELECT 1 FROM volunteer_skills WHERE volunteer_id=1005"))
+        self.post(vol, "/me/documents", {"skill_id": sid, "expires_at": "2030-01-01",
+                                         "document": (io.BytesIO(pdf), "doc.pdf")})
+        self.assertEqual(self.sql("SELECT status FROM volunteer_skills WHERE volunteer_id=1005")[0][0], "pending")
+
+    def test_urgent_call_once_per_day(self):
+        ev = self.sql("""SELECT e.event_id, e.city_id FROM events e WHERE e.org_id=1 AND e.status='published'
+                         AND e.starts_at > datetime('now','localtime') AND NOT EXISTS
+                         (SELECT 1 FROM event_requirements er WHERE er.event_id=e.event_id)
+                         AND e.max_volunteers > (SELECT COUNT(*) FROM registrations r WHERE r.event_id=e.event_id
+                         AND r.status IN ('approved','attended')) ORDER BY e.starts_at LIMIT 1""")[0]
+        org = self.client("org@demeu.kz")
+        self.post(org, f"/org/events/{ev['event_id']}/urgent")
+        sent = self.sql("SELECT COUNT(*) FROM notifications WHERE kind='n_urgent_call'")[0][0]
+        self.assertGreater(sent, 0)
+        wrong_city = self.sql("""SELECT COUNT(*) FROM notifications n JOIN volunteers v ON v.user_id=n.user_id
+                                 WHERE n.kind='n_urgent_call' AND v.city_id<>?""", (ev["city_id"],))[0][0]
+        self.assertEqual(wrong_city, 0)
+        self.post(org, f"/org/events/{ev['event_id']}/urgent")
+        self.assertEqual(self.sql("SELECT COUNT(*) FROM notifications WHERE kind='n_urgent_call'")[0][0], sent)
+        self.assertEqual(self.sql("SELECT is_urgent FROM events WHERE event_id=?", (ev["event_id"],))[0][0], 1)
+
+    def _jpeg(self):
+        return io.BytesIO(b"\xff\xd8\xff\xe0" + b"\x00" * 200 + b"\xff\xd9")
+
+    def test_friends_requests_and_privacy(self):
+        anel_email = self.sql("SELECT u.email FROM volunteers v JOIN users u USING (user_id) WHERE v.volunteer_id=1047")[0][0]
+        anel = self.client(anel_email)
+        self.assertIn("Aruzhan", anel.get("/me/friends?tab=requests").get_data(as_text=True))
+        fid = self.sql("SELECT friendship_id FROM friendships WHERE requester_id=1024 AND addressee_id=1047")[0][0]
+        self.post(anel, f"/me/friends/{fid}/accept")
+        self.assertEqual(self.sql("SELECT status FROM friendships WHERE friendship_id=?", (fid,))[0][0], "accepted")
+        aru_uid = self.sql("SELECT user_id FROM volunteers WHERE volunteer_id=1024")[0][0]
+        self.assertTrue(self.sql("SELECT 1 FROM notifications WHERE user_id=? AND kind='n_friend_accepted'", (aru_uid,)))
+        vol = self.client("volunteer@demeu.kz")
+        self.post(vol, "/me/friends/add/1041")
+        self.post(vol, "/me/friends/add/1041")
+        self.assertEqual(self.sql("""SELECT COUNT(*) FROM friendships WHERE (requester_id=1024 AND addressee_id=1041)
+                                     OR (requester_id=1041 AND addressee_id=1024)""")[0][0], 1)
+        nurs = self.client(self.sql("SELECT u.email FROM volunteers v JOIN users u USING (user_id) WHERE v.volunteer_id=1041")[0][0])
+        self.post(nurs, "/me/friends/add/1024")
+        self.assertEqual(self.sql("SELECT status FROM friendships WHERE requester_id=1024 AND addressee_id=1041")[0][0], "accepted")
+        self.assertEqual(vol.get("/volunteers/1020").status_code, 404)
+        con = sqlite3.connect(self.db)
+        con.execute("INSERT INTO friendships (requester_id, addressee_id, status, accepted_at) VALUES (1020, 1024, 'accepted', datetime('now'))")
+        con.commit(); con.close()
+        self.assertEqual(vol.get("/volunteers/1020").status_code, 200)
+        self.assertEqual(self.client("minor@demeu.kz").get("/volunteers/1020").status_code, 404)
+
+    def test_friends_going_cards_milestones_and_kudos(self):
+        from demeu import friends as FR, services as S
+        vol = self.client("volunteer@demeu.kz")
+        page = vol.get("/events").get_data(as_text=True)
+        self.assertIn("2 friends going", page)
+        con = sqlite3.connect(self.db)
+        con.execute("UPDATE volunteers SET share_plans=0 WHERE volunteer_id=1011")
+        con.commit(); con.close()
+        self.assertIn("Ramazan is going", vol.get("/events").get_data(as_text=True))
+        aru_uid = self.sql("SELECT user_id FROM volunteers WHERE volunteer_id=1024")[0][0]
+        with self.app.test_request_context():
+            aru = self.sql("SELECT * FROM volunteers WHERE volunteer_id=1024")[0]
+            target = None
+            for ev in self.open_event(0):
+                full = S.get_event(ev["event_id"])
+                if not S.eligibility(dict(aru), full) and not self.sql(
+                        "SELECT 1 FROM registrations WHERE volunteer_id=1022 AND event_id=?", (ev["event_id"],)):
+                    target = ev["event_id"]
+                    break
+            if target is None:
+                self.skipTest("no event for the demo volunteer")
+            from demeu.db import execute
+            execute("INSERT INTO registrations (volunteer_id, event_id, status, decided_at) VALUES (1022, ?, 'approved', datetime('now'))", (target,))
+            FR.on_joined(1022, target)
+            FR.on_joined(1022, target)
+            FR.on_hours(1022, 45, 52)
+            from demeu.db import get_db
+            get_db().commit()
+        self.assertEqual(self.sql("SELECT COUNT(*) FROM notifications WHERE user_id=? AND kind='n_friend_going' AND link=?",
+                                  (aru_uid, f"/events/{target}"))[0][0], 1)
+        self.assertTrue(self.sql("SELECT 1 FROM notifications WHERE user_id=? AND kind='n_friend_milestone' AND params LIKE '%50%'", (aru_uid,)))
+        self.post(vol, "/me/friends/kudos", {"volunteer_id": 1022, "n": 50})
+        self.post(vol, "/me/friends/kudos", {"volunteer_id": 1022, "n": 50})
+        self.assertEqual(self.sql("SELECT COUNT(*) FROM kudos WHERE from_id=1024 AND to_id=1022 AND milestone=50")[0][0], 1)
+        ram_uid = self.sql("SELECT user_id FROM volunteers WHERE volunteer_id=1022")[0][0]
+        self.assertTrue(self.sql("SELECT 1 FROM notifications WHERE user_id=? AND kind='n_kudos'", (ram_uid,)))
+        self.post(vol, "/me/friends/kudos", {"volunteer_id": 1046, "n": 20})
+        self.assertFalse(self.sql("SELECT 1 FROM kudos WHERE to_id=1046"))
+        self.assertIn("Kirill", vol.get("/me/friends?tab=friends").get_data(as_text=True))
+        self.assertTrue(len(self.sql("SELECT 1 FROM friendships")) > 0)
 
     def test_volunteer_registration_validation(self):
         c = self.app.test_client()

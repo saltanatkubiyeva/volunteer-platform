@@ -1,6 +1,12 @@
 {% extends "org/_layout.html" %}
 {% from "partials/macros.html" import avatar, status, empty, dir_tag, reliability_badge %}
 {% block title %}{{ ev.title }}{% endblock %}
+{% macro doc_links(vid) -%}
+{% if reqs %}<div class="xs mt-1 doc-links">{% for rq in reqs %}{% set d = vol_docs.get(vid, {}).get(rq.skill_id) %}
+  {% if d and d.status == 'approved' and (not d.expires_at or d.expires_at >= ev.ends_at[:10]) %}<a class="doc-ok" target="_blank" href="{{ url_for('media.document_file', doc_id=d.volunteer_skill_id) }}">{{ icon('check', 12) }}{{ loc(rq, 'name') }}</a>
+  {% else %}<span class="doc-bad">{{ icon('x', 12) }}{{ loc(rq, 'name') }}</span>{% endif %}
+{% endfor %}</div>{% endif %}
+{%- endmacro %}
 {% block cab %}
 {% set phase = event_phase(ev) %}
 <div class="crumbs"><a href="{{ url_for('org.events') }}">{{ _('org_events') }}</a>{{ icon('chevron-right', 14) }}<span>{{ ev.title }}</span></div>
@@ -11,10 +17,16 @@
     <a class="btn btn-ghost btn-sm" href="{{ url_for('public.event_detail', event_id=ev.event_id) }}">{{ icon('eye', 16) }} {{ _('public_page') }}</a>
     {% if ev.status in ('draft','published') and not started %}<a class="btn btn-ghost btn-sm" href="{{ url_for('org.event_edit', event_id=ev.event_id) }}">{{ icon('pencil', 16) }} {{ _('edit') }}</a>{% endif %}
     <a class="btn btn-ghost btn-sm" href="{{ url_for('org.export', event_id=ev.event_id) }}">{{ icon('download', 16) }} CSV</a>
+    {% if ev.status != 'draft' %}<button class="btn btn-ghost btn-sm" data-dialog="repeat-dlg">{{ icon('copy', 16) }} {{ _('duplicate') }}</button>{% endif %}
+    {% if ev.status == 'published' and not started and ev.taken < ev.max_volunteers %}
+      {% if urgent_next %}<button class="btn btn-ghost btn-sm" disabled title="{{ _('urgent_next', time=fmt_dt(urgent_next.strftime('%Y-%m-%d %H:%M'))) }}">{{ icon('alert', 16) }} {{ _('urgent_sent_short') }}</button>
+      {% else %}<button class="btn btn-urgent btn-sm" data-dialog="urgent-dlg">{{ icon('alert', 16) }} {{ _('urgent_call') }}</button>{% endif %}
+    {% endif %}
     {% if ev.status in ('draft','published') and not started %}<button class="btn btn-danger btn-sm" data-dialog="cancel-dlg">{{ icon('x', 16) }} {{ _('cancel_event') }}</button>{% endif %}
   </div>
 </div>
 {% if ev.status == 'cancelled' %}<div class="alert alert-danger mb-3">{{ icon('x-circle') }}<div><b>{{ _('event_cancelled_banner') }}</b><p class="small mb-0">{{ ev.cancel_reason }}</p></div></div>{% endif %}
+{% if ev.is_urgent and ev.status == 'published' and not started %}<div class="alert alert-danger mb-3">{{ icon('alert') }}<div class="small"><b>{{ _('urgent_active') }}</b> {{ _('urgent_active_text', time=fmt_dt(ev.urgent_at)) }}</div></div>{% endif %}
 {% if ev.status == 'draft' %}<div class="alert alert-warn mb-3">{{ icon('pencil') }}<div class="small">{{ _('draft_banner') }}</div></div>{% endif %}
 
 <div class="grid grid-4 mb-3">
@@ -40,7 +52,7 @@
     {% for r in groups.pending %}
       {% set rl = rel.get(r.volunteer_id) %}
       <tr class="{{ 'row-alert' if rl and rl.alert }}"><td><a class="person" href="{{ url_for('public.volunteer_profile', volunteer_id=r.volunteer_id) }}">{{ avatar(r.avatar_path, r.full_name, 'sm') }}{{ r.full_name }}</a>
-          {% if shifts %}<div class="xs muted mt-1">{{ _('preferred_shift') }}: {{ _('all_shifts') if r.prefers_all_shifts else (r.pref_title or _('no_preference')) }}</div>{% endif %}</td>
+          {% if shifts %}<div class="xs muted mt-1">{{ _('preferred_shift') }}: {{ _('all_shifts') if r.prefers_all_shifts else (r.pref_title or _('no_preference')) }}</div>{% endif %}{{ doc_links(r.volunteer_id) }}</td>
         <td>{{ age_on(r.birth_date) }}</td>
         <td class="nowrap">{{ reliability_badge(rl) }}</td>
         <td class="small cell-clip" style="max-width:190px" title="{{ r.motivation or '' }}">{{ r.motivation or '—' }}</td>
@@ -77,7 +89,7 @@
   <div class="table-wrap"><table class="table">
     <thead><tr><th>{{ _('volunteer') }}</th><th>{{ _('contacts') }}</th>{% if shifts %}<th>{{ _('shift') }}</th>{% endif %}<th>{{ _('status') }}</th>{% if started %}<th class="num">{{ _('hours_col') }}</th>{% endif %}<th>{{ _('team_leader') }}</th></tr></thead>
     <tbody>{% for r in groups.participants %}
-      <tr class="{{ 'row-lead' if r.is_team_lead }}"><td><a class="person" href="{{ url_for('public.volunteer_profile', volunteer_id=r.volunteer_id) }}">{{ avatar(r.avatar_path, r.full_name, 'sm') }}{{ r.full_name }}</a>
+      <tr class="{{ 'row-lead' if r.is_team_lead }}"><td><a class="person" href="{{ url_for('public.volunteer_profile', volunteer_id=r.volunteer_id) }}">{{ avatar(r.avatar_path, r.full_name, 'sm') }}{{ r.full_name }}</a>{{ doc_links(r.volunteer_id) }}
           {% if r.volunteer_id in candidates and not r.is_team_lead %}<br><span class="tag tag-rec" style="margin-top:4px" title="{{ _('lead_recommended_hint') }}">{{ icon('star', 12) }}{{ _('lead_recommended') }}</span>{% endif %}</td>
         <td class="small"><a class="nowrap" href="tel:{{ r.phone }}">{{ r.phone|phone }}</a><br><a class="muted" href="mailto:{{ r.email }}">{{ r.email }}</a></td>
         {% if shifts %}<td>

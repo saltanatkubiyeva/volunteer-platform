@@ -1,6 +1,6 @@
 import secrets
 import string
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from flask import url_for
 
@@ -11,6 +11,7 @@ ACTIVE = ("pending", "approved")
 MILESTONES = (10, 20, 50, 100, 200)
 NO_SHOW_ALERT = 3
 CERT_MILESTONES = (20, 50, 100)
+URGENT_COOLDOWN_HOURS = 24
 LEAD_MIN_HOURS, LEAD_MIN_RATE, LEAD_MIN_EVENTS = 30, 90, 5
 
 EVENT_SELECT = """
@@ -50,6 +51,68 @@ def consent_status(volunteer_id):
     return row["status"] if row else None
 
 
+def event_requirements(event_id):
+    return query("""SELECT s.* FROM event_requirements er JOIN skills s USING (skill_id)
+                    WHERE er.event_id=? ORDER BY s.skill_id""", (event_id,))
+
+
+def volunteer_documents(volunteer_id):
+    return {r["skill_id"]: r for r in query("SELECT * FROM volunteer_skills WHERE volunteer_id=?", (volunteer_id,))}
+
+
+def document_state(row, until=None):
+    if not row:
+        return "missing"
+    if row["status"] != "approved":
+        return row["status"]
+    limit = (until or now_str())[:10]
+    if row["expires_at"] and row["expires_at"] < limit:
+        return "expired"
+    return "valid"
+
+
+def missing_documents(volunteer_id, ev):
+    needed = event_requirements(ev["event_id"])
+    if not needed:
+        return []
+    docs = volunteer_documents(volunteer_id)
+    return [s for s in needed if document_state(docs.get(s["skill_id"]), ev["ends_at"]) != "valid"]
+
+
+def save_document(volunteer, skill_id, file_path, expires_at):
+    with transaction():
+        existing = query("SELECT volunteer_skill_id FROM volunteer_skills WHERE volunteer_id=? AND skill_id=?",
+                         (volunteer["volunteer_id"], skill_id), one=True)
+        if existing:
+            vs_id = existing["volunteer_skill_id"]
+            execute("""UPDATE volunteer_skills SET file_path=?, expires_at=?, status='pending', review_comment=NULL,
+                       reviewed_by=NULL, reviewed_at=NULL, uploaded_at=? WHERE volunteer_skill_id=?""",
+                    (file_path, expires_at, now_str(), vs_id))
+        else:
+            vs_id = execute("""INSERT INTO volunteer_skills (volunteer_id, skill_id, file_path, expires_at)
+                               VALUES (?,?,?,?)""", (volunteer["volunteer_id"], skill_id, file_path, expires_at))
+        name = scalar("SELECT name_en FROM skills WHERE skill_id=?", (skill_id,))
+        audit("document_uploaded", "volunteer_skills", vs_id, None, name)
+        for (admin_id,) in query("SELECT user_id FROM users WHERE role='admin' AND is_active=1"):
+            notify(admin_id, "n_admin_new_document", url_for("admin.documents"), name=volunteer["full_name"])
+    return vs_id
+
+
+def review_document(admin, vs_id, approve, comment):
+    with transaction():
+        row = query("""SELECT vs.*, v.user_id, s.slug FROM volunteer_skills vs JOIN volunteers v USING (volunteer_id)
+                       JOIN skills s USING (skill_id) WHERE vs.volunteer_skill_id=?""", (vs_id,), one=True)
+        if not row or row["status"] != "pending":
+            raise RuleError("rule_not_found")
+        if not approve and len(comment or "") < 5:
+            raise RuleError("err_comment_required")
+        new = "approved" if approve else "rejected"
+        execute("""UPDATE volunteer_skills SET status=?, review_comment=?, reviewed_by=?, reviewed_at=?
+                   WHERE volunteer_skill_id=?""", (new, comment or None, admin["user_id"], now_str(), vs_id))
+        audit("document_" + new, "volunteer_skills", vs_id, "pending", new)
+        notify(row["user_id"], "n_document_" + new, url_for("volunteer.documents"), skill=row["slug"], reason=comment)
+
+
 def eligibility(volunteer, ev, from_waitlist=False):
     now = now_str()
     if ev["status"] != "published" or ev["org_status"] != "verified":
@@ -76,6 +139,8 @@ def eligibility(volunteer, ev, from_waitlist=False):
                   (volunteer["volunteer_id"], ev["event_id"], ev["ends_at"], ev["starts_at"]), one=True)
     if clash:
         return "rule_time_clash"
+    if missing_documents(volunteer["volunteer_id"], ev):
+        return "rule_missing_skill"
     if from_waitlist:
         return None
     taken = scalar("SELECT COUNT(*) FROM registrations WHERE event_id=? AND status IN ('approved','attended')",
@@ -134,6 +199,9 @@ def apply(volunteer, event_id, motivation, shift_choice=None):
                name=volunteer["full_name"], event=ev["title"])
         notify(volunteer["user_id"], "n_applied" if status == "pending" else "n_approved",
                url_for("public.event_detail", event_id=event_id), event=ev["title"])
+        if status == "approved":
+            from . import friends as FR
+            FR.on_joined(volunteer["volunteer_id"], event_id)
     return status
 
 
@@ -191,6 +259,9 @@ def promote_waitlist(event_id):
         audit("waitlist_promoted", "registrations", reg_id, "waitlist", status)
         notify(first["user_id"], "n_waitlist_promoted" if status == "approved" else "n_waitlist_promoted_pending",
                link, event=ev["title"])
+        if status == "approved":
+            from . import friends as FR
+            FR.on_joined(first["volunteer_id"], event_id)
         coord_user = scalar("SELECT user_id FROM coordinators WHERE coordinator_id=?", (ev["coordinator_id"],))
         notify(coord_user, "n_coord_waitlist_promoted", url_for("org.event_manage", event_id=event_id),
                name=first["full_name"], event=ev["title"])
@@ -244,6 +315,9 @@ def decide(coordinator, registration_id, approve, note=None):
                url_for("volunteer.applications"), event=reg["title"])
         if not approve:
             promote_waitlist(reg["event_id"])
+        else:
+            from . import friends as FR
+            FR.on_joined(reg["volunteer_id"], reg["event_id"])
 
 
 def mark_attendance(coordinator, registration_id, attended, hours=None):
@@ -275,6 +349,8 @@ def mark_attendance(coordinator, registration_id, attended, hours=None):
             for m in CERT_MILESTONES:
                 if before < m <= after:
                     notify(reg["vol_user"], "n_milestone_reached", url_for("volunteer.dashboard"), n=m)
+            from . import friends as FR
+            FR.on_hours(reg["volunteer_id"], before, after)
             if reg["hours_confirmed"] != hours:
                 audit("hours_confirmed" if reg["hours_confirmed"] is None else "hours_changed",
                       "registrations", registration_id, reg["hours_confirmed"], hours)
@@ -304,6 +380,8 @@ def complete_event(coordinator, event_id):
         execute("DELETE FROM waitlist WHERE event_id=?", (event_id,))
         execute("UPDATE events SET status='completed', updated_at=? WHERE event_id=?", (now_str(), event_id))
         audit("event_completed", "events", event_id, "published", "completed")
+        from . import friends as FR
+        FR.on_event_completed(event_id)
 
 
 def cancel_event(user_id_for_audit, event_id, reason):
@@ -549,6 +627,43 @@ def save_shifts(coordinator, event_id, choices):
                     notify(r["vol_user"], "n_shift_assigned", url_for("public.event_detail", event_id=event_id),
                            event=ev["title"], shift=sh["title"], start=sh["starts_at"][11:16], end=sh["ends_at"][11:16])
     return changed
+
+
+def urgent_next_time(ev):
+    if not ev["urgent_at"]:
+        return None
+    nxt = parse_dt(ev["urgent_at"]) + timedelta(hours=URGENT_COOLDOWN_HOURS)
+    return nxt if nxt > datetime.now() else None
+
+
+def urgent_call(coordinator, event_id):
+    with transaction(immediate=True):
+        ev = get_event(event_id)
+        if not ev or ev["org_id"] != coordinator["org_id"]:
+            raise RuleError("rule_not_found")
+        if ev["status"] != "published" or ev["starts_at"] <= now_str():
+            raise RuleError("rule_urgent_not_open")
+        free = ev["max_volunteers"] - ev["taken"]
+        if free <= 0:
+            raise RuleError("rule_urgent_full")
+        nxt = urgent_next_time(ev)
+        if nxt:
+            raise RuleError("rule_urgent_cooldown", time=nxt.strftime("%d.%m %H:%M"))
+        if ev["registration_deadline"] < now_str():
+            execute("UPDATE events SET registration_deadline=starts_at WHERE event_id=?", (event_id,))
+        execute("UPDATE events SET is_urgent=1, urgent_at=? WHERE event_id=?", (now_str(), event_id))
+        ev = get_event(event_id)
+        sent = 0
+        link = url_for("public.event_detail", event_id=event_id)
+        for v in query("""SELECT v.* FROM volunteers v JOIN users u ON u.user_id = v.user_id
+                          WHERE u.is_active = 1 AND v.city_id = ?""", (ev["city_id"],)):
+            if eligibility(v, ev):
+                continue
+            notify(v["user_id"], "n_urgent_call", link, event=ev["title"], org=ev["org_name"],
+                   date=ev["starts_at"][:10], time=ev["starts_at"][11:16], n=free)
+            sent += 1
+        audit("urgent_call", "events", event_id, None, f"{sent} notified")
+    return sent
 
 
 def lead_candidates(volunteer_ids):

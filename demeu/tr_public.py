@@ -23,7 +23,7 @@ T = {
     "my_cabinet": ("My account", "Личный кабинет", "Жеке кабинет"),
     "my_applications": ("My applications", "Мои заявки", "Менің өтінімдерім"),
     "my_public_profile": ("My public profile", "Мой публичный профиль", "Менің ашық профилім"),
-    "org_cabinet": ("Organization cabinet", "Кабинет организации", "Ұйым кабинеті"),
+    "org_cabinet": ("Organization account", "Кабинет организации", "Ұйым кабинеті"),
     "org_events": ("Our events", "Наши ивенты", "Біздің іс-шаралар"),
     "org_public_page": ("Public page", "Публичная страница", "Ашық бет"),
     "admin_panel": ("Admin panel", "Админ-панель", "Әкімші панелі"),

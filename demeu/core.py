@@ -1,9 +1,10 @@
 import json
+import re
 import math
 import os
 import secrets
 import uuid
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from functools import wraps
 
 from flask import (abort, current_app, flash, g, redirect, request, session,
@@ -265,6 +266,25 @@ def notification_text(n):
     return _(n["kind"], **params)
 
 
+def notification_style(kind):
+    for prefix, ic, tone in NOTIF_STYLES:
+        if kind.startswith(prefix):
+            return ic, tone
+    return "bell", "new"
+
+
+def notification_day(value):
+    d = parse_dt(value)
+    if not d:
+        return ""
+    delta = (datetime.now().date() - d.date()).days
+    if delta == 0:
+        return _("today")
+    if delta == 1:
+        return _("yesterday")
+    return fmt_date(value, True, d.year != datetime.now().year)
+
+
 def audit(action, entity, entity_id=None, old=None, new=None):
     execute("INSERT INTO audit_log (user_id, action, entity, entity_id, old_value, new_value)"
             " VALUES (?,?,?,?,?,?)",
@@ -318,3 +338,4 @@ def safe_next(target):
     if target and target.startswith("/") and not target.startswith("//"):
         return target
     return None
+

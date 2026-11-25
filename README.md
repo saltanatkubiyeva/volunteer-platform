@@ -76,8 +76,8 @@ demeu/
   services.py       business rules of the main process
   public.py         public pages, search, reports
   auth.py           sign-up, login, settings, notifications
-  volunteer.py      volunteer cabinet
-  org.py            organization cabinet
+  volunteer.py      volunteer account
+  org.py            organization account
   admin.py          admin panel (generic CRUD)
   tr_*.py           texts in EN / RU / KZ
   templates/, static/
