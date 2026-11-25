@@ -1143,3 +1143,9 @@ a:hover > .round-go, .round-go:hover { background: var(--lime); color: var(--ink
 .ev-friends b { font-weight: 700; }
 .ev-friends { white-space: nowrap; min-width: 0; }
 .ev-friends > span:last-child { overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 420px) {
+  .header-inner { gap: 12px; }
+  .header-tools { gap: 6px; }
+  .user-btn { padding: 4px; }
+  .user-btn > svg { display: none; }
+}

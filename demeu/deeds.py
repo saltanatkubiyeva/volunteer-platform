@@ -9,6 +9,7 @@ from .db import execute, query, scalar, transaction
 from .resets import token_hash
 
 TAKE_DAYS = 7
+OPEN_DAYS = 30
 WHEN_KINDS = ("on", "by", "any")
 
 
@@ -192,6 +193,12 @@ def refresh():
                     (now_str(), req["request_id"]))
             if req["status"] != "unconfirmed":
                 _mail(req, "mail_deed_expired_subject", "mail_deed_expired_body")
+        stale = (datetime.now() - timedelta(days=OPEN_DAYS)).strftime("%Y-%m-%d %H:%M")
+        for req in query("""SELECT * FROM deed_requests WHERE status='open' AND when_kind='any' AND reviewed_at <= ?""",
+                         (stale,)):
+            execute("UPDATE deed_requests SET status='expired', closed_at=? WHERE request_id=?",
+                    (now_str(), req["request_id"]))
+            _mail(req, "mail_deed_stale_subject", "mail_deed_stale_body", n=OPEN_DAYS)
 
 
 LIST_SQL = """SELECT d.*, c.name_en AS city_name_en, c.name_ru AS city_name_ru, c.name_kk AS city_name_kk,
