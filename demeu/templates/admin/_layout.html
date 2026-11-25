@@ -20,6 +20,8 @@
     <div class="group">{{ _('adm_group_control') }}</div>
     <a class="{{ 'on' if ep == 'admin.audit_log' }}" href="{{ url_for('admin.audit_log') }}">{{ icon('history') }} {{ _('adm_audit') }}</a>
     <a class="{{ 'on' if ep == 'admin.outbox' }}" href="{{ url_for('admin.outbox') }}">{{ icon('mail') }} {{ _('adm_outbox') }}</a>
+    <a class="{{ 'on' if ep == 'admin.blocks' }}" href="{{ url_for('admin.blocks') }}">{{ icon('ban') }} {{ _('adm_blocks') }}{% if queue_counts.blocks %}<span class="badge badge-muted">{{ queue_counts.blocks }}</span>{% endif %}</a>
+    <a class="{{ 'on' if ep == 'admin.trash' }}" href="{{ url_for('admin.trash') }}">{{ icon('trash') }} {{ _('adm_trash') }}{% if queue_counts.trash %}<span class="badge badge-muted">{{ queue_counts.trash }}</span>{% endif %}</a>
     <a class="{{ 'on' if ep == 'admin.backups' }}" href="{{ url_for('admin.backups') }}">{{ icon('package') }} {{ _('adm_backups') }}</a>
     <a href="{{ url_for('public.reports') }}">{{ icon('chart') }} {{ _('nav_reports') }}</a>
   </nav>

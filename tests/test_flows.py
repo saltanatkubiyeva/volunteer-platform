@@ -190,8 +190,13 @@ class FlowTest(unittest.TestCase):
     def test_database_refuses_deleting_event_with_registrations(self):
         admin = self.client("admin@demeu.kz")
         r = self.post(admin, "/admin/events/310/delete", follow_redirects=True)
-        self.assertIn("foreign key", r.get_data(as_text=True))
-        self.assertTrue(self.sql("SELECT 1 FROM events WHERE event_id=310"))
+        self.assertIn("Only a draft or a cancelled event can be deleted", r.get_data(as_text=True))
+        self.assertTrue(self.sql("SELECT 1 FROM events WHERE event_id=310 AND deleted_at IS NULL"))
+        con = sqlite3.connect(self.db)
+        con.execute("PRAGMA foreign_keys=ON")
+        with self.assertRaises(sqlite3.IntegrityError):
+            con.execute("DELETE FROM events WHERE event_id=310")
+        con.close()
 
     def test_database_check_constraint_on_hours(self):
         con = sqlite3.connect(self.db)
@@ -451,6 +456,103 @@ class FlowTest(unittest.TestCase):
 
     def _jpeg(self):
         return io.BytesIO(b"\xff\xd8\xff\xe0" + b"\x00" * 200 + b"\xff\xd9")
+
+    def test_download_my_data(self):
+        r = self.client("volunteer@demeu.kz").get("/settings/my-data.json")
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("attachment", r.headers["Content-Disposition"])
+        data = json.loads(r.get_data(as_text=True))
+        self.assertEqual(data["account"]["email"], "volunteer@demeu.kz")
+        self.assertNotIn("password_hash", data["account"])
+        self.assertEqual(data["profile"]["full_name"], "Aruzhan Kassymova")
+        self.assertTrue(data["applications"] and data["certificates"] and data["feedback_from_organizations"])
+        self.assertEqual(self.app.test_client().get("/settings/my-data.json").status_code, 302)
+
+    def test_delete_account_anonymizes(self):
+        uid, vid = self.sql("SELECT u.user_id, v.volunteer_id FROM users u JOIN volunteers v USING (user_id) WHERE u.email='timur@demeu.kz'")[0]
+        hours_before = self.sql("SELECT SUM(hours_confirmed) FROM registrations WHERE status='attended'")[0][0]
+        attended_before = self.sql("SELECT COUNT(*) FROM registrations WHERE volunteer_id=? AND status='attended'", (vid,))[0][0]
+        self.assertTrue(attended_before)
+        code = self.sql("""SELECT ce.code FROM certificates ce JOIN registrations r USING (registration_id)
+                           WHERE r.volunteer_id=?""", (vid,))[0][0]
+        anon = self.app.test_client()
+        self.assertIn("Timur Sadykov", anon.get(f"/verify?code={code}").get_data(as_text=True))
+        c = self.client("timur@demeu.kz")
+        self.post(c, "/settings/delete", {"password": "wrong-password"})
+        self.assertEqual(self.sql("SELECT is_active FROM users WHERE user_id=?", (uid,))[0][0], 1)
+        self.post(c, "/settings/delete", {"password": PW})
+        u = self.sql("SELECT * FROM users WHERE user_id=?", (uid,))[0]
+        v = self.sql("SELECT * FROM volunteers WHERE volunteer_id=?", (vid,))[0]
+        self.assertEqual((u["is_active"], v["full_name"], v["phone"]), (0, "Deleted user", "+70000000000"))
+        self.assertTrue(u["deleted_at"])
+        self.assertNotEqual(u["email"], "timur@demeu.kz")
+        self.assertIsNone(v["about"])
+        for table in ("subscriptions", "waitlist", "volunteer_directions"):
+            self.assertFalse(self.sql(f"SELECT 1 FROM {table} WHERE volunteer_id=?", (vid,)))
+        self.assertFalse(self.sql("""SELECT 1 FROM registrations r JOIN events e USING (event_id) WHERE r.volunteer_id=?
+                                     AND r.status IN ('pending','approved') AND e.starts_at > datetime('now','localtime')""", (vid,)))
+        self.assertEqual(self.sql("SELECT COUNT(*) FROM registrations WHERE volunteer_id=? AND status='attended'", (vid,))[0][0],
+                         attended_before)
+        self.assertEqual(self.sql("SELECT SUM(hours_confirmed) FROM registrations WHERE status='attended'")[0][0], hours_before)
+        page = anon.get(f"/verify?code={code}").get_data(as_text=True)
+        self.assertNotIn("Timur", page)
+        self.assertIn("deleted their DEMEU account", page)
+        self.assertEqual(anon.get(f"/volunteers/{vid}").status_code, 404)
+        r = self.post(self.app.test_client(), "/login", {"email": "timur@demeu.kz", "password": PW})
+        self.assertNotEqual(r.status_code, 302)
+
+    def test_trash_event_delete_restore_and_purge(self):
+        org = self.client("org@demeu.kz")
+        draft = self.sql("SELECT event_id, title FROM events WHERE org_id=1 AND status='draft' AND deleted_at IS NULL")[0]
+        self.post(org, f"/org/events/{draft['event_id']}/delete")
+        self.assertTrue(self.sql("SELECT deleted_at FROM events WHERE event_id=?", (draft["event_id"],))[0][0])
+        self.assertNotIn(draft["title"], org.get("/org/events?tab=drafts").get_data(as_text=True))
+        self.assertIn(draft["title"], org.get("/org/events?tab=trash").get_data(as_text=True))
+        self.assertEqual(org.get(f"/org/events/{draft['event_id']}").status_code, 404)
+        self.post(org, f"/org/events/{draft['event_id']}/restore")
+        self.assertIsNone(self.sql("SELECT deleted_at FROM events WHERE event_id=?", (draft["event_id"],))[0][0])
+        published = self.sql("SELECT event_id FROM events WHERE org_id=1 AND status='published' LIMIT 1")[0][0]
+        self.post(org, f"/org/events/{published}/delete")
+        self.assertIsNone(self.sql("SELECT deleted_at FROM events WHERE event_id=?", (published,))[0][0])
+        self.post(org, f"/org/events/{draft['event_id']}/delete")
+        con = sqlite3.connect(self.db)
+        con.execute("UPDATE events SET deleted_at=datetime('now','localtime','-31 days') WHERE event_id=?", (draft["event_id"],))
+        con.commit(); con.close()
+        self.client("admin@demeu.kz").get("/admin/trash")
+        self.assertFalse(self.sql("SELECT 1 FROM events WHERE event_id=?", (draft["event_id"],)))
+
+    def test_trash_organization(self):
+        admin = self.client("admin@demeu.kz")
+        verified = self.sql("SELECT org_id FROM organizations WHERE status='verified' LIMIT 1")[0][0]
+        self.post(admin, f"/admin/organizations/{verified}/delete")
+        self.assertIsNone(self.sql("SELECT deleted_at FROM organizations WHERE org_id=?", (verified,))[0][0])
+        org_id, email = self.sql("""SELECT o.org_id, u.email FROM organizations o JOIN coordinators c USING (org_id)
+                                    JOIN users u USING (user_id) WHERE o.status='pending' LIMIT 1""")[0]
+        self.post(admin, f"/admin/organizations/{org_id}/delete")
+        self.assertTrue(self.sql("SELECT deleted_at FROM organizations WHERE org_id=?", (org_id,))[0][0])
+        r = self.post(self.app.test_client(), "/login", {"email": email, "password": PW}, follow_redirects=True)
+        self.assertIn("Your organization was deleted", r.get_data(as_text=True))
+        self.post(admin, "/admin/trash", {"kind": "organization", "item_id": org_id, "action": "restore"})
+        self.assertIsNone(self.sql("SELECT deleted_at FROM organizations WHERE org_id=?", (org_id,))[0][0])
+        self.post(admin, f"/admin/organizations/{org_id}/delete")
+        self.post(admin, "/admin/trash", {"kind": "organization", "item_id": org_id, "action": "forever"})
+        self.assertFalse(self.sql("SELECT 1 FROM organizations WHERE org_id=?", (org_id,)))
+        self.assertFalse(self.sql("SELECT 1 FROM users WHERE email=?", (email,)))
+
+    def test_org_report_summary(self):
+        org = self.client("org@demeu.kz")
+        year = datetime.now().year
+        r = org.get(f"/org/reports/summary?period=year&value={year}")
+        self.assertEqual(r.status_code, 200)
+        html = r.get_data(as_text=True)
+        self.assertIn("Green Steppe", html)
+        self.assertIn(f"Compared with {year - 1}", html)
+        hours = self.sql("""SELECT COALESCE(SUM(r.hours_confirmed),0) FROM registrations r JOIN events e USING (event_id)
+                            WHERE e.org_id=1 AND r.status='attended' AND e.deleted_at IS NULL
+                            AND e.status IN ('published','completed') AND strftime('%Y', e.starts_at)=?""", (str(year),))[0][0]
+        self.assertIn(f'<div class="n">{int(hours) if float(hours).is_integer() else hours}</div>', html)
+        self.assertEqual(org.get("/org/reports/summary?period=month&value=2099-01").status_code, 200)
+        self.assertEqual(self.client("volunteer@demeu.kz").get("/org/reports/summary").status_code, 403)
 
     def test_friends_requests_and_privacy(self):
         anel_email = self.sql("SELECT u.email FROM volunteers v JOIN users u USING (user_id) WHERE v.volunteer_id=1047")[0][0]

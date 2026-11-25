@@ -72,8 +72,12 @@ def upgrade_db(path, schema_path):
     with open(schema_path, encoding="utf-8") as f:
         schema = f.read()
     conn = sqlite3.connect(path)
+    later = []
     for sql in re.findall(r"CREATE (?:TABLE|INDEX|VIEW) IF NOT EXISTS .*?;", schema, re.S):
-        conn.execute(sql)
+        try:
+            conn.execute(sql)
+        except sqlite3.OperationalError:
+            later.append(sql)
     reg_cols = [r[1] for r in conn.execute("PRAGMA table_info(registrations)")]
     new_cols = [
         ("is_team_lead", "INTEGER NOT NULL DEFAULT 0 CHECK (is_team_lead IN (0,1))"),

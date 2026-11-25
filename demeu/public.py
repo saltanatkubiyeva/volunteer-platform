@@ -119,6 +119,8 @@ def event_detail(event_id):
     is_admin = g.user is not None and g.user["role"] == "admin"
     if (ev["status"] == "draft" or ev["org_status"] != "verified") and not (own_org or is_admin):
         abort(404)
+    if ev["deleted_at"] and not is_admin:
+        abort(404)
     my_reg, reason, consent, wait_pos = None, None, None, None
     if g.volunteer:
         wait_pos = S.waitlist_position(g.volunteer["volunteer_id"], event_id)
@@ -422,6 +424,11 @@ def verify():
     cert, events = None, []
     if code:
         base = query("SELECT * FROM certificates WHERE code=?", (code,), one=True)
+        owner_deleted = base and scalar("""SELECT u.deleted_at FROM users u JOIN volunteers v USING (user_id)
+            WHERE v.volunteer_id = COALESCE(?, (SELECT volunteer_id FROM registrations WHERE registration_id=?))""",
+                                        (base["volunteer_id"], base["registration_id"]))
+        if owner_deleted:
+            return render_template("public/verify.html", code=code, cert=None, events=[], revoked=True)
         if base and base["type"] == "milestone":
             v = query("SELECT full_name FROM volunteers WHERE volunteer_id=?", (base["volunteer_id"],), one=True)
             if S.total_hours(base["volunteer_id"]) >= base["milestone_hours"]:

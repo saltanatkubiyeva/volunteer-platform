@@ -53,5 +53,30 @@
   </form>
   {% endif %}
 
+  <div class="card card-pad mt-3" id="my-data">
+    <h3>{{ icon('download') }} {{ _('my_data_title') }}</h3>
+    <p class="small muted">{{ _('my_data_hint') }}</p>
+    <a class="btn btn-dark" href="{{ url_for('auth.my_data') }}">{{ icon('download', 16) }} {{ _('my_data_btn') }}</a>
+  </div>
+
+  {% if g.user.role == 'volunteer' %}
+  <div class="card card-pad mt-3 danger-zone" id="delete">
+    <h3>{{ icon('trash') }} {{ _('delete_title') }}</h3>
+    <p class="small muted">{{ _('delete_hint') }}</p>
+    <button class="btn btn-danger" type="button" data-dialog="delete-dlg">{{ icon('trash', 16) }} {{ _('delete_btn') }}</button>
+  </div>
+  <dialog id="delete-dlg"><form class="dlg" method="post" action="{{ url_for('auth.delete_account') }}">
+    {{ csrf_field() }}<h3>{{ icon('alert', 20) }} {{ _('delete_dlg_title') }}</h3>
+    <ul class="small delete-list">
+      <li>{{ _('delete_what_1') }}</li><li>{{ _('delete_what_2') }}</li><li>{{ _('delete_what_3') }}</li><li><b>{{ _('delete_what_4') }}</b></li>
+    </ul>
+    <div class="alert alert-info mt-1">{{ icon('download') }}<div class="small">{{ _('delete_download_first') }} <a href="{{ url_for('auth.my_data') }}"><b>{{ _('my_data_btn') }}</b></a></div></div>
+    <label for="del-password" class="mt-2">{{ _('delete_confirm_password') }}</label>
+    <input class="input" type="password" id="del-password" name="password" autocomplete="current-password" required>
+    <div class="row mt-2"><button class="btn btn-danger">{{ icon('trash', 16) }} {{ _('delete_final') }}</button><button class="btn btn-ghost" type="button" data-close>{{ _('close') }}</button></div>
+  </form></dialog>
+  {% else %}
+  <p class="xs muted mt-2">{{ icon('info', 12) }} {{ _('delete_coordinator_note') }}</p>
+  {% endif %}
 </div>
 {% endblock %}

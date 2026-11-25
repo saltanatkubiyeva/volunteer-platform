@@ -828,6 +828,8 @@ dialog .dlg { padding: 26px; }
 .field[hidden] { display: none !important; }
 .btn-fb { border-color: #f3b8c8; color: #b0284f; }
 .btn-fb:hover { background: #fde8ee; }
+.danger-zone { border-color: #f3c4c4; }
+.danger-zone h3 { color: #b4232c; }
 .delete-list { padding-left: 18px; margin: 8px 0 0; display: grid; gap: 4px; }
 .tag.tone-mint svg { color: #4c8a12; } .tag.tone-sage svg { color: #2f7a55; } .tag.tone-butter svg { color: #c2551b; }
 .tag.tone-sky svg { color: #2b66b0; } .tag.tone-rose svg { color: #b83a62; } .tag.tone-lilac svg { color: #5a47b8; }
@@ -842,6 +844,11 @@ a:hover > .round-go, .round-go:hover { background: var(--lime); color: var(--ink
 .urgent-tag svg, .urgent-tag .icon { color: #fff !important; }
 .avatar:has(img) { box-shadow: none; }
 .avatar-stack .avatar { background: #fff !important; color: var(--violet) !important; }
+.trash-thumb { display: grid; place-items: center; color: var(--muted); background: var(--paper-2); }
+.trash-left { font-size: 13px; font-weight: 600; color: var(--ink-2); white-space: nowrap; }
+.trash-left.soon { color: var(--danger); }
+.badge-muted { background: var(--line-2) !important; color: var(--ink) !important; }
+
 .words-form .input { max-width: 320px; }
 .words { display: flex; flex-wrap: wrap; gap: 8px; }
 .rep-brand { font-weight: 800; letter-spacing: -.02em; font-size: 15px; color: var(--violet); }

@@ -30,7 +30,7 @@ JOIN directions d    ON d.direction_id = e.direction_id
 JOIN cities c        ON c.city_id = e.city_id
 """
 
-PUBLIC_WHERE = "e.status IN ('published','completed') AND o.status = 'verified'"
+PUBLIC_WHERE = "e.status IN ('published','completed') AND o.status = 'verified' AND e.deleted_at IS NULL AND o.deleted_at IS NULL"
 
 
 def get_event(event_id):

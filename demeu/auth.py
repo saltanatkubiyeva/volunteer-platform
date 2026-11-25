@@ -6,6 +6,8 @@ from flask import (Blueprint, flash, g, make_response, redirect, render_template
                    session, url_for)
 from werkzeug.security import check_password_hash, generate_password_hash
 
+from . import blocks as BL
+from . import privacy as PV
 from . import resets as R
 from . import services as S
 from .core import (_, audit, csrf_token, fmt_dt, form_int, login_required, notify,
@@ -309,6 +311,30 @@ def settings():
                     all_cities=query("SELECT * FROM cities ORDER BY name_en"),
                     all_directions=query("SELECT * FROM directions ORDER BY direction_id"))
     return render_template("auth/settings.html", errors=errors, subs=subs)
+
+
+@bp.route("/settings/my-data.json")
+@login_required
+def my_data():
+    data = PV.export_data(g.user)
+    body = json.dumps(data, ensure_ascii=False, indent=2, default=str)
+    resp = make_response(body)
+    resp.headers["Content-Type"] = "application/json; charset=utf-8"
+    resp.headers["Content-Disposition"] = f'attachment; filename="demeu-my-data-{date.today()}.json"'
+    return resp
+
+
+@bp.route("/settings/delete", methods=["POST"])
+@login_required
+def delete_account():
+    try:
+        PV.delete_account(g.user, request.form.get("password"))
+    except S.RuleError as e:
+        flash(_(e.key, **e.params), "error")
+        return redirect(url_for("auth.settings") + "#delete")
+    session.clear()
+    flash(_("flash_account_deleted"), "info")
+    return redirect(url_for("public.home"))
 
 
 @bp.route("/notifications")

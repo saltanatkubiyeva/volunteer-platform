@@ -1,0 +1,30 @@
+{% extends "admin/_layout.html" %}
+{% from "partials/macros.html" import empty, status %}
+{% block title %}{{ _('adm_trash') }}{% endblock %}
+{% block admin %}
+<div class="cab-head"><div><h1>{{ _('adm_trash') }}</h1><p>{{ _('adm_trash_subtitle', n=keep_days) }}</p></div></div>
+<div class="alert alert-info mb-2">{{ icon('info') }}<div class="small">{{ _('trash_vs_backup') }}</div></div>
+{% if rows %}
+<div class="table-wrap">
+<table class="table">
+  <thead><tr><th>{{ _('trash_col_item') }}</th><th>{{ _('trash_col_deleted') }}</th><th>{{ _('trash_col_left') }}</th><th></th></tr></thead>
+  <tbody>
+  {% for t in rows %}{% set left = days_left(t.deleted_at) %}
+  <tr>
+    <td><div class="row tight"><span class="tag">{{ icon('calendar' if t.kind == 'event' else 'building', 12) }}{{ _('trash_kind_' ~ t.kind) }}</span>{{ status(t.status) }}</div>
+      <b>{{ t.name }}</b>{% if t.kind == 'event' %}<div class="xs muted">{{ t.org_name }}</div>{% endif %}</td>
+    <td class="small">{{ fmt_dt(t.deleted_at) }}<div class="xs muted">{{ t.deleted_by_email or '—' }}</div></td>
+    <td><span class="trash-left {{ 'soon' if left <= 3 }}">{{ _('trash_days_left', n=left) }}</span><div class="xs muted">{{ _('trash_until', d=fmt_date(expires_on(t.deleted_at))) }}</div></td>
+    <td class="nowrap"><div class="row tight">
+      <form method="post">{{ csrf_field() }}<input type="hidden" name="kind" value="{{ t.kind }}"><input type="hidden" name="item_id" value="{{ t.item_id }}">
+        <button class="btn btn-ghost btn-xs" name="action" value="restore">{{ icon('rotate-ccw', 14) }} {{ _('trash_restore') }}</button></form>
+      <form method="post" onsubmit="return confirm(this.dataset.msg)" data-msg="{{ _('trash_forever_confirm') }}">{{ csrf_field() }}<input type="hidden" name="kind" value="{{ t.kind }}"><input type="hidden" name="item_id" value="{{ t.item_id }}">
+        <button class="btn btn-danger btn-xs" name="action" value="forever">{{ icon('x', 14) }} {{ _('trash_forever') }}</button></form>
+    </div></td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}{{ empty('trash', _('trash_empty')) }}{% endif %}
+{% endblock %}

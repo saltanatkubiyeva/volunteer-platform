@@ -159,8 +159,8 @@ def applications():
         "closed": ("(r.status IN ('rejected','cancelled') OR e.status='cancelled')", [], "r.applied_at DESC"),
     }
     cond, extra, order = conditions.get(tab, conditions["active"])
-    rows = query(REG_SELECT + f" WHERE r.volunteer_id=? AND {cond} ORDER BY {order}", [vid] + extra)
-    counts = {k: scalar(f"SELECT COUNT(*) FROM registrations r JOIN events e USING (event_id) WHERE r.volunteer_id=? AND {c}",
+    rows = query(REG_SELECT + f" WHERE r.volunteer_id=? AND e.deleted_at IS NULL AND {cond} ORDER BY {order}", [vid] + extra)
+    counts = {k: scalar(f"SELECT COUNT(*) FROM registrations r JOIN events e USING (event_id) WHERE r.volunteer_id=? AND e.deleted_at IS NULL AND {c}",
                         [vid] + x) for k, (c, x, _o) in conditions.items()}
     waiting = query(S.EVENT_SELECT + """ JOIN waitlist w ON w.event_id = e.event_id
         WHERE w.volunteer_id=? AND e.status='published' AND e.starts_at > ? ORDER BY e.starts_at""", (vid, now))

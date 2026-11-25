@@ -7,6 +7,8 @@ from flask import (Blueprint, Response, abort, flash, g, redirect,
 from werkzeug.security import generate_password_hash
 
 from . import services as S
+from . import trash as T
+from . import vfeedback as VF
 from .core import (IMAGE_EXT, _, audit, duration_hours, form_int, notify,
                    now_str, role_required, save_upload)
 from .db import execute, query, scalar, transaction
@@ -24,7 +26,7 @@ def owner_only():
 
 def own_event(event_id):
     ev = S.get_event(event_id)
-    if not ev or ev["org_id"] != g.coordinator["org_id"]:
+    if not ev or ev["org_id"] != g.coordinator["org_id"] or ev["deleted_at"]:
         abort(404)
     return ev
 
@@ -67,13 +69,41 @@ def events():
         "past": ("e.status IN ('published','completed') AND e.ends_at < ?", [now], "e.starts_at DESC"),
         "cancelled": ("e.status='cancelled'", [], "e.starts_at DESC"),
     }
-    cond, args, order = conds.get(tab, conds["upcoming"])
-    rows = query(S.EVENT_SELECT + f" WHERE e.org_id=? AND {cond} ORDER BY {order}", [oid] + args)
-    counts = {k: scalar(f"SELECT COUNT(*) FROM events e WHERE e.org_id=? AND {c}", [oid] + a)
+    counts = {k: scalar(f"SELECT COUNT(*) FROM events e WHERE e.org_id=? AND e.deleted_at IS NULL AND {c}", [oid] + a)
               for k, (c, a, _o) in conds.items()}
+    trashed = T.items(oid)
+    counts["trash"] = len(trashed)
+    if tab == "trash":
+        return render_template("org/events.html", rows=[], trash=trashed, tab=tab, counts=counts,
+                               days_left=T.days_left, keep_days=T.KEEP_DAYS)
+    cond, args, order = conds.get(tab, conds["upcoming"])
+    rows = query(S.EVENT_SELECT + f" WHERE e.org_id=? AND e.deleted_at IS NULL AND {cond} ORDER BY {order}", [oid] + args)
     return render_template("org/events.html", rows=rows, tab=tab, counts=counts)
 
 
+@bp.route("/events/<int:event_id>/delete", methods=["POST"])
+@coordinator_only
+def event_delete(event_id):
+    ev = own_event(event_id)
+    try:
+        T.delete_event(g.user, event_id)
+        flash(_("flash_trash_moved", n=T.KEEP_DAYS), "success")
+        return redirect(url_for("org.events", tab="trash"))
+    except S.RuleError as e:
+        flash(_(e.key, **e.params), "error")
+        return redirect(url_for("org.event_manage", event_id=ev["event_id"]))
+
+
+@bp.route("/events/<int:event_id>/restore", methods=["POST"])
+@coordinator_only
+def event_restore(event_id):
+    try:
+        row = T.restore(g.user, "event", event_id, org_id=g.coordinator["org_id"])
+        flash(_("flash_trash_restored"), "success")
+        return redirect(url_for("org.events", tab="drafts" if row["status"] == "draft" else "cancelled"))
+    except S.RuleError as e:
+        flash(_(e.key, **e.params), "error")
+        return redirect(url_for("org.events", tab="trash"))
 
 
 EVENT_FIELDS = ("title", "summary", "description", "address", "requirements", "provided")
@@ -564,7 +594,7 @@ def team():
             flash(_("flash_team_added"), "success")
             return redirect(url_for("org.team"))
     members = query("""SELECT c.*, u.email, u.is_active, u.last_login_at,
-        (SELECT COUNT(*) FROM events e WHERE e.coordinator_id=c.coordinator_id AND e.status IN ('draft','published')) AS active_events
+        (SELECT COUNT(*) FROM events e WHERE e.coordinator_id=c.coordinator_id AND e.status IN ('draft','published') AND e.deleted_at IS NULL) AS active_events
         FROM coordinators c JOIN users u USING (user_id) WHERE c.org_id=? ORDER BY c.is_owner DESC, c.full_name""", (oid,))
     return render_template("org/team.html", members=members, f=f, errors=errors)
 
@@ -578,7 +608,7 @@ def team_toggle(coordinator_id):
     if not c or c["is_owner"]:
         abort(400)
     active = scalar("SELECT is_active FROM users WHERE user_id=?", (c["user_id"],))
-    if active and scalar("SELECT COUNT(*) FROM events WHERE coordinator_id=? AND status IN ('draft','published')"
+    if active and scalar("SELECT COUNT(*) FROM events WHERE coordinator_id=? AND status IN ('draft','published') AND deleted_at IS NULL"
                          " AND ends_at >= ?", (coordinator_id, now_str())):
         flash(_("rule_coordinator_has_events"), "error")
         return redirect(url_for("org.team"))

@@ -23,6 +23,8 @@
       {% else %}<button class="btn btn-urgent btn-sm" data-dialog="urgent-dlg">{{ icon('alert', 16) }} {{ _('urgent_call') }}</button>{% endif %}
     {% endif %}
     {% if ev.status in ('draft','published') and not started %}<button class="btn btn-danger btn-sm" data-dialog="cancel-dlg">{{ icon('x', 16) }} {{ _('cancel_event') }}</button>{% endif %}
+    {% if ev.status in ('draft','cancelled') %}<form method="post" action="{{ url_for('org.event_delete', event_id=ev.event_id) }}" onsubmit="return confirm(this.dataset.msg)" data-msg="{{ _('trash_confirm', n=30) }}">{{ csrf_field() }}
+      <button class="btn btn-danger btn-sm">{{ icon('trash', 16) }} {{ _('delete') }}</button></form>{% endif %}
   </div>
 </div>
 {% if ev.status == 'cancelled' %}<div class="alert alert-danger mb-3">{{ icon('x-circle') }}<div><b>{{ _('event_cancelled_banner') }}</b><p class="small mb-0">{{ ev.cancel_reason }}</p></div></div>{% endif %}

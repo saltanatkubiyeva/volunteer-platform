@@ -13,7 +13,9 @@
   </div>
 </section>
 <div class="wrap" style="max-width:760px;padding:28px 24px 72px">
-  {% if code and cert and cert.type == 'milestone' %}
+  {% if code and revoked %}
+    <div class="alert alert-warn">{{ icon('alert', 22) }}<div><b>{{ _('certificate_revoked') }}</b><p class="mb-0">{{ _('certificate_revoked_text') }}</p></div></div>
+  {% elif code and cert and cert.type == 'milestone' %}
     <div class="alert alert-ok">{{ icon('check-circle', 22) }}<div><b>{{ _('certificate_valid') }}</b>
       <p class="mb-0">{{ _('mcert_valid_text', name=cert.full_name, n=cert.milestone_hours, h=fmt_hours(cert.hours), e=cert.n_events, o=cert.n_orgs) }}</p>
       <p class="xs mt-1 mb-0">{{ _('mcert_type') }} · {{ _('issued_on', d=fmt_date(cert.issued_at)) }} · <span class="mono">{{ cert.code }}</span></p></div></div>

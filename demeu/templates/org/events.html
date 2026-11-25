@@ -5,10 +5,25 @@
 <div class="cab-head"><div><h1>{{ _('org_events') }}</h1></div>
   <a class="btn btn-primary" href="{{ url_for('org.event_new') }}">{{ icon('plus') }} {{ _('new_event') }}</a></div>
 <nav class="tabs">
-  {% for key in ['upcoming', 'drafts', 'past', 'cancelled'] %}
-  <a class="{{ 'on' if tab == key }}" href="{{ url_for('org.events', tab=key) }}">{{ _('org_tab_' ~ key) }} <span class="n">{{ counts[key] }}</span></a>
+  {% for key in ['upcoming', 'drafts', 'past', 'cancelled', 'trash'] %}
+  <a class="{{ 'on' if tab == key }}" href="{{ url_for('org.events', tab=key) }}">{% if key == 'trash' %}{{ icon('trash', 14) }} {% endif %}{{ _('org_tab_' ~ key) }} <span class="n">{{ counts[key] }}</span></a>
   {% endfor %}
 </nav>
+{% if tab == 'trash' %}
+<p class="small muted mb-2">{{ icon('info', 14) }} {{ _('trash_org_hint', n=keep_days) }}</p>
+{% for t in trash %}{% set left = days_left(t.deleted_at) %}
+<div class="card list-card trash-card">
+  <div class="thumb trash-thumb">{{ icon('trash', 22) }}</div>
+  <div><h4>{{ t.name }}</h4>
+    <div class="meta"><span>{{ status(t.status) }}</span><span>{{ icon('clock', 14) }}{{ _('trash_deleted_on', d=fmt_dt(t.deleted_at)) }}</span>{% if t.deleted_by_email %}<span>{{ icon('user', 14) }}{{ t.deleted_by_email }}</span>{% endif %}</div></div>
+  <div class="actions"><span class="trash-left {{ 'soon' if left <= 3 }}">{{ _('trash_days_left', n=left) }}</span>
+    <form method="post" action="{{ url_for('org.event_restore', event_id=t.item_id) }}">{{ csrf_field() }}
+      <button class="btn btn-ghost btn-xs">{{ icon('rotate-ccw', 14) }} {{ _('trash_restore') }}</button></form></div>
+</div>
+{% else %}
+  {{ empty('trash', _('trash_empty')) }}
+{% endfor %}
+{% else %}
 {% for ev in rows %}
 <div class="card list-card">
   <a class="thumb" href="{{ url_for('org.event_manage', event_id=ev.event_id) }}"><img {{ cover_attrs(ev) }} alt=""></a>

@@ -828,9 +828,61 @@ def main():
                if r[1] not in ("event_id", "starts_at", "ends_at", "registration_deadline", "created_at", "series_id",
                                "is_urgent", "urgent_at", "updated_at", "cancel_reason")]
 
+    tim_created = NOW - timedelta(days=200)
+    tim_uid = x("""INSERT INTO users (email,password_hash,role,preferred_lang,created_at,last_login_at)
+                   VALUES ('timur@demeu.kz',?, 'volunteer','en',?,?)""", (pw, dt(tim_created), dt(NOW - timedelta(days=2)))).lastrowid
+    x("""INSERT INTO volunteers (volunteer_id,user_id,full_name,phone,birth_date,city_id,about,skills,is_public,show_contacts,created_at)
+         VALUES (1100,?,'Timur Sadykov','+77015550011','2002-03-11',?,?,?,1,1,?)""",
+      (tim_uid, C["Astana"], "Software engineering student. I like outdoor clean-ups and helping at food banks.",
+       "driving licence, Python", dt(tim_created)))
+    for slug in ("ecology", "social"):
+        x("INSERT INTO volunteer_directions VALUES (1100, ?)", (D[slug],))
+    x("INSERT INTO subscriptions (volunteer_id, city_id) VALUES (1100, ?)", (C["Astana"],))
+    x("INSERT INTO subscriptions (volunteer_id, direction_id) VALUES (1100, ?)", (D["ecology"],))
+    tim_done = []
+    for title in ("City Park Clean-up", "Autumn Tree Planting"):
+        ev = last_completed(title, 1)
+        if ev:
+            st = con.execute("SELECT starts_at, ends_at FROM events WHERE event_id=?", (ev[0],)).fetchone()
+            hrs = (datetime.strptime(st[1], "%Y-%m-%d %H:%M") - datetime.strptime(st[0], "%Y-%m-%d %H:%M")).seconds / 3600
+            rid = x("""INSERT INTO registrations (volunteer_id,event_id,status,motivation,applied_at,decided_at,decided_by,
+                       hours_confirmed,confirmed_by,confirmed_at) VALUES (1100,?,'attended',?,?,?,1,?,1,?)""",
+                    (ev[0], "I live nearby and want to help.", dt(datetime.strptime(st[0], "%Y-%m-%d %H:%M") - timedelta(days=5)),
+                     dt(datetime.strptime(st[0], "%Y-%m-%d %H:%M") - timedelta(days=4)), hrs, st[1])).lastrowid
+            tim_done.append((rid, st[1]))
+    if tim_done:
+        x("INSERT INTO certificates (registration_id,code,issued_at) VALUES (?,'TMR4DEL8XQ',?)",
+          (tim_done[0][0], dt(datetime.strptime(tim_done[0][1], "%Y-%m-%d %H:%M") + timedelta(days=1))))
+        x("INSERT INTO feedback (registration_id,rating,comment,created_at) VALUES (?,5,?,?)",
+          (tim_done[0][0], "Well organised, I will come again.", tim_done[0][1]))
+        x("""INSERT INTO volunteer_feedback (registration_id, coordinator_id, is_thanks, is_reliable, comment, created_at)
+             VALUES (?,1,1,1,'Timur brought extra bags and helped to carry everything to the van.',?)""",
+          (tim_done[0][0], tim_done[0][1]))
+    x("""INSERT INTO registrations (volunteer_id,event_id,status,motivation,applied_at,decided_at,decided_by)
+         VALUES (1100,?,'approved','Saturdays work for me.',?,?,1)""", (esil, dt(NOW - timedelta(days=1)), dt(NOW - timedelta(days=1))))
+    note("timur@demeu.kz", "n_approved", f"/events/{esil}", 24, 0, event="Saturday Clean-up at the Esil Embankment")
+
     trash_cols = [r[1] for r in con.execute("PRAGMA table_info(events)")
                   if r[1] not in ("event_id", "title", "status", "starts_at", "ends_at", "registration_deadline", "created_at",
                                   "deleted_at", "deleted_by", "series_id", "cancel_reason", "is_urgent", "urgent_at", "updated_at")]
+
+    def trashed_event(src_id, title, status, days_ahead, deleted_ago, by_email, reason=None):
+        start = (NOW + timedelta(days=days_ahead)).replace(hour=11, minute=0, second=0, microsecond=0)
+        by = con.execute("SELECT user_id FROM users WHERE email=?", (by_email,)).fetchone()[0]
+        cols = ", ".join(trash_cols)
+        return x(f"""INSERT INTO events ({cols}, title, status, cancel_reason, starts_at, ends_at, registration_deadline,
+                     created_at, deleted_at, deleted_by)
+                     SELECT {cols}, ?, ?, ?, ?, ?, ?, ?, ?, ? FROM events WHERE event_id=?""",
+                 (title, status, reason, dt(start), dt(start + timedelta(hours=3)), dt(start - timedelta(days=1)),
+                  dt(NOW - timedelta(days=deleted_ago + 4)), dt(NOW - timedelta(days=deleted_ago)), by, src_id)).lastrowid
+
+    trashed_event(367, "Winter Clothes Sorting Day", "draft", 20, 2, "org@demeu.kz")
+    run_src = con.execute("SELECT event_id FROM events WHERE org_id=8 ORDER BY event_id LIMIT 1").fetchone()[0]
+    run_owner = con.execute("""SELECT u.email FROM coordinators c JOIN users u USING (user_id)
+                               WHERE c.org_id=8 ORDER BY c.is_owner DESC LIMIT 1""").fetchone()[0]
+    trashed_event(run_src, "Night Run Water Point", "cancelled", 6, 28, run_owner, "The city moved the night run to spring.")
+    x("UPDATE organizations SET deleted_at=?, deleted_by=? WHERE name='Quick Help KZ'",
+      (dt(NOW - timedelta(days=12)), admin_uid))
 
     def vol_user(vid):
         return con.execute("SELECT user_id FROM volunteers WHERE volunteer_id=?", (vid,)).fetchone()[0]

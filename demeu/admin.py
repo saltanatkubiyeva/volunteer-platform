@@ -44,7 +44,7 @@ ENTITIES = {
                 F("skills", "textarea"), F("is_public", "bool"), F("show_contacts", "bool")]),
     "organizations": dict(
         table="organizations", pk="org_id", icon="building", create=False,
-        list_sql="SELECT o.*, c.name_en AS city FROM organizations o JOIN cities c USING (city_id)",
+        list_sql="SELECT o.*, c.name_en AS city FROM organizations o JOIN cities c USING (city_id) WHERE o.deleted_at IS NULL",
         search=("o.name", "o.bin", "o.email"), filters={"status": STATUS_ORG},
         columns=("org_id", "name", "bin", "org_type", "city", "status", "created_at"),
         fields=[F("name", required=True), F("bin", required=True),
@@ -63,7 +63,7 @@ ENTITIES = {
     "events": dict(
         table="events", pk="event_id", icon="calendar", create=False,
         list_sql="""SELECT e.*, o.name AS organization, c.name_en AS city FROM events e
-                    JOIN organizations o USING (org_id) JOIN cities c USING (city_id)""",
+                    JOIN organizations o USING (org_id) JOIN cities c USING (city_id) WHERE e.deleted_at IS NULL""",
         search=("e.title", "o.name", "e.address"), filters={"status": STATUS_EVENT},
         columns=("event_id", "title", "organization", "city", "starts_at", "max_volunteers", "status"),
         fields=[F("title", required=True), F("summary", required=True), F("description", "textarea", True),
@@ -156,7 +156,7 @@ def friendly_db_error(err):
 @bp.context_processor
 def admin_ctx():
     counts = dict(
-        organizations=scalar("SELECT COUNT(*) FROM organizations WHERE status='pending'"),
+        organizations=scalar("SELECT COUNT(*) FROM organizations WHERE status='pending' AND deleted_at IS NULL"),
         consents=scalar("SELECT COUNT(*) FROM consents WHERE status='pending'"),
         messages=scalar("SELECT COUNT(*) FROM contact_messages WHERE status='new'"),
         complaints=scalar("SELECT COUNT(*) FROM complaints WHERE status='new'"),
@@ -177,7 +177,7 @@ def dashboard():
         new_users_30=scalar("SELECT COUNT(*) FROM users WHERE created_at >= datetime('now','localtime','-30 days')"),
     )
     pending_orgs = query("""SELECT o.*, c.name_en AS city FROM organizations o JOIN cities c USING (city_id)
-                            WHERE o.status='pending' ORDER BY o.created_at""")
+                            WHERE o.status='pending' AND o.deleted_at IS NULL ORDER BY o.created_at""")
     pending_consents = query("""SELECT c.*, v.full_name, v.birth_date FROM consents c JOIN volunteers v USING (volunteer_id)
                                 WHERE c.status='pending' ORDER BY c.uploaded_at""")
     new_messages = query("SELECT * FROM contact_messages WHERE status='new' ORDER BY created_at DESC LIMIT 5")
@@ -610,6 +610,30 @@ def _related(entity, pk):
     return None
 
 
+@bp.route("/trash", methods=["GET", "POST"])
+@admin_only
+def trash():
+    if request.method == "POST":
+        kind, item_id = request.form.get("kind"), form_int("item_id")
+        try:
+            if kind not in ("event", "organization"):
+                raise S.RuleError("rule_not_found")
+            if request.form.get("action") == "forever":
+                T.delete_forever(g.user, kind, item_id)
+                flash(_("flash_trash_purged"), "success")
+            else:
+                T.restore(g.user, kind, item_id)
+                flash(_("flash_trash_restored"), "success")
+        except S.RuleError as e:
+            flash(_(e.key, **e.params), "error")
+        return redirect(url_for("admin.trash"))
+    purged = T.purge_expired()
+    if purged:
+        flash(_("flash_trash_auto", n=purged), "info")
+    return render_template("admin/trash.html", rows=T.items(), days_left=T.days_left, expires_on=T.expires_on,
+                           keep_days=T.KEEP_DAYS)
+
+
 @bp.route("/<entity>/<int:pk>/delete", methods=["POST"])
 @admin_only
 def entity_delete(entity, pk):
@@ -617,6 +641,14 @@ def entity_delete(entity, pk):
     if entity == "users" and pk == g.user["user_id"]:
         flash(_("err_self_delete"), "error")
         return redirect(url_for("admin.entity_list", entity=entity))
+    if entity in ("events", "organizations"):
+        try:
+            (T.delete_event if entity == "events" else T.delete_org)(g.user, pk)
+            flash(_("flash_trash_moved", n=T.KEEP_DAYS), "success")
+            return redirect(url_for("admin.trash"))
+        except S.RuleError as e:
+            flash(_(e.key, **e.params), "error")
+            return redirect(url_for("admin.entity_edit", entity=entity, pk=pk))
     try:
         with transaction():
             execute(f"DELETE FROM {cfg['table']} WHERE {cfg['pk']}=?", (pk,))

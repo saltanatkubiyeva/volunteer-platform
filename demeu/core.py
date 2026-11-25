@@ -174,6 +174,9 @@ def load_user():
         if g.coordinator:
             g.org = query("SELECT * FROM organizations WHERE org_id = ?",
                           (g.coordinator["org_id"],), one=True)
+        if not g.org or g.org["deleted_at"]:
+            g.user = g.coordinator = g.org = None
+            session.clear()
 
 
 def login_required(view):

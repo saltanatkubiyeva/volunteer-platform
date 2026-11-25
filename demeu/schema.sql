@@ -29,7 +29,9 @@ CREATE TABLE users (
     is_active      INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0,1)),
     preferred_lang TEXT NOT NULL DEFAULT 'en' CHECK (preferred_lang IN ('en','ru','kk')),
     created_at     TEXT NOT NULL DEFAULT (datetime('now','localtime')),
-    last_login_at  TEXT
+    last_login_at  TEXT,
+    deleted_at     TEXT,
+    CHECK (deleted_at IS NULL OR is_active = 0)
 );
 
 CREATE TABLE volunteers (
@@ -74,6 +76,8 @@ CREATE TABLE organizations (
     status_comment   TEXT,
     verified_at      TEXT,
     verified_by      INTEGER REFERENCES users(user_id) ON DELETE SET NULL,
+    deleted_at       TEXT,
+    deleted_by       INTEGER REFERENCES users(user_id) ON DELETE SET NULL,
     created_at       TEXT NOT NULL DEFAULT (datetime('now','localtime'))
 );
 
@@ -346,6 +350,19 @@ SELECT v.volunteer_id,
 FROM volunteers v
 LEFT JOIN registrations r ON r.volunteer_id = v.volunteer_id
 GROUP BY v.volunteer_id;
+
+CREATE INDEX IF NOT EXISTS idx_events_deleted ON events(deleted_at);
+CREATE INDEX IF NOT EXISTS idx_orgs_deleted ON organizations(deleted_at);
+
+CREATE VIEW IF NOT EXISTS trash_items AS
+SELECT 'event' AS kind, e.event_id AS item_id, e.title AS name, o.name AS org_name, e.org_id,
+       e.status, e.deleted_at, e.deleted_by
+FROM events e JOIN organizations o ON o.org_id = e.org_id
+WHERE e.deleted_at IS NOT NULL
+UNION ALL
+SELECT 'organization', o.org_id, o.name, o.name, o.org_id, o.status, o.deleted_at, o.deleted_by
+FROM organizations o
+WHERE o.deleted_at IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS friendships (
     friendship_id INTEGER PRIMARY KEY,
