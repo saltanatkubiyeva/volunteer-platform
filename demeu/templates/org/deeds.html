@@ -2,12 +2,16 @@
 {% from "partials/macros.html" import empty %}
 {% block title %}{{ _('org_deeds') }}{% endblock %}
 {% block cab %}
-<div class="cab-head"><div><h1>{{ _('org_deeds') }}</h1><p>{{ _('org_deeds_subtitle') }}</p></div></div>
+<div class="cab-head"><div><h1>{{ _('org_deeds') }}</h1></div></div>
 <nav class="tabs">
-  <a class="{{ 'on' if tab == 'city' }}" href="?tab=city">{{ _('deeds_tab_city', city=loc(city, 'name')) }} <span class="n">{{ counts.open_city }}</span></a>
-  <a class="{{ 'on' if tab == 'all' }}" href="?tab=all">{{ _('deeds_tab_all') }} <span class="n">{{ counts.open_all }}</span></a>
+  <a class="{{ 'on' if tab == 'open' }}" href="?tab=open">{{ _('deeds_tab_open') }} <span class="n">{{ counts.open_city if city_only else counts.open_all }}</span></a>
   <a class="{{ 'on' if tab == 'ours' }}" href="?tab=ours">{{ _('deeds_tab_ours') }} <span class="n">{{ counts.ours }}</span></a>
 </nav>
+{% if tab == 'open' %}
+<form method="get" class="mb-2"><input type="hidden" name="f" value="1">
+  <label class="check"><input type="checkbox" name="city" value="1" {{ 'checked' if city_only }} onchange="this.form.submit()"> {{ _('deeds_only_city', city=loc(city, 'name')) }}</label>
+</form>
+{% endif %}
 {% for r in rows %}
 <div class="card card-pad mb-2 deed-card">
   <div class="row between">
@@ -32,7 +36,6 @@
       {% endif %}
     </div>
   {% else %}
-    <p class="xs muted mb-1">{{ icon('lock', 12) }} {{ _('deed_private_hint') }}</p>
     <form method="post" action="{{ url_for('org.deed_take', request_id=r.request_id) }}" class="mt-1">{{ csrf_field() }}
       <button class="btn btn-primary btn-sm">{{ icon('check', 15) }} {{ _('deed_take') }}</button></form>
   {% endif %}

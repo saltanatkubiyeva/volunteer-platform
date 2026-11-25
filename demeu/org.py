@@ -726,12 +726,11 @@ def reports():
 @coordinator_only
 def deeds():
     DD.refresh()
-    tab = request.args.get("tab", "city")
-    if tab not in ("city", "all", "ours"):
-        tab = "city"
+    tab = "ours" if request.args.get("tab") == "ours" else "open"
+    city_only = request.args.get("city") == "1" or "f" not in request.args
     city = query("SELECT * FROM cities WHERE city_id=?", (g.org["city_id"],), one=True)
-    return render_template("org/deeds.html", tab=tab, rows=DD.org_list(g.org, tab, city_only=tab == "city"),
-                           counts=DD.org_counts(g.org), city=city)
+    return render_template("org/deeds.html", tab=tab, city_only=city_only, city=city,
+                           rows=DD.org_list(g.org, tab, city_only=city_only), counts=DD.org_counts(g.org))
 
 
 @bp.route("/requests/<int:request_id>/take", methods=["POST"])
