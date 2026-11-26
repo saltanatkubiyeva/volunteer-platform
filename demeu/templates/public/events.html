@@ -163,7 +163,7 @@
   function node(tag, cls, text) { var n = document.createElement(tag); if (cls) n.className = cls; if (text) n.textContent = text; return n; }
   var bounds = [];
   points.forEach(function (p) {
-    var m = L.circleMarker([p.lat, p.lng], {radius: p.urgent ? 11 : 8, color: p.urgent ? '#fff' : '#1f0d49', weight: p.urgent ? 3 : 2.5,
+    var m = L.circleMarker([p.lat, p.lng], {radius: p.urgent ? 11 : 8, color: p.urgent ? '#fff' : '#0c0e0b', weight: p.urgent ? 3 : 2.5,
       fillColor: p.urgent ? '#b42318' : p.color, fillOpacity: 1}).addTo(map);
     var box = node('div', 'map-pop');
     var tags = node('div', 'map-pop-tags');

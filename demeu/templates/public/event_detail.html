@@ -303,7 +303,7 @@
   var box = document.createElement('div');
   var b = document.createElement('b'); b.textContent = el.dataset.title; box.appendChild(b);
   box.appendChild(document.createElement('br')); box.appendChild(document.createTextNode(el.dataset.address));
-  L.circleMarker(pt, {radius: 10, color: '#1f0d49', weight: 3, fillColor: '#c8f04a', fillOpacity: 1}).addTo(map).bindPopup(box);
+  L.circleMarker(pt, {radius: 10, color: '#0c0e0b', weight: 3, fillColor: '#c8f04a', fillOpacity: 1}).addTo(map).bindPopup(box);
 })();
 </script>
 {% endif %}

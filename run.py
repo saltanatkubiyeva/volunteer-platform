@@ -10,9 +10,11 @@ from demeu import create_app
 from demeu.backups import daily_backup
 
 app = create_app()
+app.config["TEMPLATES_AUTO_RELOAD"] = True
 daily_backup(app.config["DATABASE"])
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
-    print(f"\n  DEMEU is running:  http://127.0.0.1:{port}\n")
-    app.run(host="127.0.0.1", port=port, debug=False)
+    if os.environ.get("WERKZEUG_RUN_MAIN"):
+        print(f"\n  DEMEU is running:  http://127.0.0.1:{port}\n")
+    app.run(host="127.0.0.1", port=port, debug=False, use_reloader=True)

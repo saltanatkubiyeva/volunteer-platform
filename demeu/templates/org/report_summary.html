@@ -63,7 +63,7 @@
           {% set h = (m.hours / r.monthly_max * 130) if m.hours else 0 %}
           {% set x = 10 + loop.index0 * w + w * 0.18 %}
           <rect x="{{ x }}" y="{{ 160 - h }}" width="{{ w * 0.64 }}" height="{{ h if h > 0 else 0 }}" rx="4"
-                fill="{{ '#c8f04a' if m.current else '#1f0d49' }}" {% if m.current %}stroke="#1f0d49" stroke-width="1.5"{% endif %}/>
+                fill="{{ '#c8f04a' if m.current else '#0c0e0b' }}" {% if m.current %}stroke="#0c0e0b" stroke-width="1.5"{% endif %}/>
           {% if m.hours %}<text x="{{ x + w * 0.32 }}" y="{{ 152 - h }}" text-anchor="middle" font-size="12" font-weight="700" fill="#111214">{{ fmt_hours(m.hours) }}</text>{% endif %}
           <text x="{{ x + w * 0.32 }}" y="178" text-anchor="middle" font-size="12" fill="#6b6e73">{{ month_name(m.month, True) }}{% if p.kind == 'month' and m.month == 1 %} {{ m.year }}{% endif %}</text>
         {% endfor %}
