@@ -2,7 +2,7 @@
 {% from "partials/macros.html" import pagination %}
 {% block title %}{{ _('adm_audit') }}{% endblock %}
 {% block admin %}
-<div class="cab-head"><div><h1>{{ _('adm_audit') }}</h1><p>{{ _('adm_audit_subtitle') }}</p></div></div>
+<div class="cab-head"><div><h1>{{ _('adm_audit') }}</h1></div></div>
 <form class="toolbar" method="get">
   <select class="select pill" name="entity" onchange="this.form.submit()" aria-label="{{ _('object') }}">
     <option value="">{{ _('object') }}: {{ _('all') }}</option>

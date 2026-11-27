@@ -45,10 +45,6 @@ T = {
     "photo_credit": ("Photos: Unsplash", "Фото: Unsplash", "Фото: Unsplash"),
 
     "hello_name": ("{name}", "{name}", "{name}"),
-    "volunteer_dash_subtitle": ("Applications, confirmed hours and events for you.", "Заявки, подтверждённые часы и ивенты для вас.",
-                                "Өтінімдер, расталған сағаттар және сізге арналған іс-шаралар."),
-    "org_dash_subtitle": ("New applications, upcoming events and attendance.", "Новые заявки, ближайшие ивенты и явка.",
-                          "Жаңа өтінімдер, жақын іс-шаралар және қатысу."),
     "all_milestones": ("All milestones reached", "Все достижения получены", "Барлық жетістік алынды"),
 
     "draft_banner": ("This is a draft. Only your team sees it.", "Это черновик. Его видит только ваша команда.", "Бұл жоба. Оны тек сіздің командаңыз көреді."),
@@ -81,7 +77,6 @@ T = {
                          "Введите минимум 2 символа. Ищем сразу по ивентам, организациям и волонтёрам.",
                          "Кемінде 2 таңба енгізіңіз. Іс-шаралар, ұйымдар және еріктілер бойынша бірден іздейміз."),
     "error_413_text": ("The maximum file size is 5 MB.", "Максимальный размер файла 5 МБ.", "Файлдың ең үлкен көлемі 5 МБ."),
-    "register_choice_subtitle": ("Choose who you are. The forms are different.", "Выберите, кто вы. Анкеты отличаются.", "Кім екеніңізді таңдаңыз. Сауалнамалар әртүрлі."),
     "birth_date_hint": ("Volunteering from 14. Under 18 with parental consent.", "Волонтёрство с 14 лет. До 18 с согласием родителей.",
                         "Еріктілік 14 жастан. 18-ге дейін ата-ана келісімімен."),
     "directions_hint": ("Choose one or more. We will suggest events.", "Выберите одно или несколько. Мы подберём ивенты.",
@@ -122,9 +117,6 @@ T = {
     "footer_about": ("Volunteer events from verified organizations across Kazakhstan, with confirmed hours.",
                      "Волонтёрские ивенты проверенных организаций по всему Казахстану и подтверждённые часы.",
                      "Қазақстан бойынша тексерілген ұйымдардың еріктілік іс-шаралары және расталған сағаттар."),
-    "events_subtitle": ("Only events of verified organizations. Filter by city, direction and date.",
-                        "Только ивенты проверенных организаций. Фильтры по городу, направлению и дате.",
-                        "Тек тексерілген ұйымдардың іс-шаралары. Қала, бағыт және күн бойынша сүзгілер."),
     "recommended_hint": ("Events in your city.",
                          "Ивенты в вашем городе.",
                          "Сіздің қалаңыздағы іс-шаралар."),

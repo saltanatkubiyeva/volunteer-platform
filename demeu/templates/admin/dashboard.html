@@ -2,7 +2,7 @@
 {% from "partials/macros.html" import status %}
 {% block title %}{{ _('admin_panel') }}{% endblock %}
 {% block admin %}
-<div class="cab-head"><div><h1>{{ _('admin_panel') }}</h1><p>{{ _('admin_subtitle') }}</p></div>
+<div class="cab-head"><div><h1>{{ _('admin_panel') }}</h1></div>
   <a class="btn btn-ghost btn-sm" href="{{ url_for('admin.new_admin') }}">{{ icon('user-plus', 16) }} {{ _('new_admin') }}</a></div>
 <div class="kpis">
   <div class="stat dark"><div class="num">{{ k.users }}</div><div class="lbl">{{ _('adm_users') }} · +{{ k.new_users_30 }} {{ _('in_30_days') }}</div></div>

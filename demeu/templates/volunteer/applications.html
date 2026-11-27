@@ -2,7 +2,7 @@
 {% from "partials/macros.html" import status, cover_url, cover_attrs, rating, empty %}
 {% block title %}{{ _('my_applications') }}{% endblock %}
 {% block cab %}
-<div class="cab-head"><div><h1>{{ _('my_applications') }}</h1><p>{{ _('applications_subtitle') }}</p></div></div>
+<div class="cab-head"><div><h1>{{ _('my_applications') }}</h1></div></div>
 <nav class="tabs">
   {% for key in ['active', 'history', 'closed'] %}
   <a class="{{ 'on' if tab == key }}" href="{{ url_for('volunteer.applications', tab=key) }}">{{ _('apps_tab_' ~ key) }} <span class="n">{{ counts[key] }}</span></a>

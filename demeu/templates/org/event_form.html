@@ -3,7 +3,7 @@
 {% block title %}{{ _('edit_event') if ev else _('new_event') }}{% endblock %}
 {% block head %}<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">{% endblock %}
 {% block cab %}
-<div class="cab-head"><div><h1>{{ _('edit_event') if ev else _('new_event') }}</h1><p>{{ _('event_form_subtitle') }}</p></div>
+<div class="cab-head"><div><h1>{{ _('edit_event') if ev else _('new_event') }}</h1></div>
   {% if ev %}<a class="btn btn-ghost" href="{{ url_for('org.event_manage', event_id=ev.event_id) }}">{{ icon('arrow-left', 16) }} {{ _('back') }}</a>{% endif %}</div>
 {% if errors.form %}<div class="alert alert-danger mb-2">{{ icon('alert') }}<div>{{ _(errors.form) }}</div></div>{% endif %}
 {% if ev and ev.status == 'published' and ev.taken %}<div class="alert alert-info mb-2">{{ icon('info') }}<div class="small">{{ _('edit_notifies_participants') }}</div></div>{% endif %}

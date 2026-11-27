@@ -6,7 +6,7 @@
   <div class="wrap">
     <div class="crumbs"><a href="{{ url_for('public.home') }}">{{ _('home') }}</a>{{ icon('chevron-right', 14) }}<span>{{ _('nav_reports') }}</span></div>
     <div class="row between">
-      <div><h1>{{ _('reports_title') }}</h1><p>{{ _('reports_subtitle') }}</p></div>
+      <div><h1>{{ _('reports_title') }}</h1></div>
       <form class="row" method="get" data-autosubmit>
         <select class="select pill" name="year" aria-label="{{ _('year') }}" style="width:auto">
           {% for y in years %}<option value="{{ y }}" {{ 'selected' if y == year }}>{{ y }}</option>{% endfor %}</select>

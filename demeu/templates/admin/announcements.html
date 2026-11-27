@@ -2,7 +2,7 @@
 {% from "partials/macros.html" import empty, field_error %}
 {% block title %}{{ _('adm_announcements') }}{% endblock %}
 {% block admin %}
-<div class="cab-head"><div><h1>{{ _('adm_announcements') }}</h1><p>{{ _('adm_announcements_subtitle') }}</p></div></div>
+<div class="cab-head"><div><h1>{{ _('adm_announcements') }}</h1></div></div>
 <div class="ann-admin">
   <form class="card card-pad" method="post" novalidate>
     {{ csrf_field() }}

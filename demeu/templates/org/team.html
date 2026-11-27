@@ -2,7 +2,7 @@
 {% from "partials/macros.html" import field_error, avatar %}
 {% block title %}{{ _('team') }}{% endblock %}
 {% block cab %}
-<div class="cab-head"><div><h1>{{ _('team') }}</h1><p>{{ _('team_subtitle') }}</p></div></div>
+<div class="cab-head"><div><h1>{{ _('team') }}</h1></div></div>
 <div class="table-wrap mb-3"><table class="table">
   <thead><tr><th>{{ _('coordinator') }}</th><th>Email</th><th>{{ _('position') }}</th><th class="num">{{ _('active_events') }}</th><th>{{ _('last_login') }}</th><th></th></tr></thead>
   <tbody>{% for m in members %}

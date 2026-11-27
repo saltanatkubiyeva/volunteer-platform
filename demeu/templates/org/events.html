@@ -10,7 +10,6 @@
   {% endfor %}
 </nav>
 {% if tab == 'invites' %}
-<p class="small muted mb-2">{{ icon('info', 14) }} {{ _('invites_hint') }}</p>
 {% for ev in invites %}
 <div class="card list-card">
   <a class="thumb" href="{{ url_for('public.event_detail', event_id=ev.event_id) }}"><img {{ cover_attrs(ev) }} alt=""></a>

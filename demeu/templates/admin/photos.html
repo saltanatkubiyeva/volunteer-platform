@@ -2,7 +2,7 @@
 {% from "partials/macros.html" import empty %}
 {% block title %}{{ _('adm_photos') }}{% endblock %}
 {% block admin %}
-<div class="cab-head"><div><h1>{{ _('adm_photos') }}</h1><p>{{ _('adm_photos_subtitle') }}</p></div></div>
+<div class="cab-head"><div><h1>{{ _('adm_photos') }}</h1></div></div>
 <nav class="tabs">
   <a class="{{ 'on' if tab == 'queue' }}" href="?tab=queue">{{ _('photos_tab_queue') }} <span class="n">{{ counts.queue }}</span></a>
   <a class="{{ 'on' if tab == 'hidden' }}" href="?tab=hidden">{{ _('photos_tab_hidden') }} <span class="n">{{ counts.hidden }}</span></a>

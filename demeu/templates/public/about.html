@@ -1,66 +1,63 @@
 {% extends "base.html" %}
 {% block title %}{{ _('nav_about') }}{% endblock %}
 {% block content %}
-<section class="hero" style="padding-bottom:56px">
+<section class="ab-hero">
   <div class="wrap">
     <div class="crumbs"><a href="{{ url_for('public.home') }}">{{ _('home') }}</a>{{ icon('chevron-right', 14) }}<span>{{ _('nav_about') }}</span></div>
-    <div class="hero-grid">
-      <div>
-        
-        <h1>{{ _('about_title') }}</h1>
-        <p class="lead">{{ _('about_lead') }}</p>
+    <h1>{{ _('about_title') }}</h1>
+    <p class="lead ab-lead">{{ _('about_lead') }}</p>
+    <dl class="ab-stats">
+      <div><dt>{{ stats.volunteers }}</dt><dd>{{ _('stat_volunteers') }}</dd></div>
+      <div><dt>{{ stats.orgs }}</dt><dd>{{ _('stat_verified_orgs') }}</dd></div>
+      <div><dt>{{ fmt_hours(stats.hours) }}</dt><dd>{{ _('stat_hours') }}</dd></div>
+    </dl>
+  </div>
+</section>
+
+<section class="ab-block">
+  <div class="wrap">
+    <div class="ab-compare">
+      <div class="ab-compare-head"><span>{{ _('about_problem_title') }}</span><span>{{ _('about_solution_title') }}</span></div>
+      {% for p, s in [(1, 1), (2, 2), (3, 4), (4, 3)] %}
+      <div class="ab-compare-row">
+        <span class="ab-n">0{{ loop.index }}</span>
+        <p class="ab-before">{{ _('about_problem_' ~ p) }}</p>
+        <p class="ab-after">{{ _('about_solution_' ~ s) }}</p>
       </div>
-      <div class="grid grid-2">
-        <div class="stat dark"><div class="num">{{ stats.volunteers }}</div><div class="lbl">{{ _('stat_volunteers') }}</div></div>
-        <div class="stat"><div class="num">{{ stats.orgs }}</div><div class="lbl">{{ _('stat_verified_orgs') }}</div></div>
-        <div class="stat" style="grid-column:span 2"><div class="num">{{ fmt_hours(stats.hours) }}</div><div class="lbl">{{ _('stat_hours') }}</div></div>
-      </div>
+      {% endfor %}
     </div>
   </div>
 </section>
 
-<section class="section">
+<section class="ab-block">
   <div class="wrap">
-    <div class="grid grid-2">
-      <div class="card card-pad"><h3>{{ _('about_problem_title') }}</h3>
-        <ul class="muted" style="padding-left:18px;margin:0">
-          <li>{{ _('about_problem_1') }}</li><li>{{ _('about_problem_2') }}</li><li>{{ _('about_problem_3') }}</li><li>{{ _('about_problem_4') }}</li></ul></div>
-      <div class="card card-pad" style="background:var(--lime-soft)"><h3>{{ _('about_solution_title') }}</h3>
-        <ul style="padding-left:18px;margin:0">
-          <li>{{ _('about_solution_1') }}</li><li>{{ _('about_solution_2') }}</li><li>{{ _('about_solution_3') }}</li><li>{{ _('about_solution_4') }}</li></ul></div>
-    </div>
-  </div>
-</section>
-
-<section class="section tint">
-  <div class="wrap">
-    <div class="section-head"><div><h2>{{ _('about_principles_title') }}</h2></div></div>
-    <div class="grid grid-4">
+    <h2 class="ab-h2">{{ _('about_principles_title') }}</h2>
+    <div class="ab-principles">
       {% for ic, k in [('shield-check','pr_verified'),('clock','pr_hours'),('lock','pr_privacy'),('users','pr_minors')] %}
-      <div class="card card-pad"><div class="stat" style="padding:0;border:0"><div class="ic-wrap">{{ icon(ic) }}</div></div>
-        <h4>{{ _(k ~ '_title') }}</h4><p class="small muted mb-0">{{ _(k ~ '_text') }}</p></div>
+      <div><span class="ab-ic">{{ icon(ic, 20) }}</span><h4>{{ _(k ~ '_title') }}</h4><p>{{ _(k ~ '_text') }}</p></div>
       {% endfor %}
     </div>
   </div>
 </section>
 
-<section class="section">
+<section class="ab-block">
   <div class="wrap">
-    <div class="section-head"><div><h2>{{ _('about_team_title') }}</h2><p>{{ _('about_team_text') }}</p></div></div>
-    <div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(200px,1fr))">
-      {% for name, role in [('Alan Aimurzayev','team_role_analysis'),('Ilyas Aitkhozha','team_role_data'),('Saltanat Kubiyeva','team_role_dev'),('Alua Kudaibergenova','team_role_arch'),('Emil Akshabayev','team_role_test')] %}
-      <div class="card team-card"><span class="avatar lg">{{ initials(name) }}</span><b>{{ name }}</b><div class="small muted">{{ _(role) }}</div></div>
+    <h2 class="ab-h2">{{ _('about_team_title') }}</h2>
+    <div class="ab-team">
+      {% for name, role, img in [('Alan Aimurzayev','team_role_analysis','alan'),('Alua Kudaibergenova','team_role_arch','alua'),('Ilyas Aitkhozha','team_role_data','ilyas'),('Saltanat Kubiyeva','team_role_dev','saltanat'),('Emil Akshabayev','team_role_test','emil')] %}
+      <figure><img src="{{ static_v('img/team/' ~ img ~ '.webp') }}" alt="{{ name }}" width="560" height="560" loading="lazy">
+        <figcaption><b>{{ name }}</b><span>{{ _(role) }}</span></figcaption></figure>
       {% endfor %}
     </div>
   </div>
 </section>
 
-<section class="section tint" id="faq">
-  <div class="wrap" style="max-width:860px">
-    <h2>{{ _('faq_title') }}</h2>
-    <div class="faq mt-2">
+<section class="ab-block ab-faq" id="faq">
+  <div class="wrap">
+    <h2 class="ab-h2">{{ _('faq_title') }}</h2>
+    <div class="faq">
       {% for i in range(1, 9) %}
-      <details {{ 'open' if i == 1 }}><summary>{{ _('faq_q' ~ i) }} {{ icon('chevron-down') }}</summary><p>{{ _('faq_a' ~ i) }}</p></details>
+      <details><summary>{{ _('faq_q' ~ i) }} {{ icon('chevron-down') }}</summary><p>{{ _('faq_a' ~ i) }}</p></details>
       {% endfor %}
     </div>
     <div class="row mt-3"><a class="btn btn-dark" href="{{ url_for('public.contacts') }}">{{ icon('message') }} {{ _('ask_question') }}</a></div>

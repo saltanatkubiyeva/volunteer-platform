@@ -9,7 +9,7 @@
 </div>
 {%- endmacro %}
 {% block cab %}
-<div class="cab-head"><div><h1>{{ _('friends') }}</h1><p>{{ _('friends_subtitle') }}</p></div></div>
+<div class="cab-head"><div><h1>{{ _('friends') }}</h1></div></div>
 <nav class="tabs">
   <a class="{{ 'on' if tab == 'friends' }}" href="?tab=friends">{{ _('fr_tab_friends') }} <span class="n">{{ friends|length }}</span></a>
   <a class="{{ 'on' if tab == 'requests' }}" href="?tab=requests">{{ _('fr_tab_requests') }} <span class="n">{{ incoming|length }}</span></a>

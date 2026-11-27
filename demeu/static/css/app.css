@@ -745,8 +745,8 @@ dialog .dlg { padding: 26px; }
 .rel-alert { display: inline-flex; align-items: center; gap: 4px; margin-top: 4px; font-size: 12px; font-weight: 600; color: var(--warn); }
 .rel-line { margin-top: 4px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .rel-line .xs.mt-1, .rel-line .rel-alert { margin-top: 0; }
-.row-lead td { background: #f3f0ff; }
-.lead-box { border: 1px solid var(--line); border-radius: var(--r); padding: 14px 16px; margin-top: 12px; background: #f3f0ff; }
+.row-lead td { background: var(--paper-2); }
+.lead-box { border: 1px solid var(--line); border-radius: var(--r); padding: 14px 16px; margin-top: 12px; background: var(--paper-2); }
 .lead-box ul { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6px; }
 .lead-box li { display: flex; justify-content: space-between; gap: 10px; font-size: 14px; }
 .shifts-box { margin-top: 12px; border: 1px solid var(--line); border-radius: var(--r); padding: 14px; background: var(--paper); }
@@ -1242,3 +1242,49 @@ body.home .site-header.scrolled { background: rgba(250, 250, 250, .8); border-bo
 .combo-empty { padding: 10px; color: var(--muted); font-size: 14px; }
 .cohost-mark { color: #3f6212; font-weight: 600; }
 .partner-invite { overflow: visible; }
+.ab-hero { padding: 28px 0 40px; border-bottom: 1px solid var(--line); }
+.ab-hero h1 { font-size: clamp(44px, 7vw, 92px); line-height: .95; letter-spacing: -.055em; margin: 18px 0 28px; max-width: 13ch; }
+.ab-hero .lead { margin: 0; max-width: 620px; }
+.ab-stats { display: flex; margin: 36px 0 0; padding: 0; }
+.ab-stats > div { padding-right: 40px; margin-right: 40px; border-right: 1px solid var(--line); }
+.ab-stats > div:last-child { border: 0; margin: 0; padding: 0; }
+.ab-stats dt { font-size: 40px; font-weight: 700; letter-spacing: -.04em; line-height: 1; }
+.ab-stats dd { margin: 8px 0 0; color: var(--muted); font-size: 14px; }
+.ab-block { padding: 56px 0; }
+.ab-block + .ab-block { border-top: 1px solid var(--line); }
+.ab-h2 { font-size: clamp(26px, 3vw, 34px); margin: 0 0 28px; }
+.ab-compare-head { display: grid; grid-template-columns: 56px 1fr 1fr; gap: 32px; padding-bottom: 14px; font-size: 22px; font-weight: 700; letter-spacing: -.03em; }
+.ab-compare-head span:first-child { grid-column: 2; }
+.ab-compare-row { display: grid; grid-template-columns: 56px 1fr 1fr; gap: 32px; padding: 18px 0; border-top: 1px solid var(--line); align-items: baseline; }
+.ab-compare-row p { margin: 0; font-size: 16px; }
+.ab-n { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.ab-before { color: var(--muted); }
+.ab-after { color: var(--ink); font-weight: 500; padding-left: 22px; position: relative; }
+.ab-after::before { content: ""; position: absolute; left: 0; top: .55em; width: 10px; height: 10px; border-radius: 50%; background: var(--lime); }
+.ab-principles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 32px; }
+.ab-ic { display: inline-flex; color: var(--ink); margin-bottom: 10px; }
+.ab-principles h4 { margin: 0 0 6px; font-size: 16px; }
+.ab-principles p { margin: 0; color: var(--muted); font-size: 14.5px; }
+.ab-team { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+.ab-team figure { margin: 0; }
+.ab-team img { display: block; width: 100%; height: auto; }
+.ab-team figcaption { padding: 0 6px; }
+.ab-team figcaption b { display: block; font-size: 15.5px; letter-spacing: -.01em; }
+.ab-team figcaption span { display: block; color: var(--muted); font-size: 13.5px; margin-top: 2px; }
+.ab-faq .wrap { max-width: 860px; }
+@media (max-width: 900px) {
+  .ab-principles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ab-team { grid-template-columns: repeat(3, minmax(0, 1fr)); row-gap: 24px; }
+}
+@media (max-width: 640px) {
+  .ab-stats { gap: 0; }
+  .ab-stats > div { flex: 1; padding-right: 12px; margin-right: 12px; }
+  .ab-stats dt { font-size: 28px; }
+  .ab-stats dd { font-size: 12.5px; }
+  .ab-compare-head { display: none; }
+  .ab-compare-row { grid-template-columns: 32px 1fr; gap: 6px 12px; }
+  .ab-compare-row .ab-after { grid-column: 2; }
+  .ab-principles { grid-template-columns: 1fr; }
+  .ab-team { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ab-block { padding: 40px 0; }
+}

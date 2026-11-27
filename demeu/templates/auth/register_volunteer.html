@@ -5,7 +5,6 @@
 <div class="wrap" style="max-width:820px;padding:40px 24px 72px">
   <div class="crumbs"><a href="{{ url_for('auth.register') }}">{{ _('register') }}</a>{{ icon('chevron-right', 14) }}<span>{{ _('i_am_volunteer') }}</span></div>
   <h1>{{ _('register_volunteer_title') }}</h1>
-  <p class="muted">{{ _('register_volunteer_subtitle') }}</p>
   <form class="card card-pad mt-3" method="post" novalidate>
     {{ csrf_field() }}
     <div class="form-section">
