@@ -1,5 +1,5 @@
 {% extends "org/_layout.html" %}
-{% from "partials/macros.html" import field_error, cover_url, cover_attrs %}
+{% from "partials/macros.html" import field_error, cover_url, cover_attrs, org_logo %}
 {% block title %}{{ _('edit_event') if ev else _('new_event') }}{% endblock %}
 {% block head %}<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">{% endblock %}
 {% block cab %}
@@ -109,6 +109,31 @@
         {% if ev and ev.cover_path %}<label class="check small"><input type="checkbox" name="remove_cover" value="1"> {{ _('remove_cover') }}</label>{% endif %}</div>
     </div>
   </div>
+  {% if partner_choices %}
+  <div class="form-section">
+    <h3><span class="num">5</span>{{ _('partners_section') }} <span class="label-note">({{ _('optional') }})</span></h3>
+    <p class="small muted">{{ _('partners_section_hint', n=max_partners) }}</p>
+    <div class="field {{ 'has-error' if errors.partners }}">
+      <div class="combo" data-combo data-max="{{ max_partners }}">
+        <div class="combo-chips" data-combo-chips></div>
+        <div class="combo-box">{{ icon('search', 16) }}<input class="input" type="search" data-combo-input autocomplete="off"
+          placeholder="{{ _('partners_search') }}" aria-label="{{ _('partners_search') }}"></div>
+        <div class="combo-list" data-combo-list>
+          {% for o in partner_choices %}{% set locked = o.partner_status in ('pending', 'accepted') %}
+          <label class="combo-opt {{ 'locked' if locked }}" data-search="{{ (o.name ~ ' ' ~ o.city_name_en ~ ' ' ~ o.city_name_ru ~ ' ' ~ o.city_name_kk)|lower }}">
+            <input type="checkbox" name="partner_orgs" value="{{ o.org_id }}" {{ 'checked' if locked or o.org_id in (f.partner_ids or []) }} {{ 'disabled' if locked }}>
+            {{ org_logo(o, 'xs') }}<span class="combo-name">{{ o.name }}</span><small>{{ loc(o, 'city_name') }}</small>
+            {% if o.partner_status == 'accepted' %}<span class="tag tone-lime">{{ _('cohost_partner') }}</span>{% elif o.partner_status == 'pending' %}<span class="tag tone-butter">{{ _('partner_st_pending') }}</span>{% endif %}
+            <span class="combo-check">{{ icon('check', 15) }}</span>
+          </label>
+          {% endfor %}
+          <div class="combo-empty" hidden>{{ _('partners_not_found') }}</div>
+        </div>
+      </div>
+      {{ field_error(errors, 'partners') }}
+    </div>
+  </div>
+  {% endif %}
   <div class="form-actions">
     {% if not ev or ev.status == 'draft' %}
       <button class="btn btn-primary btn-lg" name="action" value="publish" {{ 'disabled' if g.org.status != 'verified' }}>{{ icon('send', 16) }} {{ _('publish') }}</button>

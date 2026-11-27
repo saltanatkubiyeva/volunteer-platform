@@ -33,6 +33,11 @@ JOIN cities c        ON c.city_id = e.city_id
 PUBLIC_WHERE = "e.status IN ('published','completed') AND o.status = 'verified' AND e.deleted_at IS NULL AND o.deleted_at IS NULL"
 
 
+def manages(coordinator, event_id):
+    return bool(coordinator) and bool(scalar("SELECT 1 FROM org_events WHERE event_id=? AND org_id=?",
+                                             (event_id, coordinator["org_id"])))
+
+
 def get_event(event_id):
     return query(EVENT_SELECT + " WHERE e.event_id = ?", (event_id,), one=True)
 
@@ -295,7 +300,7 @@ def decide(coordinator, registration_id, approve, note=None):
                        FROM registrations r JOIN events e USING (event_id)
                        JOIN volunteers v USING (volunteer_id) WHERE r.registration_id=?""",
                     (registration_id,), one=True)
-        if not reg or reg["org_id"] != coordinator["org_id"]:
+        if not reg or not manages(coordinator, reg["event_id"]):
             raise RuleError("rule_not_found")
         if reg["status"] != "pending" or reg["ev_status"] != "published":
             raise RuleError("rule_not_pending")
@@ -329,7 +334,7 @@ def mark_attendance(coordinator, registration_id, attended, hours=None):
                        LEFT JOIN event_shifts sh ON sh.shift_id = r.shift_id AND r.all_shifts = 0
                        WHERE r.registration_id=?""",
                     (registration_id,), one=True)
-        if not reg or reg["org_id"] != coordinator["org_id"]:
+        if not reg or not manages(coordinator, reg["event_id"]):
             raise RuleError("rule_not_found")
         if reg["status"] not in ("approved", "attended", "no_show"):
             raise RuleError("rule_not_participant")
@@ -366,7 +371,7 @@ def mark_attendance(coordinator, registration_id, attended, hours=None):
 def complete_event(coordinator, event_id):
     with transaction():
         ev = get_event(event_id)
-        if not ev or ev["org_id"] != coordinator["org_id"]:
+        if not ev or not manages(coordinator, event_id):
             raise RuleError("rule_not_found")
         if ev["status"] != "published" or ev["ends_at"] > now_str():
             raise RuleError("rule_not_finished")
@@ -599,7 +604,7 @@ def save_shifts(coordinator, event_id, choices):
     changed = 0
     with transaction(immediate=True):
         ev = get_event(event_id)
-        if not ev or ev["org_id"] != coordinator["org_id"]:
+        if not ev or not manages(coordinator, event_id):
             raise RuleError("rule_not_found")
         shifts = {s["shift_id"]: s for s in event_shifts(event_id)}
         if not shifts:
@@ -683,7 +688,7 @@ def set_team_lead(coordinator, registration_id, on):
         reg = query("""SELECT r.*, e.title, e.org_id, e.ends_at, e.status AS ev_status, v.user_id AS vol_user
                        FROM registrations r JOIN events e USING (event_id) JOIN volunteers v USING (volunteer_id)
                        WHERE r.registration_id=?""", (registration_id,), one=True)
-        if not reg or reg["org_id"] != coordinator["org_id"]:
+        if not reg or not manages(coordinator, reg["event_id"]):
             raise RuleError("rule_not_found")
         if reg["status"] != "approved" or reg["ev_status"] != "published" or reg["ends_at"] <= now_str():
             raise RuleError("rule_team_lead_status")
@@ -718,11 +723,12 @@ def org_stats(org_id):
                           COALESCE(SUM(CASE WHEN r.status='attended' THEN r.hours_confirmed END),0) AS hours,
                           SUM(r.status='attended') AS attended, SUM(r.status='no_show') AS no_show
                    FROM events e LEFT JOIN registrations r ON r.event_id = e.event_id
-                   WHERE e.org_id=? AND e.status <> 'draft'""", (org_id,), one=True)
-    completed = scalar("SELECT COUNT(*) FROM events WHERE org_id=? AND status='completed'", (org_id,))
+                   WHERE e.event_id IN (SELECT event_id FROM org_events WHERE org_id=?) AND e.status <> 'draft'""", (org_id,), one=True)
+    completed = scalar("""SELECT COUNT(*) FROM events WHERE status='completed'
+                       AND event_id IN (SELECT event_id FROM org_events WHERE org_id=?)""", (org_id,))
     rating = query("""SELECT ROUND(AVG(f.rating),1) AS avg, COUNT(*) AS n FROM feedback f
                       JOIN registrations r USING (registration_id) JOIN events e USING (event_id)
-                      WHERE e.org_id=? AND f.is_hidden=0""", (org_id,), one=True)
+                      WHERE e.event_id IN (SELECT event_id FROM org_events WHERE org_id=?) AND f.is_hidden=0""", (org_id,), one=True)
     att, ns = row["attended"] or 0, row["no_show"] or 0
     return dict(events=row["events"] or 0, completed=completed, volunteers=row["volunteers"] or 0,
                 hours=row["hours"] or 0, attendance=round(att * 100 / (att + ns)) if att + ns else None,

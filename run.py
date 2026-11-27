@@ -11,6 +11,7 @@ from demeu.backups import daily_backup
 
 app = create_app()
 app.config["TEMPLATES_AUTO_RELOAD"] = True
+app.jinja_env.auto_reload = True
 daily_backup(app.config["DATABASE"])
 
 if __name__ == "__main__":

@@ -542,3 +542,21 @@ CREATE TABLE IF NOT EXISTS kudos (
     UNIQUE (from_id, to_id, milestone),
     CHECK (from_id <> to_id)
 );
+
+CREATE TABLE IF NOT EXISTS event_partners (
+    partner_id    INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_id      INTEGER NOT NULL REFERENCES events(event_id) ON DELETE CASCADE,
+    org_id        INTEGER NOT NULL REFERENCES organizations(org_id) ON DELETE CASCADE,
+    status        TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'declined')),
+    invited_by    INTEGER REFERENCES users(user_id) ON DELETE SET NULL,
+    invited_at    TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+    responded_by  INTEGER REFERENCES users(user_id) ON DELETE SET NULL,
+    responded_at  TEXT,
+    UNIQUE (event_id, org_id)
+);
+CREATE INDEX IF NOT EXISTS idx_partners_org ON event_partners(org_id, status);
+
+CREATE VIEW IF NOT EXISTS org_events AS
+    SELECT event_id, org_id, 'host' AS role FROM events
+    UNION ALL
+    SELECT event_id, org_id, 'partner' AS role FROM event_partners WHERE status = 'accepted';

@@ -1,5 +1,5 @@
 {% extends "org/_layout.html" %}
-{% from "partials/macros.html" import avatar, status, empty, dir_tag, reliability_badge, feedback_summary, feedback_tags %}
+{% from "partials/macros.html" import avatar, status, empty, dir_tag, reliability_badge, feedback_summary, feedback_tags, org_logo %}
 {% block title %}{{ ev.title }}{% endblock %}
 {% macro doc_links(vid) -%}
 {% if reqs %}<div class="xs mt-1 doc-links">{% for rq in reqs %}{% set d = vol_docs.get(vid, {}).get(rq.skill_id) %}
@@ -15,20 +15,28 @@
     <p>{{ fmt_date(ev.starts_at, True) }}, {{ fmt_time(ev.starts_at) }}–{{ fmt_time(ev.ends_at) }} · {{ ev.address }}</p></div>
   <div class="row">
     <a class="btn btn-ghost btn-sm" href="{{ url_for('public.event_detail', event_id=ev.event_id) }}">{{ icon('eye', 16) }} {{ _('public_page') }}</a>
-    {% if ev.status in ('draft','published') and not started %}<a class="btn btn-ghost btn-sm" href="{{ url_for('org.event_edit', event_id=ev.event_id) }}">{{ icon('pencil', 16) }} {{ _('edit') }}</a>{% endif %}
+    {% set is_host = my_role == 'host' %}
+    {% if is_host and ev.status in ('draft','published') and not started %}<a class="btn btn-ghost btn-sm" href="{{ url_for('org.event_edit', event_id=ev.event_id) }}">{{ icon('pencil', 16) }} {{ _('edit') }}</a>{% endif %}
     <a class="btn btn-ghost btn-sm" href="{{ url_for('org.export', event_id=ev.event_id) }}">{{ icon('download', 16) }} CSV</a>
-    {% if ev.status != 'draft' %}<button class="btn btn-ghost btn-sm" data-dialog="repeat-dlg">{{ icon('copy', 16) }} {{ _('duplicate') }}</button>{% endif %}
-    {% if ev.status == 'published' and not started and ev.taken < ev.max_volunteers %}
+    {% if is_host and ev.status != 'draft' %}<button class="btn btn-ghost btn-sm" data-dialog="repeat-dlg">{{ icon('copy', 16) }} {{ _('duplicate') }}</button>{% endif %}
+    {% if is_host and ev.status == 'published' and not started and ev.taken < ev.max_volunteers %}
       {% if urgent_next %}<button class="btn btn-ghost btn-sm" disabled title="{{ _('urgent_next', time=fmt_dt(urgent_next.strftime('%Y-%m-%d %H:%M'))) }}">{{ icon('alert', 16) }} {{ _('urgent_sent_short') }}</button>
       {% else %}<button class="btn btn-urgent btn-sm" data-dialog="urgent-dlg">{{ icon('alert', 16) }} {{ _('urgent_call') }}</button>{% endif %}
     {% endif %}
-    {% if ev.status in ('draft','published') and not started %}<button class="btn btn-danger btn-sm" data-dialog="cancel-dlg">{{ icon('x', 16) }} {{ _('cancel_event') }}</button>{% endif %}
-    {% if ev.status in ('draft','cancelled') %}<form method="post" action="{{ url_for('org.event_delete', event_id=ev.event_id) }}" onsubmit="return confirm(this.dataset.msg)" data-msg="{{ _('trash_confirm', n=30) }}">{{ csrf_field() }}
+    {% if is_host and ev.status in ('draft','published') and not started %}<button class="btn btn-danger btn-sm" data-dialog="cancel-dlg">{{ icon('x', 16) }} {{ _('cancel_event') }}</button>{% endif %}
+    {% if is_host and ev.status in ('draft','cancelled') %}<form method="post" action="{{ url_for('org.event_delete', event_id=ev.event_id) }}" onsubmit="return confirm(this.dataset.msg)" data-msg="{{ _('trash_confirm', n=30) }}">{{ csrf_field() }}
       <button class="btn btn-danger btn-sm">{{ icon('trash', 16) }} {{ _('delete') }}</button></form>{% endif %}
   </div>
 </div>
 {% if ev.status == 'cancelled' %}<div class="alert alert-danger mb-3">{{ icon('x-circle') }}<div><b>{{ _('event_cancelled_banner') }}</b><p class="small mb-0">{{ ev.cancel_reason }}</p></div></div>{% endif %}
 {% if ev.is_urgent and ev.status == 'published' and not started %}<div class="alert alert-danger mb-3">{{ icon('alert') }}<div class="small"><b>{{ _('urgent_active') }}</b> {{ _('urgent_active_text', time=fmt_dt(ev.urgent_at)) }}</div></div>{% endif %}
+{% set accepted = partners|selectattr('status', 'equalto', 'accepted')|list %}
+{% if my_role == 'partner' %}{% set mine = partners|selectattr('org_id', 'equalto', g.org.org_id)|first %}
+<div class="alert alert-lime mb-3">{{ icon('users') }}<div class="grow"><b>{{ _('cohost_banner_title', org=ev.org_name) }}</b>
+  <p class="small mb-0">{{ _('cohost_banner_text', org=ev.org_name) }}</p></div>
+  {% if partner_open %}<form method="post" action="{{ url_for('org.partner_remove', partner_id=mine.partner_id) }}" onsubmit="return confirm(this.dataset.msg)" data-msg="{{ _('cohost_leave_confirm') }}">{{ csrf_field() }}
+    <button class="btn btn-ghost btn-xs">{{ _('cohost_leave') }}</button></form>{% endif %}</div>
+{% endif %}
 {% if ev.status == 'draft' %}<div class="alert alert-warn mb-3">{{ icon('pencil') }}<div class="small">{{ _('draft_banner') }}</div></div>{% endif %}
 {% if series|length > 1 %}
 {% set cancellable = series|selectattr('status', 'in', ['published', 'draft'])|selectattr('starts_at', 'gt', now_value)|list %}
@@ -57,6 +65,7 @@
   {% if started and ev.status in ('published', 'completed') %}<a class="{{ 'on' if tab == 'attendance' }}" href="?tab=attendance">{{ _('tab_attendance') }}{% if unmarked %} <span class="n">{{ unmarked }}</span>{% endif %}</a>{% endif %}
   <a class="{{ 'on' if tab == 'waitlist' }}" href="?tab=waitlist">{{ _('tab_waitlist') }} <span class="n">{{ waiting|length }}</span></a>
   <a class="{{ 'on' if tab == 'closed' }}" href="?tab=closed">{{ _('tab_closed') }} <span class="n">{{ groups.closed|length }}</span></a>
+  <a class="{{ 'on' if tab == 'partners' }}" href="?tab=partners">{{ _('tab_partners') }} <span class="n">{{ accepted|length + 1 }}</span></a>
 </nav>
 
 {% if tab == 'pending' %}
@@ -177,6 +186,37 @@
   {% endif %}
   {% else %}{{ empty('users', _('no_participants')) }}{% endif %}
 
+{% elif tab == 'partners' %}
+  <p class="small muted mb-2">{{ icon('info', 14) }} {{ _('partners_hint') }}</p>
+  <div class="card partner-list">
+    <div class="partner-row">{{ org_logo(ev) }}<div class="grow"><b>{{ ev.org_name }}</b><div class="xs muted">{{ loc(ev, 'city_name') }}</div></div>
+      <span class="tag tag-dark">{{ _('cohost_host') }}</span></div>
+    {% for p in partners %}
+    <div class="partner-row">{{ org_logo(p) }}<div class="grow"><b>{{ p.name }}</b><div class="xs muted">{{ loc(p, 'city_name') }} · {{ _('partner_invited_on', d=fmt_date(p.invited_at, True, False)) }}</div></div>
+      {% if p.status == 'accepted' %}<span class="tag tone-lime">{{ _('cohost_partner') }}</span>
+      {% elif p.status == 'pending' %}<span class="tag tone-butter">{{ _('partner_st_pending') }}</span>
+      {% else %}<span class="tag tone-rose">{{ _('partner_st_declined') }}</span>{% endif %}
+      {% if my_role == 'host' and (p.status == 'pending' or (p.status == 'accepted' and partner_open)) %}
+      <form method="post" action="{{ url_for('org.partner_remove', partner_id=p.partner_id) }}" onsubmit="return confirm(this.dataset.msg)" data-msg="{{ _('partner_remove_confirm', org=p.name) }}">{{ csrf_field() }}
+        <button class="btn btn-ghost btn-xs" title="{{ _('remove') }}">{{ icon('x', 14) }}</button></form>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% if my_role == 'host' %}
+    {% set busy = partners|rejectattr('status', 'equalto', 'declined')|list|length %}
+    {% if not partner_open %}<p class="small muted mt-2">{{ _('partner_closed_hint') }}</p>
+    {% elif busy >= max_partners %}<p class="small muted mt-2">{{ _('rule_partner_limit', n=max_partners) }}</p>
+    {% elif partner_candidates %}
+    <form method="post" action="{{ url_for('org.partner_invite', event_id=ev.event_id) }}" class="card card-pad mt-2 partner-invite">{{ csrf_field() }}
+      <label for="partner-org"><b>{{ _('partner_invite_title') }}</b></label>
+      <div class="row mt-1"><select class="select grow" id="partner-org" name="org_id" required>
+        <option value="">{{ _('partner_choose') }}</option>
+        {% for o in partner_candidates %}<option value="{{ o.org_id }}">{{ o.name }} — {{ loc(o, 'city_name') }}</option>{% endfor %}
+      </select><button class="btn btn-primary">{{ icon('send', 16) }} {{ _('partner_invite_btn') }}</button></div>
+      <p class="xs muted mt-1 mb-0">{{ _('partner_invite_hint') }}</p>
+    </form>
+    {% endif %}
+  {% endif %}
 {% elif tab == 'waitlist' %}
   {% if waiting %}
   <div class="table-wrap"><table class="table">

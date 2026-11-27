@@ -1199,3 +1199,44 @@ body.home .site-header.scrolled { background: rgba(250, 250, 250, .8); border-bo
 @media (max-width: 640px) { .rep-table { display: block; overflow-x: auto; } }
 .admin-side { scrollbar-width: thin; scrollbar-gutter: stable; }
 .side-nav .badge { flex: none; display: inline-grid; place-items: center; min-width: 24px; height: 20px; padding: 0 7px; border-radius: 999px; background: var(--lime); color: #0c0e0b; font-size: 11.5px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+.tone-lime { background: var(--lime-soft); color: #3f6212; }
+.ev-cohost { display: flex; align-items: center; gap: 6px; min-width: 0; white-space: nowrap; }
+.ev-cohost a { color: inherit; text-decoration: none; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.ev-cohost > span:last-child { flex: none; }
+.org-stack { display: inline-flex; }
+.org-stack .avatar.xs { border-radius: 6px; box-shadow: 0 0 0 2px var(--white); }
+.org-stack .avatar.xs:not(:first-child) { margin-left: -5px; }
+.partner-list { padding: 4px 16px; }
+.partner-row { display: flex; align-items: center; gap: 12px; padding: 12px 0; }
+.partner-row + .partner-row { border-top: 1px solid var(--line); }
+.partner-row form { margin: 0; }
+.alert .grow + form { align-self: center; }
+.avatar-stack { flex-wrap: wrap; row-gap: 6px; }
+.cabinet > * { min-width: 0; }
+.list-card > div { min-width: 0; }
+.cohost-tag { white-space: normal; max-width: 100%; }
+.combo { position: relative; max-width: 620px; }
+.combo-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.combo-chips:empty { display: none; }
+.combo-chip { display: inline-flex; align-items: center; gap: 7px; padding: 4px 6px 4px 4px; border: 1px solid var(--line); border-radius: 999px; background: var(--white); font-size: 13.5px; font-weight: 500; box-shadow: var(--sh-1); }
+.combo-chip .avatar.xs, .combo-opt .avatar.xs { border-radius: 6px; flex: none; }
+.combo-chip button { border: 0; background: none; font-size: 17px; line-height: 1; color: var(--muted); cursor: pointer; padding: 0 4px; }
+.combo-chip button:hover { color: var(--ink); }
+.combo-chip.locked { background: var(--paper-2); padding-right: 10px; }
+.combo-box { position: relative; }
+.combo-box > svg { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
+.combo-box .input { padding-left: 36px; }
+.combo-list { border: 1px solid var(--line); border-radius: 10px; padding: 4px; background: var(--white); margin-top: 6px; }
+.combo.js .combo-list { display: none; position: absolute; left: 0; right: 0; top: 100%; z-index: 20; max-height: 300px; overflow: auto; box-shadow: var(--sh-2); }
+.combo.js.open .combo-list { display: block; }
+.combo-opt { position: relative; display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 7px; cursor: pointer; font-size: 14px; }
+.combo-opt:hover { background: var(--paper-2); }
+.combo-opt[hidden] { display: none; }
+.combo-opt input { position: absolute; opacity: 0; pointer-events: none; }
+.combo-name { font-weight: 500; }
+.combo-opt small { color: var(--muted); font-size: 12.5px; }
+.combo-check { margin-left: auto; visibility: hidden; color: var(--ink); display: inline-flex; }
+.combo-opt input:checked ~ .combo-check { visibility: visible; }
+.combo-opt.locked { cursor: default; color: var(--muted); }
+.combo-opt .tag { margin-left: 4px; }
+.combo-empty { padding: 10px; color: var(--muted); font-size: 14px; }

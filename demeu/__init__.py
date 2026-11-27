@@ -101,6 +101,12 @@ def create_app(test_config=None):
         return going_for_cards()
 
     app.jinja_env.globals["friends_going"] = friends_going
+
+    def event_partners(event_id):
+        from .partners import partners_of
+        return partners_of(event_id)
+
+    app.jinja_env.globals["event_partners"] = event_partners
     app.jinja_env.filters["first_word"] = lambda v: (v or "").split()[0] if v else ""
 
     @app.context_processor

@@ -48,7 +48,13 @@ src="{{ cover_url(ev, w) }}" onerror="this.onerror=null;this.src='{{ fallback_ur
     <div class="ev-meta"><span>{{ icon('map-pin') }}{{ loc(ev, 'city_name') }}</span><span>{{ icon('calendar') }}{{ fmt_date(ev.starts_at, True, False) }} · {{ fmt_time(ev.starts_at) }}</span></div>
     <h3><a href="{{ url_for('public.event_detail', event_id=ev.event_id) }}">{{ ev.title }}</a></h3>
     <p class="ev-sum">{{ ev.summary }}</p>
+    {% set parts = event_partners(ev.event_id) %}
+    {% if parts %}
+    <span class="ev-org ev-cohost" title="{{ ev.org_name }} · {{ parts|map(attribute='name')|join(' · ') }}"><span class="org-stack">{{ org_logo(ev, 'xs') }}{% for p in parts[:2] %}{{ org_logo(p, 'xs') }}{% endfor %}</span>
+      <a href="{{ url_for('public.organization_profile', org_id=ev.org_id) }}">{{ ev.org_name }}</a><span>{{ _('cohost_more', n=parts|length) }}</span></span>
+    {% else %}
     <a class="ev-org" href="{{ url_for('public.organization_profile', org_id=ev.org_id) }}">{{ ev.org_name }}</a>
+    {% endif %}
     <div class="ev-foot">
       {% set fr = friends_going().get(ev.event_id) if friends_going is defined else none %}
       {% if fr and phase == 'upcoming' %}
@@ -68,7 +74,7 @@ src="{{ cover_url(ev, w) }}" onerror="this.onerror=null;this.src='{{ fallback_ur
 <a class="ev-row" href="{{ url_for('public.event_detail', event_id=ev.event_id) }}">
   <span class="ev-date"><b>{{ ev.starts_at[8:10] }}</b><span>{{ fmt_date(ev.starts_at, False, False).split(' ')[1] }}</span></span>
   <span><h4>{{ ev.title }}</h4>
-    <span class="ev-meta"><span>{{ fmt_date(ev.starts_at, True, False).split(',')[0] }} · {{ fmt_time(ev.starts_at) }}</span><span>{{ loc(ev, 'city_name') }}</span><span>{{ ev.org_name }}</span></span></span>
+    <span class="ev-meta"><span>{{ fmt_date(ev.starts_at, True, False).split(',')[0] }} · {{ fmt_time(ev.starts_at) }}</span><span>{{ loc(ev, 'city_name') }}</span><span>{{ ev.org_name }}{% set parts = event_partners(ev.event_id) %}{% if parts %} {{ _('cohost_more', n=parts|length) }}{% endif %}</span></span></span>
   <span class="places">{% if left > 0 %}{{ _('n_left', n=left) }}{% else %}{{ _('full') }}{% endif %}</span>
   <span class="round-go">{{ icon('arrow-right', 17) }}</span>
 </a>

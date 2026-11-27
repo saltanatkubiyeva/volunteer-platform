@@ -5,11 +5,27 @@
 <div class="cab-head"><div><h1>{{ _('org_events') }}</h1></div>
   <a class="btn btn-primary" href="{{ url_for('org.event_new') }}">{{ icon('plus') }} {{ _('new_event') }}</a></div>
 <nav class="tabs">
-  {% for key in ['upcoming', 'drafts', 'past', 'cancelled', 'trash'] %}
+  {% for key in ['upcoming', 'drafts', 'past', 'cancelled'] + (['invites'] if counts.invites or tab == 'invites' else []) + ['trash'] %}
   <a class="{{ 'on' if tab == key }}" href="{{ url_for('org.events', tab=key) }}">{% if key == 'trash' %}{{ icon('trash', 14) }} {% endif %}{{ _('org_tab_' ~ key) }} <span class="n">{{ counts[key] }}</span></a>
   {% endfor %}
 </nav>
-{% if tab == 'trash' %}
+{% if tab == 'invites' %}
+<p class="small muted mb-2">{{ icon('info', 14) }} {{ _('invites_hint') }}</p>
+{% for ev in invites %}
+<div class="card list-card">
+  <a class="thumb" href="{{ url_for('public.event_detail', event_id=ev.event_id) }}"><img {{ cover_attrs(ev) }} alt=""></a>
+  <div><h4><a href="{{ url_for('public.event_detail', event_id=ev.event_id) }}">{{ ev.title }}</a></h4>
+    <div class="meta"><span>{{ icon('building', 14) }}{{ _('invite_from', org=ev.org_name) }}</span><span>{{ icon('calendar', 14) }}{{ fmt_date(ev.starts_at, True) }}, {{ fmt_time(ev.starts_at) }}</span><span>{{ icon('map-pin', 14) }}{{ loc(ev, 'city_name') }}</span>
+      <span>{{ icon('users', 14) }}{{ ev.taken }}/{{ ev.max_volunteers }}</span></div></div>
+  <div class="actions">
+    <form method="post" action="{{ url_for('org.partner_respond', partner_id=ev.partner_id) }}" class="row tight">{{ csrf_field() }}
+      <button class="btn btn-primary btn-xs" name="decision" value="accept">{{ icon('check', 14) }} {{ _('invite_accept') }}</button>
+      <button class="btn btn-ghost btn-xs" name="decision" value="decline">{{ _('invite_decline') }}</button></form></div>
+</div>
+{% else %}
+  {{ empty('users', _('invites_empty')) }}
+{% endfor %}
+{% elif tab == 'trash' %}
 <p class="small muted mb-2">{{ icon('info', 14) }} {{ _('trash_org_hint', n=keep_days) }}</p>
 {% for t in trash %}{% set left = days_left(t.deleted_at) %}
 <div class="card list-card trash-card">
@@ -31,6 +47,8 @@
     <div class="meta"><span>{{ icon('calendar', 14) }}{{ fmt_date(ev.starts_at, True) }}, {{ fmt_time(ev.starts_at) }}</span><span>{{ icon('map-pin', 14) }}{{ loc(ev, 'city_name') }}</span>
       <span>{{ icon('users', 14) }}{{ ev.taken }}/{{ ev.max_volunteers }}</span>
       {% if ev.is_urgent and event_phase(ev) == 'upcoming' and ev.taken < ev.max_volunteers %}<span class="tag urgent-tag">{{ icon('alert', 12) }}{{ _('urgent') }}</span>{% endif %}
+      {% if ev.org_id != g.org.org_id %}<span class="tag tone-lime cohost-tag">{{ icon('users', 12) }}{{ _('cohost_with', org=ev.org_name) }}</span>
+      {% elif event_partners(ev.event_id) %}<span class="tag tone-lime">{{ icon('users', 12) }}{{ _('cohost_n', n=event_partners(ev.event_id)|length) }}</span>{% endif %}
       {% if ev.series_id %}<span class="tag tone-sky">{{ icon('repeat', 12) }}{{ _('series_tag') }}</span>{% endif %}
       {% if ev.pending %}<span class="tag tone-butter">{{ _('n_pending_apps', n=ev.pending) }}</span>{% endif %}</div></div>
   <div class="actions">{{ status(event_phase(ev)) }}

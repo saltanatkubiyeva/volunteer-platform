@@ -31,7 +31,7 @@ def parse_period(kind, value):
                 prev_end=date(year, 1, 1), value=str(year))
 
 
-EVENTS_IN = """FROM events e WHERE e.org_id=? AND e.status IN ('published','completed') AND e.deleted_at IS NULL
+EVENTS_IN = """FROM events e WHERE e.event_id IN (SELECT event_id FROM org_events WHERE org_id=?) AND e.status IN ('published','completed') AND e.deleted_at IS NULL
                AND e.starts_at >= ? AND e.starts_at < ? AND e.starts_at <= ?"""
 
 
@@ -52,7 +52,8 @@ def totals(org_id, start, end):
         JOIN registrations r USING (registration_id) WHERE f.status='published'
         AND r.event_id IN (SELECT e.event_id {EVENTS_IN})""", args, one=True)
     new = scalar(f"""SELECT COUNT(*) FROM (SELECT r.volunteer_id, MIN(e.starts_at) AS first FROM registrations r
-        JOIN events e USING (event_id) WHERE e.org_id=? AND r.status='attended' GROUP BY r.volunteer_id)
+        JOIN events e USING (event_id) WHERE e.event_id IN (SELECT event_id FROM org_events WHERE org_id=?)
+        AND r.status='attended' GROUP BY r.volunteer_id)
         WHERE first >= ? AND first < ?""", (org_id, start.isoformat(), end.isoformat()))
     marked = row["attended"] + row["no_show"]
     return dict(events=row["events"], volunteers=row["volunteers"], hours=row["hours"], attended=row["attended"],
@@ -121,14 +122,16 @@ def top_volunteers(org_id, start, end, limit=5):
 
 
 def years(org_id):
-    first = scalar("SELECT MIN(starts_at) FROM events WHERE org_id=? AND status IN ('published','completed')", (org_id,))
+    first = scalar("""SELECT MIN(starts_at) FROM events WHERE status IN ('published','completed')
+                       AND event_id IN (SELECT event_id FROM org_events WHERE org_id=?)""", (org_id,))
     this = date.today().year
     start = int(first[:4]) if first else this
     return list(range(this, start - 1, -1))
 
 
 def months(org_id):
-    first = scalar("SELECT MIN(starts_at) FROM events WHERE org_id=? AND status IN ('published','completed')", (org_id,))
+    first = scalar("""SELECT MIN(starts_at) FROM events WHERE status IN ('published','completed')
+                       AND event_id IN (SELECT event_id FROM org_events WHERE org_id=?)""", (org_id,))
     today = date.today().replace(day=1)
     start = datetime.strptime(first[:7], "%Y-%m").date() if first else today
     out, cur = [], today

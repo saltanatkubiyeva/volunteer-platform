@@ -189,3 +189,63 @@
     label.textContent = input.files.length ? label.dataset.template.replace("{n}", input.files.length) : label.dataset.empty;
   });
 })();
+
+(function () {
+  "use strict";
+  const $ = (s, el = document) => el.querySelector(s);
+  const $$ = (s, el = document) => Array.from(el.querySelectorAll(s));
+  $$("[data-combo]").forEach((combo) => {
+    const input = $("[data-combo-input]", combo);
+    const list = $("[data-combo-list]", combo);
+    const chips = $("[data-combo-chips]", combo);
+    const empty = $(".combo-empty", combo);
+    const opts = $$(".combo-opt", combo);
+    combo.classList.add("js");
+    const render = () => {
+      chips.innerHTML = "";
+      opts.forEach((opt) => {
+        const box = $("input", opt);
+        opt.classList.toggle("on", box.checked);
+        if (!box.checked) return;
+        const chip = document.createElement("span");
+        chip.className = "combo-chip" + (box.disabled ? " locked" : "");
+        chip.appendChild($(".avatar", opt).cloneNode(true));
+        chip.appendChild(document.createTextNode($(".combo-name", opt).textContent));
+        if (!box.disabled) {
+          const x = document.createElement("button");
+          x.type = "button";
+          x.setAttribute("aria-label", "×");
+          x.textContent = "×";
+          x.addEventListener("click", () => { box.checked = false; render(); });
+          chip.appendChild(x);
+        }
+        chips.appendChild(chip);
+      });
+    };
+    const filter = () => {
+      const q = input.value.trim().toLowerCase();
+      let shown = 0;
+      opts.forEach((opt) => {
+        const ok = !q || opt.dataset.search.includes(q);
+        opt.hidden = !ok;
+        if (ok) shown += 1;
+      });
+      empty.hidden = shown > 0;
+    };
+    const open = () => { combo.classList.add("open"); filter(); };
+    input.addEventListener("focus", open);
+    input.addEventListener("click", open);
+    input.addEventListener("input", open);
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") { combo.classList.remove("open"); input.blur(); }
+      if (e.key === "Enter") {
+        e.preventDefault();
+        const first = opts.find((o) => !o.hidden && !$("input", o).disabled);
+        if (first) { $("input", first).checked = !$("input", first).checked; render(); input.value = ""; filter(); }
+      }
+    });
+    opts.forEach((opt) => $("input", opt).addEventListener("change", () => { render(); input.value = ""; filter(); input.focus(); }));
+    document.addEventListener("click", (e) => { if (!combo.contains(e.target)) combo.classList.remove("open"); });
+    render();
+  });
+})();

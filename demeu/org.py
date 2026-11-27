@@ -8,6 +8,7 @@ from werkzeug.security import generate_password_hash
 
 from . import deeds as DD
 from . import orgreport as OR
+from . import partners as P
 from . import series as SR
 from . import services as S
 from . import trash as T
@@ -32,7 +33,8 @@ def org_counts():
     if not g.get("org"):
         return {}
     return dict(deeds_open=scalar("SELECT COUNT(*) FROM deed_requests WHERE status='open' AND city_id=?",
-                                  (g.org["city_id"],)))
+                                  (g.org["city_id"],)),
+                partner_invites=P.invitations_count(g.org["org_id"]))
 
 
 def own_event(event_id):
@@ -42,29 +44,36 @@ def own_event(event_id):
     return ev
 
 
+def managed_event(event_id):
+    ev = S.get_event(event_id)
+    if not ev or ev["deleted_at"] or not P.can_manage(g.coordinator["org_id"], event_id):
+        abort(404)
+    return ev
+
+
 @bp.route("/")
 @coordinator_only
 def dashboard():
     oid = g.coordinator["org_id"]
     now = now_str()
-    pending = query("""SELECT r.*, v.full_name, v.avatar_path, v.birth_date, v.volunteer_id, e.title, e.event_id, e.starts_at
+    pending = query(f"""SELECT r.*, v.full_name, v.avatar_path, v.birth_date, v.volunteer_id, e.title, e.event_id, e.starts_at
         FROM registrations r JOIN volunteers v USING (volunteer_id) JOIN events e USING (event_id)
-        WHERE e.org_id=? AND r.status='pending' AND e.status='published' AND e.starts_at > ?
+        WHERE {P.INVOLVED} AND r.status='pending' AND e.status='published' AND e.starts_at > ?
         ORDER BY e.starts_at, r.applied_at LIMIT 8""", (oid, now))
-    upcoming = query(S.EVENT_SELECT + " WHERE e.org_id=? AND e.status='published' AND e.ends_at >= ? ORDER BY e.starts_at LIMIT 5",
+    upcoming = query(S.EVENT_SELECT + f" WHERE {P.INVOLVED} AND e.status='published' AND e.ends_at >= ? ORDER BY e.starts_at LIMIT 5",
                      (oid, now))
-    to_mark = query(S.EVENT_SELECT + """ WHERE e.org_id=? AND e.status='published' AND e.starts_at <= ?
+    to_mark = query(S.EVENT_SELECT + f""" WHERE {P.INVOLVED} AND e.status='published' AND e.starts_at <= ?
         ORDER BY e.starts_at DESC""", (oid, now))
-    need_shifts = query("""SELECT e.event_id, e.title,
+    need_shifts = query(f"""SELECT e.event_id, e.title,
             (SELECT COUNT(*) FROM registrations r WHERE r.event_id=e.event_id AND r.status='approved'
              AND r.shift_id IS NULL AND r.all_shifts=0) AS n
-        FROM events e WHERE e.org_id=? AND e.status='published' AND e.registration_deadline <= ? AND e.starts_at > ?
+        FROM events e WHERE {P.INVOLVED} AND e.status='published' AND e.registration_deadline <= ? AND e.starts_at > ?
         AND EXISTS (SELECT 1 FROM event_shifts s WHERE s.event_id=e.event_id)""", (oid, now_str(), now_str()))
-    return render_template("org/dashboard.html", pending=pending, upcoming=upcoming, to_mark=to_mark, need_shifts=[x for x in need_shifts if x["n"]],
+    return render_template("org/dashboard.html", invites=P.invitations(oid), pending=pending, upcoming=upcoming, to_mark=to_mark, need_shifts=[x for x in need_shifts if x["n"]],
                            rel=S.reliability(r["volunteer_id"] for r in pending),
                            stats=S.org_stats(oid),
-                           n_pending=scalar("""SELECT COUNT(*) FROM registrations r JOIN events e USING (event_id)
-                               WHERE e.org_id=? AND r.status='pending' AND e.status='published' AND e.starts_at > ?""",
+                           n_pending=scalar(f"""SELECT COUNT(*) FROM registrations r JOIN events e USING (event_id)
+                               WHERE {P.INVOLVED} AND r.status='pending' AND e.status='published' AND e.starts_at > ?""",
                                             (oid, now)))
 
 
@@ -74,21 +83,26 @@ def events():
     oid = g.coordinator["org_id"]
     tab = request.args.get("tab", "upcoming")
     now = now_str()
+    mine = "e.org_id=?"
     conds = {
-        "upcoming": ("e.status='published' AND e.ends_at >= ?", [now], "e.starts_at"),
-        "drafts": ("e.status='draft'", [], "e.created_at DESC"),
-        "past": ("e.status IN ('published','completed') AND e.ends_at < ?", [now], "e.starts_at DESC"),
-        "cancelled": ("e.status='cancelled'", [], "e.starts_at DESC"),
+        "upcoming": (P.INVOLVED, "e.status='published' AND e.ends_at >= ?", [now], "e.starts_at"),
+        "drafts": (mine, "e.status='draft'", [], "e.created_at DESC"),
+        "past": (P.INVOLVED, "e.status IN ('published','completed') AND e.ends_at < ?", [now], "e.starts_at DESC"),
+        "cancelled": (P.INVOLVED, "e.status='cancelled'", [], "e.starts_at DESC"),
     }
-    counts = {k: scalar(f"SELECT COUNT(*) FROM events e WHERE e.org_id=? AND e.deleted_at IS NULL AND {c}", [oid] + a)
-              for k, (c, a, _o) in conds.items()}
+    counts = {k: scalar(f"SELECT COUNT(*) FROM events e WHERE {who} AND e.deleted_at IS NULL AND {c}", [oid] + a)
+              for k, (who, c, a, _o) in conds.items()}
     trashed = T.items(oid)
     counts["trash"] = len(trashed)
+    invites = P.invitations(oid)
+    counts["invites"] = len(invites)
     if tab == "trash":
         return render_template("org/events.html", rows=[], trash=trashed, tab=tab, counts=counts,
                                days_left=T.days_left, keep_days=T.KEEP_DAYS)
-    cond, args, order = conds.get(tab, conds["upcoming"])
-    rows = query(S.EVENT_SELECT + f" WHERE e.org_id=? AND e.deleted_at IS NULL AND {cond} ORDER BY {order}", [oid] + args)
+    if tab == "invites":
+        return render_template("org/events.html", rows=[], invites=invites, tab=tab, counts=counts)
+    who, cond, args, order = conds.get(tab, conds["upcoming"])
+    rows = query(S.EVENT_SELECT + f" WHERE {who} AND e.deleted_at IS NULL AND {cond} ORDER BY {order}", [oid] + args)
     return render_template("org/events.html", rows=rows, tab=tab, counts=counts)
 
 
@@ -149,6 +163,20 @@ def _send_urgent(event_id):
         flash(_(e.key, **e.params), "error")
 
 
+def _active_partners(ev):
+    if not ev:
+        return []
+    return [r[0] for r in query("SELECT org_id FROM event_partners WHERE event_id=? AND status IN ('pending','accepted')",
+                                (ev["event_id"],))]
+
+
+def _invite_partners(event_id, org_ids):
+    if org_ids:
+        n = P.invite_many(g.coordinator, g.user, event_id, org_ids)
+        if n:
+            flash(_("flash_partners_invited", n=n), "success")
+
+
 def _event_form(ev=None):
     oid = g.coordinator["org_id"]
     errors = Errors()
@@ -186,6 +214,8 @@ def _event_form(ev=None):
         valid_skills = {r["skill_id"] for r in query("SELECT skill_id FROM skills")}
         f["doc_skills"] = sorted({int(x) for x in request.form.getlist("doc_skills") if x.isdigit()} & valid_skills)
         f["is_urgent"] = 1 if request.form.get("is_urgent") else 0
+        allowed = {c["org_id"] for c in P.choices(oid, g.org["city_id"])}
+        f["partner_ids"] = sorted({int(x) for x in request.form.getlist("partner_orgs") if x.isdigit()} & allowed)
         f["lat"], f["lng"] = clean(request.form.get("lat"), 20), clean(request.form.get("lng"), 20)
         f["shifts"] = [dict(id=i, title=clean(t, 80), start=a, end=b, need=n) for i, t, a, b, n in zip(
             request.form.getlist("shift_id"), request.form.getlist("shift_title"), request.form.getlist("shift_start"),
@@ -258,6 +288,10 @@ def _event_form(ev=None):
                 problem = problem or "err_shift_names"
             if problem:
                 errors.add("shifts", problem)
+        busy = scalar("""SELECT COUNT(*) FROM event_partners WHERE event_id=? AND status IN ('pending','accepted')""",
+                      (ev["event_id"] if ev else 0,))
+        if len(set(f["partner_ids"]) - set(_active_partners(ev))) + busy > P.MAX_PARTNERS:
+            errors.add("partners", "err_partner_limit")
         if publish and g.org["status"] != "verified":
             errors.add("form", "err_org_not_verified")
         cover = ev["cover_path"] if ev else None
@@ -288,6 +322,7 @@ def _event_form(ev=None):
                     if status == "published":
                         S.notify_subscribers(new_id)
                 flash(_("flash_event_published" if publish else "flash_event_draft"), "success")
+                _invite_partners(new_id, f["partner_ids"])
                 if status == "published" and f["is_urgent"]:
                     _send_urgent(new_id)
                 return None, new_id
@@ -312,10 +347,13 @@ def _event_form(ev=None):
                                event=f["title"])
                 audit("event_updated", "events", ev["event_id"], ev["status"], status)
             flash(_("flash_event_saved"), "success")
+            _invite_partners(ev["event_id"], [x for x in f["partner_ids"] if x not in _active_partners(ev)])
             if status == "published" and ev["status"] == "draft" and f["is_urgent"]:
                 _send_urgent(ev["event_id"])
             return None, ev["event_id"]
     return render_template("org/event_form.html", f=f, ev=ev, errors=errors,
+                           partner_choices=P.choices(oid, g.org["city_id"], ev["event_id"] if ev else None),
+                           max_partners=P.MAX_PARTNERS,
                            all_skills=query("SELECT * FROM skills ORDER BY skill_id"), **ref), None
 
 
@@ -340,7 +378,8 @@ def event_edit(event_id):
 @bp.route("/events/<int:event_id>")
 @coordinator_only
 def event_manage(event_id):
-    ev = own_event(event_id)
+    ev = managed_event(event_id)
+    my_role = P.role(g.coordinator["org_id"], ev)
     regs = query("""SELECT r.*, v.full_name, v.phone, v.birth_date, v.avatar_path, v.volunteer_id, u.email,
         sh.title AS shift_title, sh.starts_at AS shift_start, sh.ends_at AS shift_end, sh.position AS shift_pos,
         ps.title AS pref_title, ps.starts_at AS pref_start, ps.ends_at AS pref_end
@@ -367,7 +406,12 @@ def event_manage(event_id):
     proposal = S.propose_shifts(event_id) if shifts and request.args.get("propose") else {}
     started = ev["starts_at"] <= now_str()
     tab = request.args.get("tab") or ("attendance" if started and ev["status"] == "published" else "pending")
+    partners = P.for_event(event_id)
     return render_template("org/event_manage.html", ev=ev, groups=groups, tab=tab, started=started,
+                           my_role=my_role, partners=partners,
+                           partner_candidates=P.candidates(ev) if my_role == "host" else [],
+                           partner_open=ev["status"] in ("draft", "published") and not started,
+                           max_partners=P.MAX_PARTNERS,
                            rel=S.reliability([r["volunteer_id"] for r in groups["pending"]]
                                              + [w["volunteer_id"] for w in waiting]),
                            fb_sum=VF.summary([r["volunteer_id"] for r in groups["pending"]]
@@ -450,7 +494,7 @@ def urgent(event_id):
 @bp.route("/events/<int:event_id>/shifts", methods=["POST"])
 @coordinator_only
 def shifts_save(event_id):
-    own_event(event_id)
+    managed_event(event_id)
     choices = {}
     for key, value in request.form.items():
         if key.startswith("shift_") and key[6:].isdigit():
@@ -492,7 +536,7 @@ def decide(registration_id):
 @bp.route("/events/<int:event_id>/attendance", methods=["POST"])
 @coordinator_only
 def attendance(event_id):
-    own_event(event_id)
+    managed_event(event_id)
     ids = [int(x) for x in request.form.getlist("registration_id") if x.isdigit()]
     done, problems = 0, []
     for rid in ids:
@@ -546,7 +590,7 @@ def cancel(event_id):
 @bp.route("/events/<int:event_id>/export.csv")
 @coordinator_only
 def export(event_id):
-    ev = own_event(event_id)
+    ev = managed_event(event_id)
     rows = query("""SELECT v.full_name, v.phone, u.email, v.birth_date, r.status, r.applied_at, r.hours_confirmed,
         r.is_team_lead, r.all_shifts, r.prefers_all_shifts, sh.title AS shift_title, ps.title AS pref_title
         FROM registrations r JOIN volunteers v USING (volunteer_id) JOIN users u ON u.user_id=v.user_id
@@ -699,14 +743,14 @@ def team_toggle(coordinator_id):
 @coordinator_only
 def reports():
     oid = g.coordinator["org_id"]
-    rows = query("""SELECT e.event_id, e.title, e.starts_at, e.status, e.max_volunteers,
+    rows = query(f"""SELECT e.event_id, e.title, e.starts_at, e.status, e.max_volunteers, e.org_id,
         SUM(r.status IS NOT NULL) AS applied, SUM(r.status IN ('approved','attended','no_show')) AS accepted,
         SUM(r.status='attended') AS attended, SUM(r.status='no_show') AS no_show,
         COALESCE(SUM(CASE WHEN r.status='attended' THEN r.hours_confirmed END),0) AS hours,
         (SELECT ROUND(AVG(f.rating),1) FROM feedback f JOIN registrations r2 USING (registration_id)
           WHERE r2.event_id=e.event_id AND f.is_hidden=0) AS rating
         FROM events e LEFT JOIN registrations r ON r.event_id=e.event_id
-        WHERE e.org_id=? AND e.status IN ('published','completed') AND e.starts_at <= ?
+        WHERE {P.INVOLVED} AND e.status IN ('published','completed') AND e.starts_at <= ?
         GROUP BY e.event_id ORDER BY e.starts_at DESC""", (oid, now_str()))
     if request.args.get("format") == "csv":
         buf = io.StringIO()
@@ -762,3 +806,45 @@ def report_summary():
     kind = "month" if request.args.get("period") == "month" else "year"
     data = OR.build(g.coordinator["org_id"], kind, request.args.get("value"))
     return render_template("org/report_summary.html", r=data, org=g.org)
+
+
+@bp.route("/events/<int:event_id>/partners", methods=["POST"])
+@coordinator_only
+def partner_invite(event_id):
+    own_event(event_id)
+    try:
+        P.invite(g.coordinator, g.user, event_id, form_int("org_id") or 0)
+        flash(_("flash_partner_invited"), "success")
+    except S.RuleError as e:
+        flash(_(e.key, **e.params), "error")
+    return redirect(url_for("org.event_manage", event_id=event_id, tab="partners"))
+
+
+@bp.route("/partners/<int:partner_id>/respond", methods=["POST"])
+@coordinator_only
+def partner_respond(partner_id):
+    accept = request.form.get("decision") == "accept"
+    try:
+        ev = P.respond(g.coordinator, g.user, partner_id, accept)
+        if accept:
+            flash(_("flash_partner_accepted"), "success")
+            return redirect(url_for("org.event_manage", event_id=ev["event_id"]))
+        flash(_("flash_partner_declined"), "info")
+    except S.RuleError as e:
+        flash(_(e.key, **e.params), "error")
+    return redirect(url_for("org.events", tab="invites"))
+
+
+@bp.route("/partners/<int:partner_id>/remove", methods=["POST"])
+@coordinator_only
+def partner_remove(partner_id):
+    try:
+        ev, left = P.remove(g.coordinator, g.user, partner_id)
+        if left:
+            flash(_("flash_partner_left"), "info")
+            return redirect(url_for("org.events"))
+        flash(_("flash_partner_removed"), "info")
+        return redirect(url_for("org.event_manage", event_id=ev["event_id"], tab="partners"))
+    except S.RuleError as e:
+        flash(_(e.key, **e.params), "error")
+    return redirect(request.referrer or url_for("org.events"))

@@ -13,6 +13,13 @@
   <div class="stat"><div class="ic-wrap">{{ icon('star') }}</div><div class="num">{{ stats.rating or '—' }}</div><div class="lbl">{{ _('stat_rating', n=stats.reviews) }}</div></div>
 </div>
 
+{% for ev in invites %}
+<div class="alert alert-lime mt-3">{{ icon('users') }}<div class="grow"><b>{{ _('invite_dash_title', org=ev.org_name, event=ev.title) }}</b>
+  <p class="small mb-1">{{ fmt_date(ev.starts_at, True) }}, {{ fmt_time(ev.starts_at) }} · {{ loc(ev, 'city_name') }} · <a href="{{ url_for('public.event_detail', event_id=ev.event_id) }}">{{ _('public_page') }}</a></p>
+  <form method="post" action="{{ url_for('org.partner_respond', partner_id=ev.partner_id) }}" class="row tight">{{ csrf_field() }}
+    <button class="btn btn-primary btn-xs" name="decision" value="accept">{{ icon('check', 14) }} {{ _('invite_accept') }}</button>
+    <button class="btn btn-ghost btn-xs" name="decision" value="decline">{{ _('invite_decline') }}</button></form></div></div>
+{% endfor %}
 {% for x in need_shifts %}
 <div class="alert alert-warn mb-2">{{ icon('clock') }}<div><b>{{ _('assign_shifts_title', event=x.title) }}</b>
   <p class="small">{{ _('assign_shifts_text', n=x.n) }}</p>

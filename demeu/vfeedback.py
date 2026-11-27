@@ -11,7 +11,7 @@ def save(coordinator, registration_id, tags, comment):
     reg = query("""SELECT r.*, e.org_id, e.title, e.event_id, v.user_id AS vol_user, o.name AS org_name
                    FROM registrations r JOIN events e USING (event_id) JOIN volunteers v USING (volunteer_id)
                    JOIN organizations o ON o.org_id = e.org_id WHERE r.registration_id=?""", (registration_id,), one=True)
-    if not reg or reg["org_id"] != coordinator["org_id"]:
+    if not reg or not S.manages(coordinator, reg["event_id"]):
         raise S.RuleError("rule_not_found")
     if reg["status"] != "attended":
         raise S.RuleError("rule_feedback_attended")

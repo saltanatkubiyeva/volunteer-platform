@@ -8,6 +8,7 @@ from . import announcements as A
 from . import eventcal as EC
 from . import photoreports as P
 from . import deeds as DD
+from . import partners as PT
 from . import friends as FR
 from . import reviews as RV
 from . import vfeedback as VF
@@ -215,9 +216,10 @@ def event_detail(event_id):
     ev = S.get_event(event_id)
     if not ev:
         abort(404)
-    own_org = g.coordinator is not None and g.coordinator["org_id"] == ev["org_id"]
+    org_role = PT.role(g.coordinator["org_id"], ev) if g.coordinator else None
+    own_org = org_role in ("host", "partner")
     is_admin = g.user is not None and g.user["role"] == "admin"
-    if (ev["status"] == "draft" or ev["org_status"] != "verified") and not (own_org or is_admin):
+    if (ev["status"] == "draft" or ev["org_status"] != "verified") and not (org_role or is_admin):
         abort(404)
     if ev["deleted_at"] and not is_admin:
         abort(404)
@@ -319,7 +321,8 @@ def can_see_contacts(v):
         return True
     if g.coordinator:
         return bool(scalar("""SELECT 1 FROM registrations r JOIN events e USING (event_id)
-                              WHERE r.volunteer_id=? AND e.org_id=? AND r.status <> 'cancelled'""",
+                              WHERE r.volunteer_id=? AND e.event_id IN (SELECT event_id FROM org_events WHERE org_id=?)
+                              AND r.status <> 'cancelled'""",
                            (v["volunteer_id"], g.coordinator["org_id"])))
     return False
 
@@ -404,13 +407,13 @@ def organization_profile(org_id):
     own = g.coordinator is not None and g.coordinator["org_id"] == org_id
     if o["status"] != "verified" and not own and not (g.user and g.user["role"] == "admin"):
         abort(404)
-    upcoming = query(S.EVENT_SELECT + " WHERE e.org_id=? AND e.status='published' AND e.ends_at >= ? ORDER BY e.starts_at",
+    upcoming = query(S.EVENT_SELECT + f" WHERE {PT.INVOLVED} AND e.status='published' AND e.ends_at >= ? ORDER BY e.starts_at",
                      (org_id, now_str()))
-    past = query(S.EVENT_SELECT + " WHERE e.org_id=? AND e.status IN ('published','completed') AND e.ends_at < ?"
+    past = query(S.EVENT_SELECT + f" WHERE {PT.INVOLVED} AND e.status IN ('published','completed') AND e.ends_at < ?"
                  " ORDER BY e.starts_at DESC LIMIT 6", (org_id, now_str()))
-    reviews = query("""SELECT f.*, v.full_name, v.avatar_path, v.user_id AS author_id, e.title, e.event_id FROM feedback f
+    reviews = query(f"""SELECT f.*, v.full_name, v.avatar_path, v.user_id AS author_id, e.title, e.event_id FROM feedback f
         JOIN registrations r USING (registration_id) JOIN volunteers v USING (volunteer_id) JOIN events e USING (event_id)
-        WHERE e.org_id=? AND f.is_hidden=0 ORDER BY f.created_at DESC LIMIT 10""", (org_id,))
+        WHERE {PT.INVOLVED} AND f.is_hidden=0 ORDER BY f.created_at DESC LIMIT 10""", (org_id,))
     team = query("SELECT full_name, position FROM coordinators WHERE org_id=? ORDER BY is_owner DESC, full_name", (org_id,))
     return render_template("public/organization_profile.html", o=o, upcoming=upcoming, past=past, reviews=reviews,
                            my_review_reports=_my_review_reports(),

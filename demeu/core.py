@@ -284,6 +284,11 @@ def notification_text(n):
 
 
 NOTIF_STYLES = [
+    ("n_partner_accepted", "users", "good"),
+    ("n_partner_declined", "users", "bad"),
+    ("n_partner_removed", "users", "bad"),
+    ("n_partner_left", "users", "bad"),
+    ("n_partner", "users", "new"),
     ("n_urgent_call", "alert", "urgent"),
     ("n_announcement", "megaphone", "new"),
     ("n_friend_milestone", "award", "good"),

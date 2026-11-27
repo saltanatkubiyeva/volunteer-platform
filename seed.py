@@ -652,9 +652,9 @@ def main():
         ids = [x("""INSERT INTO event_shifts (event_id, title, starts_at, ends_at, max_volunteers, position)
                     VALUES (?,?,?,?,?,?)""", (row[0], name, dt(start + timedelta(hours=a)), dt(start + timedelta(hours=b)), need, pos)).lastrowid
                for pos, (name, a, b, need) in enumerate(plan)]
-        for (rid,) in con.execute("SELECT registration_id FROM registrations WHERE event_id=? AND status IN ('pending','approved')",
-                                  (row[0],)).fetchall():
-            pick = rid % 4
+        for i, (rid,) in enumerate(con.execute("""SELECT registration_id FROM registrations WHERE event_id=?
+                AND status IN ('pending','approved') ORDER BY status='approved' DESC, registration_id""", (row[0],)).fetchall()):
+            pick = i % 4
             if pick < 2:
                 x("UPDATE registrations SET preferred_shift_id=? WHERE registration_id=?", (ids[pick], rid))
             elif pick == 2:
@@ -1180,6 +1180,47 @@ def main():
     note("volunteer@demeu.kz", "n_friend_going", f"/events/{esil}", 5, 0, name="Kirill",
          event="Saturday Clean-up at the Esil Embankment")
     note("volunteer@demeu.kz", "n_friend_request", "/me/friends?tab=requests", 3, 0, name="Yerlan Ivanov")
+
+    su_coord, su_uid = con.execute("""SELECT c.coordinator_id, c.user_id FROM coordinators c WHERE c.org_id=6
+                                       ORDER BY c.is_owner DESC LIMIT 1""").fetchone()
+    gs_uid = con.execute("SELECT user_id FROM users WHERE email='org@demeu.kz'").fetchone()[0]
+
+    def su_event(title, status):
+        return con.execute("""SELECT event_id, starts_at FROM events WHERE org_id=6 AND title=? AND status=?
+                              ORDER BY starts_at DESC LIMIT 1""", (title, status)).fetchone()
+
+    def cohost(event, status, invited_days, answered_days=None):
+        start = datetime.strptime(event[1], "%Y-%m-%d %H:%M")
+        invited = min(start - timedelta(days=invited_days), NOW - timedelta(days=invited_days))
+        answered = invited + timedelta(days=answered_days) if answered_days is not None else None
+        x("""INSERT INTO event_partners (event_id, org_id, status, invited_by, invited_at, responded_by, responded_at)
+             VALUES (?,1,?,?,?,?,?)""", (event[0], status, su_uid, dt(invited), gs_uid if answered else None,
+                                         dt(answered) if answered else None))
+
+    past_fest = su_event("City Day Festival Volunteers", "completed")
+    if past_fest:
+        cohost(past_fest, "accepted", 30, 1)
+    fest = su_event("City Day Festival Volunteers", "published")
+    if fest:
+        cohost(fest, "accepted", 6, 1)
+        adults = [r[0] for r in con.execute("""SELECT volunteer_id FROM volunteers WHERE volunteer_id IN ({})
+            AND birth_date <= date('now', '-18 years') ORDER BY volunteer_id""".format(",".join(map(str, astana_vols))))]
+        frnd = random.Random(77)
+        for i, vid in enumerate(frnd.sample(adults, min(9, len(adults)))):
+            approved = i < 6
+            x("""INSERT OR IGNORE INTO registrations (volunteer_id, event_id, status, motivation, applied_at, decided_at, decided_by)
+                 VALUES (?,?,?,?,?,?,?)""",
+              (vid, fest[0], "approved" if approved else "pending",
+               frnd.choice([None, "I love big city holidays and want to help.", "I can help at the info desk."]),
+               dt(NOW - timedelta(days=4 - i * 0.3)), dt(NOW - timedelta(days=3)) if approved else None,
+               su_coord if approved else None))
+        note("aigerim@steppe-uni.kz", "n_partner_accepted", f"/org/events/{fest[0]}?tab=partners", 24 * 4, 1,
+             org="Green Steppe", event="City Day Festival Volunteers")
+    football = su_event("Kids Football Tournament", "published")
+    if football:
+        cohost(football, "pending", 1)
+        note("org@demeu.kz", "n_partner_invite", "/org/events?tab=invites", 20, 0,
+             org="Steppe University Volunteer Club", event="Kids Football Tournament")
 
     known_points = {
         "Storm Clean-up in Central Park": (51.152770, 71.436240),

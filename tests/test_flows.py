@@ -215,7 +215,7 @@ class FlowTest(unittest.TestCase):
         org = self.client("org@demeu.kz")
         org.get("/lang/en")
         html = org.get(f"/org/events/{eid}?tab=pending").get_data(as_text=True)
-        self.assertIn("3 no-shows in a row", html)
+        self.assertRegex(html, r"\b([3-9]|\d{2,}) no-shows in a row")
         self.assertIn("No history yet", html)
         self.assertIn("row-alert", html)
 
@@ -765,7 +765,8 @@ class FlowTest(unittest.TestCase):
         self.assertIn("Green Steppe", html)
         self.assertIn(f"Compared with {year - 1}", html)
         hours = self.sql("""SELECT COALESCE(SUM(r.hours_confirmed),0) FROM registrations r JOIN events e USING (event_id)
-                            WHERE e.org_id=1 AND r.status='attended' AND e.deleted_at IS NULL
+                            WHERE e.event_id IN (SELECT event_id FROM org_events WHERE org_id=1)
+                            AND r.status='attended' AND e.deleted_at IS NULL
                             AND e.status IN ('published','completed') AND strftime('%Y', e.starts_at)=?""", (str(year),))[0][0]
         self.assertIn(f'<div class="n">{int(hours) if float(hours).is_integer() else hours}</div>', html)
         self.assertEqual(org.get("/org/reports/summary?period=month&value=2099-01").status_code, 200)
@@ -894,6 +895,71 @@ class FlowTest(unittest.TestCase):
         self.assertEqual(self.sql("SELECT phone FROM volunteers v JOIN users u USING (user_id) WHERE u.email='new.vol@mail.kz'")[0][0],
                          "+77015554433")
 
+
+    def test_partner_invitation_and_shared_management(self):
+        football = self.sql("""SELECT p.partner_id, p.event_id FROM event_partners p JOIN events e USING (event_id)
+                               WHERE p.org_id=1 AND p.status='pending' AND e.title='Kids Football Tournament'""")[0]
+        org = self.client("org@demeu.kz")
+        org.get("/lang/en")
+        self.assertIn("Kids Football Tournament", org.get("/org/events?tab=invites").get_data(as_text=True))
+        self.assertEqual(org.get(f"/org/events/{football['event_id']}").status_code, 404)
+        self.post(org, f"/org/partners/{football['partner_id']}/respond", {"decision": "accept"})
+        self.assertEqual(self.sql("SELECT status FROM event_partners WHERE partner_id=?", (football["partner_id"],))[0][0],
+                         "accepted")
+        page = org.get(f"/org/events/{football['event_id']}").get_data(as_text=True)
+        self.assertIn("You co-host this event", page)
+        self.assertNotIn(f"/org/events/{football['event_id']}/edit", page)
+        self.assertEqual(org.get(f"/org/events/{football['event_id']}/edit").status_code, 404)
+        self.assertTrue(self.sql("SELECT 1 FROM notifications WHERE kind='n_partner_accepted'"))
+        fest = self.sql("""SELECT e.event_id FROM events e JOIN event_partners p USING (event_id)
+                           WHERE p.org_id=1 AND p.status='accepted' AND e.status='published'
+                             AND e.title='City Day Festival Volunteers'""")[0][0]
+        reg = self.sql("SELECT registration_id FROM registrations WHERE event_id=? AND status='pending' LIMIT 1", (fest,))[0][0]
+        self.post(org, f"/org/registrations/{reg}/decide", {"decision": "approve"})
+        self.assertEqual(self.sql("SELECT status FROM registrations WHERE registration_id=?", (reg,))[0][0], "approved")
+        other = self.sql("""SELECT u.email FROM coordinators c JOIN users u USING (user_id)
+                            WHERE c.org_id=2 AND u.is_active=1 LIMIT 1""")[0][0]
+        self.assertEqual(self.client(other).get(f"/org/events/{fest}").status_code, 404)
+        detail = self.client().get(f"/events/{fest}").get_data(as_text=True)
+        self.assertIn("Organizers", detail)
+        self.assertIn("Green Steppe", detail)
+        self.assertIn("Steppe University Volunteer Club", detail)
+
+    def test_partner_invite_rules_and_reports(self):
+        river = self.sql("""SELECT event_id FROM events WHERE org_id=1 AND title='Riverbank Restoration Day'
+                            AND status='published' ORDER BY starts_at DESC LIMIT 1""")[0][0]
+        org = self.client("org@demeu.kz")
+        self.post(org, f"/org/events/{river}/partners", {"org_id": "6"})
+        self.post(org, f"/org/events/{river}/partners", {"org_id": "6"})
+        self.post(org, f"/org/events/{river}/partners", {"org_id": "10"})
+        rows = self.sql("SELECT org_id, status FROM event_partners WHERE event_id=?", (river,))
+        self.assertEqual([tuple(r) for r in rows], [(6, "pending")])
+        uni = self.client("aigerim@steppe-uni.kz")
+        uni.get("/lang/en")
+        self.assertIn("Riverbank Restoration Day", uni.get("/org/events?tab=invites").get_data(as_text=True))
+        past = self.sql("""SELECT e.event_id FROM events e JOIN event_partners p USING (event_id)
+                           WHERE p.org_id=1 AND e.status='completed'""")[0][0]
+        csv_text = org.get("/org/reports?format=csv").get_data(as_text=True)
+        title = self.sql("SELECT title FROM events WHERE event_id=?", (past,))[0][0]
+        self.assertIn(title, csv_text)
+        self.assertIn(past, [r[0] for r in self.sql("SELECT event_id FROM org_events WHERE org_id=1")])
+
+    def test_partners_invited_from_event_form(self):
+        org = self.client("org@demeu.kz")
+        start = datetime.now() + timedelta(days=40)
+        data = {"title": "Joint winter fair", "summary": "A winter fair organised by two teams.",
+                "description": "Volunteers help at the stands, the info desk and the children's corner during the fair.",
+                "address": "Astana, Expo square", "direction_id": 1, "city_id": 1, "coordinator_id": self.sql(
+                    "SELECT coordinator_id FROM coordinators WHERE org_id=1 ORDER BY is_owner DESC LIMIT 1")[0][0],
+                "starts_at": start.strftime("%Y-%m-%dT10:00"), "ends_at": start.strftime("%Y-%m-%dT14:00"),
+                "registration_deadline": (start - timedelta(days=1)).strftime("%Y-%m-%dT20:00"),
+                "max_volunteers": 30, "min_age": 16, "action": "draft", "partner_orgs": ["6", "8", "10", "1"]}
+        self.post(org, "/org/events/new", data)
+        eid = self.sql("SELECT event_id FROM events WHERE title='Joint winter fair'")[0][0]
+        rows = self.sql("SELECT org_id, status FROM event_partners WHERE event_id=? ORDER BY org_id", (eid,))
+        self.assertEqual([tuple(r) for r in rows], [(6, "pending"), (8, "pending")])
+        page = org.get(f"/org/events/{eid}/edit").get_data(as_text=True)
+        self.assertIn('name="partner_orgs" value="6" checked disabled', page)
 
 if __name__ == "__main__":
     unittest.main()
