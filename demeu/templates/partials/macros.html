@@ -129,3 +129,22 @@ src="{{ cover_url(ev, w) }}" onerror="this.onerror=null;this.src='{{ fallback_ur
 <div class="xs muted mt-1">{{ _('rel_counts', m=rel.no_show, t=rel.total) }}</div>
 {% if rel.alert %}<div class="rel-alert">{{ icon('alert', 13) }} {{ _('rel_alert', n=rel.streak) }}</div>{% endif %}{% endif %}
 {%- endmacro %}
+
+{% macro partner_picker(choices, selected=[], max=5) -%}
+      <div class="combo" data-combo data-max="{{ max }}">
+        <div class="combo-chips" data-combo-chips></div>
+        <div class="combo-box">{{ icon('search', 16) }}<input class="input" type="search" data-combo-input autocomplete="off"
+          placeholder="{{ _('partners_search') }}" aria-label="{{ _('partners_search') }}"></div>
+        <div class="combo-list" data-combo-list>
+          {% for o in choices %}{% set locked = o.partner_status in ('pending', 'accepted') %}
+          <label class="combo-opt {{ 'locked' if locked }}" data-search="{{ (o.name ~ ' ' ~ o.city_name_en ~ ' ' ~ o.city_name_ru ~ ' ' ~ o.city_name_kk)|lower }}">
+            <input type="checkbox" name="partner_orgs" value="{{ o.org_id }}" {{ 'checked' if locked or o.org_id in selected }} {{ 'disabled' if locked }}>
+            {{ org_logo(o, 'xs') }}<span class="combo-name">{{ o.name }}</span><small>{{ loc(o, 'city_name') }}</small>
+            {% if o.partner_status == 'accepted' %}<span class="tag tone-lime">{{ _('cohost_partner') }}</span>{% elif o.partner_status == 'pending' %}<span class="tag tone-butter">{{ _('partner_st_pending') }}</span>{% endif %}
+            <span class="combo-check">{{ icon('check', 15) }}</span>
+          </label>
+          {% endfor %}
+          <div class="combo-empty" hidden>{{ _('partners_not_found') }}</div>
+        </div>
+      </div>
+{%- endmacro %}

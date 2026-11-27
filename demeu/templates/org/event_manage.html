@@ -1,5 +1,5 @@
 {% extends "org/_layout.html" %}
-{% from "partials/macros.html" import avatar, status, empty, dir_tag, reliability_badge, feedback_summary, feedback_tags, org_logo %}
+{% from "partials/macros.html" import avatar, status, empty, dir_tag, reliability_badge, feedback_summary, feedback_tags, org_logo, partner_picker %}
 {% block title %}{{ ev.title }}{% endblock %}
 {% macro doc_links(vid) -%}
 {% if reqs %}<div class="xs mt-1 doc-links">{% for rq in reqs %}{% set d = vol_docs.get(vid, {}).get(rq.skill_id) %}
@@ -206,15 +206,15 @@
     {% set busy = partners|rejectattr('status', 'equalto', 'declined')|list|length %}
     {% if not partner_open %}<p class="small muted mt-2">{{ _('partner_closed_hint') }}</p>
     {% elif busy >= max_partners %}<p class="small muted mt-2">{{ _('rule_partner_limit', n=max_partners) }}</p>
-    {% elif partner_candidates %}
+    {% else %}{% set free = partner_choices|rejectattr('partner_status', 'in', ['pending', 'accepted'])|list %}
+    {% if free %}
     <form method="post" action="{{ url_for('org.partner_invite', event_id=ev.event_id) }}" class="card card-pad mt-2 partner-invite">{{ csrf_field() }}
-      <label for="partner-org"><b>{{ _('partner_invite_title') }}</b></label>
-      <div class="row mt-1"><select class="select grow" id="partner-org" name="org_id" required>
-        <option value="">{{ _('partner_choose') }}</option>
-        {% for o in partner_candidates %}<option value="{{ o.org_id }}">{{ o.name }} — {{ loc(o, 'city_name') }}</option>{% endfor %}
-      </select><button class="btn btn-primary">{{ icon('send', 16) }} {{ _('partner_invite_btn') }}</button></div>
-      <p class="xs muted mt-1 mb-0">{{ _('partner_invite_hint') }}</p>
+      <b>{{ _('partner_invite_title') }}</b>
+      <div class="mt-1">{{ partner_picker(free, [], max_partners) }}</div>
+      <div class="row mt-2"><button class="btn btn-primary">{{ icon('send', 16) }} {{ _('partner_invite_btn') }}</button>
+        <span class="xs muted">{{ _('partner_invite_hint') }}</span></div>
     </form>
+    {% endif %}
     {% endif %}
   {% endif %}
 {% elif tab == 'waitlist' %}

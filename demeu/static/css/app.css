@@ -1240,3 +1240,5 @@ body.home .site-header.scrolled { background: rgba(250, 250, 250, .8); border-bo
 .combo-opt.locked { cursor: default; color: var(--muted); }
 .combo-opt .tag { margin-left: 4px; }
 .combo-empty { padding: 10px; color: var(--muted); font-size: 14px; }
+.cohost-mark { color: #3f6212; font-weight: 600; }
+.partner-invite { overflow: visible; }

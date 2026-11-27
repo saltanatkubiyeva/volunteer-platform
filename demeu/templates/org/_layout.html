@@ -15,7 +15,6 @@
       <a class="{{ 'on' if ep == 'org.profile' }}" href="{{ url_for('org.profile') }}">{{ icon('building') }} {{ _('org_profile') }}</a>
       <a class="{{ 'on' if ep == 'org.team' }}" href="{{ url_for('org.team') }}">{{ icon('users') }} {{ _('team') }}</a>
       {% endif %}
-      <a href="{{ url_for('auth.notifications') }}">{{ icon('bell') }} {{ _('notifications') }}{% if unread %}<span class="badge">{{ unread }}</span>{% endif %}</a>
       <a href="{{ url_for('public.organization_profile', org_id=g.org.org_id) }}">{{ icon('eye') }} {{ _('org_public_page') }}</a>
       <a href="{{ url_for('auth.settings') }}">{{ icon('sliders') }} {{ _('settings') }}</a>
     </nav>

@@ -1376,4 +1376,5 @@ T = {
     "flash_partners_invited": ('Invitations sent to {n} organizations.', 'Приглашения отправлены организациям: {n}.', 'Шақыру жіберілген ұйымдар: {n}.'),
     "partners_search": ('Search an organization or city', 'Найдите организацию или город', 'Ұйымды не қаланы іздеңіз'),
     "partners_not_found": ('No organizations found', 'Ничего не найдено', 'Ештеңе табылмады'),
+    "n_partner_event_cancelled": ('{org} cancelled “{event}” that you co-host. Reason: {reason}', '{org} отменила «{event}», где вы соорганизатор. Причина: {reason}', '{org} сіз бірге ұйымдастырған «{event}» іс-шарасын тоқтатты. Себебі: {reason}'),
 }

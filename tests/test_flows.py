@@ -929,9 +929,9 @@ class FlowTest(unittest.TestCase):
         river = self.sql("""SELECT event_id FROM events WHERE org_id=1 AND title='Riverbank Restoration Day'
                             AND status='published' ORDER BY starts_at DESC LIMIT 1""")[0][0]
         org = self.client("org@demeu.kz")
-        self.post(org, f"/org/events/{river}/partners", {"org_id": "6"})
-        self.post(org, f"/org/events/{river}/partners", {"org_id": "6"})
-        self.post(org, f"/org/events/{river}/partners", {"org_id": "10"})
+        self.post(org, f"/org/events/{river}/partners", {"partner_orgs": "6"})
+        self.post(org, f"/org/events/{river}/partners", {"partner_orgs": "6"})
+        self.post(org, f"/org/events/{river}/partners", {"partner_orgs": "10"})
         rows = self.sql("SELECT org_id, status FROM event_partners WHERE event_id=?", (river,))
         self.assertEqual([tuple(r) for r in rows], [(6, "pending")])
         uni = self.client("aigerim@steppe-uni.kz")

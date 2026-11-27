@@ -404,6 +404,11 @@ def cancel_event(user_id_for_audit, event_id, reason):
                           WHERE w.event_id=?""", (event_id, event_id)):
             notify(r["user_id"], "n_event_cancelled", url_for("public.event_detail", event_id=event_id),
                    event=ev["title"], reason=reason)
+        for r in query("""SELECT c.user_id FROM event_partners p JOIN coordinators c ON c.org_id = p.org_id
+                          JOIN users u ON u.user_id = c.user_id
+                          WHERE p.event_id=? AND p.status='accepted' AND u.is_active=1""", (event_id,)):
+            notify(r["user_id"], "n_partner_event_cancelled", url_for("org.event_manage", event_id=event_id),
+                   org=ev["org_name"], event=ev["title"], reason=reason)
         execute("DELETE FROM waitlist WHERE event_id=?", (event_id,))
         audit("event_cancelled", "events", event_id, ev["status"], "cancelled")
 

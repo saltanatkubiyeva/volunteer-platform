@@ -285,6 +285,7 @@ def notification_text(n):
 
 NOTIF_STYLES = [
     ("n_partner_accepted", "users", "good"),
+    ("n_partner_event_cancelled", "x-circle", "bad"),
     ("n_partner_declined", "users", "bad"),
     ("n_partner_removed", "users", "bad"),
     ("n_partner_left", "users", "bad"),

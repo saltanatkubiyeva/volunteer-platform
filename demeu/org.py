@@ -174,7 +174,7 @@ def _invite_partners(event_id, org_ids):
     if org_ids:
         n = P.invite_many(g.coordinator, g.user, event_id, org_ids)
         if n:
-            flash(_("flash_partners_invited", n=n), "success")
+            flash(_("flash_partner_invited") if n == 1 else _("flash_partners_invited", n=n), "success")
 
 
 def _event_form(ev=None):
@@ -409,7 +409,7 @@ def event_manage(event_id):
     partners = P.for_event(event_id)
     return render_template("org/event_manage.html", ev=ev, groups=groups, tab=tab, started=started,
                            my_role=my_role, partners=partners,
-                           partner_candidates=P.candidates(ev) if my_role == "host" else [],
+                           partner_choices=P.choices(ev["org_id"], g.org["city_id"], event_id) if my_role == "host" else [],
                            partner_open=ev["status"] in ("draft", "published") and not started,
                            max_partners=P.MAX_PARTNERS,
                            rel=S.reliability([r["volunteer_id"] for r in groups["pending"]]
@@ -812,11 +812,14 @@ def report_summary():
 @coordinator_only
 def partner_invite(event_id):
     own_event(event_id)
-    try:
-        P.invite(g.coordinator, g.user, event_id, form_int("org_id") or 0)
-        flash(_("flash_partner_invited"), "success")
-    except S.RuleError as e:
-        flash(_(e.key, **e.params), "error")
+    ids = [int(x) for x in request.form.getlist("partner_orgs") if x.isdigit()]
+    busy = scalar("SELECT COUNT(*) FROM event_partners WHERE event_id=? AND status IN ('pending','accepted')", (event_id,))
+    if not ids:
+        flash(_("partner_choose"), "error")
+    elif busy + len(ids) > P.MAX_PARTNERS:
+        flash(_("err_partner_limit"), "error")
+    else:
+        _invite_partners(event_id, ids)
     return redirect(url_for("org.event_manage", event_id=event_id, tab="partners"))
 
 
